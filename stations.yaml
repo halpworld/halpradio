@@ -302,6 +302,26 @@ stations:
     activities: ["programming", "relaxing"]
 
   # Japan (JP) Top Stations
+  - id: gensokyo-radio
+    name: "Gensokyo Radio"
+    url: "https://stream.gensokyoradio.net/3"
+    genre: "Touhou / Doujin / Video Game"
+    country: "JP"
+    bitrate: 256
+    codec: "MP3"
+    homepage: "https://gensokyoradio.net"
+    activities: ["programming", "relaxing"]
+
+  - id: retro-pc-game-music
+    name: "Retro PC GAME Music Radio"
+    url: "http://gyusyabu.ddo.jp:8000/"
+    genre: "Chiptune / FM Synth / Game Music"
+    country: "JP"
+    bitrate: 256
+    codec: "MP3"
+    homepage: "http://gyusyabu.ddo.jp/MP3/MP3.html"
+    activities: ["programming", "thinking"]
+
   - id: j1-hits
     name: "J1 Hits (Japan FM)"
     url: "https://jenny.torontocast.com:2000/stream/J1HITS?_=184325"
@@ -424,4 +444,55 @@ stations:
     codec: "MP3"
     homepage: "https://www.mixmegapol.se"
     activities: ["cleaning", "relaxing"]
+
+  # South Korea (KR) Top Stations
+  - id: reyfm-kpop
+    name: "REYFM - #kpop"
+    url: "https://listen.reyfm.de/kpop_320kbps.mp3"
+    genre: "K-Pop / Dance / Chart Hits"
+    country: "KR"
+    bitrate: 320
+    codec: "MP3"
+    homepage: "https://www.reyfm.de"
+    activities: ["programming", "cleaning", "relaxing"]
+
+  - id: big-b-radio-kpop
+    name: "Big B Radio - #KPOP Station"
+    url: "https://antares.dribbcast.com/proxy/kpop?mp=/s"
+    genre: "K-Pop / Hits / Dance"
+    country: "KR"
+    bitrate: 192
+    codec: "MP3"
+    homepage: "https://bigbradio.net/kpop"
+    activities: ["programming", "cleaning", "relaxing"]
+
+  - id: listen-moe-kpop
+    name: "Listen.moe K-Pop"
+    url: "https://listen.moe/kpop/fallback"
+    genre: "K-Pop / Korean Pop / Hits"
+    country: "KR"
+    bitrate: 192
+    codec: "MP3"
+    homepage: "https://listen.moe/kpop"
+    activities: ["programming", "cleaning", "relaxing"]
+
+  - id: arirang-radio
+    name: "Arirang Radio Seoul"
+    url: "http://amdlive-ch03-ctnd-com.akamaized.net/arirang_3ch/arirang_3ch_audio/chunklist_b128000.m3u8"
+    genre: "K-Pop / News / Culture / Talk"
+    country: "KR"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://arirang.com/radio"
+    activities: ["news", "relaxing", "thinking"]
+
+  - id: old-pop-cafe
+    name: "Old Pop Cafe (올드팝카페)"
+    url: "http://cast.oldpopcafe.net:7080/"
+    genre: "Classic Pop / 70s & 80s / Oldies"
+    country: "KR"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://oldpopcafe.net"
+    activities: ["relaxing", "reading", "thinking"]
 

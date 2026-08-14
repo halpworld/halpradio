@@ -228,7 +228,7 @@ func TestBundledStationsYAML(t *testing.T) {
 	}
 
 	seenIDs := make(map[string]bool)
-	requiredCountries := []string{"GB", "IE", "US", "CN", "JP", "AU", "IN", "SE"}
+	requiredCountries := []string{"GB", "IE", "US", "CN", "JP", "AU", "IN", "SE", "KR"}
 	countryCounts := make(map[string]int)
 
 	for _, s := range stations {
