@@ -1,7 +1,7 @@
 class Halpradio < Formula
   desc "LazyVim-inspired Terminal Internet Radio Streamer"
   homepage "https://github.com/halpworld/halpradio"
-  version "0.0.1"
+  version "0.0.2"
   license "MIT"
 
   on_macos do

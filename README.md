@@ -55,7 +55,7 @@ halpradio
 ## 📺 Preview
 
 ```
-┌── 📻 HALPRADIO v0.0.1 ───────────────────────────────────────────────────────────── [ TOKYO NIGHT ] ┐
+┌── 📻 HALPRADIO v0.0.2 ───────────────────────────────────────────────────────────── [ TOKYO NIGHT ] ┐
 │                                                                                                    │
 │  [1] All Stations (128)   [2] Favorites (12)   [3] Categories   [4] Online Search (30,000+)       │
 │ ────────────────────────────────────────────────────────────────────────────────────────────────── │
@@ -119,8 +119,8 @@ Download pre-compiled standalone tarballs from the [GitHub Releases](https://git
 **Manual Installation Steps:**
 ```bash
 # Example for macOS Apple Silicon:
-curl -LO https://github.com/halpworld/halpradio/releases/latest/download/halpradio_0.0.1_darwin_arm64.tar.gz
-tar -xzf halpradio_0.0.1_darwin_arm64.tar.gz
+curl -LO https://github.com/halpworld/halpradio/releases/latest/download/halpradio_0.0.2_darwin_arm64.tar.gz
+tar -xzf halpradio_0.0.2_darwin_arm64.tar.gz
 sudo mv halpradio /usr/local/bin/
 ```
 
