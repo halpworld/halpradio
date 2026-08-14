@@ -46,6 +46,7 @@ brews:
       owner: halpworld
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    skip_upload: "{{ if not .Env.HOMEBREW_TAP_TOKEN }}true{{ else }}false{{ end }}"
     commit_author:
       name: github-actions[bot]
       email: 41898282+github-actions[bot]@users.noreply.github.com
