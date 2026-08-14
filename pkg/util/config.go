@@ -18,7 +18,7 @@ func DefaultConfig() Config {
 		Volume:         80,
 		PlayerBackend:  "auto",
 		Theme:          "tokyonight",
-		VisualizerMode: "bars",
+		VisualizerMode: "dj-cat",
 		LastStationID:  "",
 	}
 }

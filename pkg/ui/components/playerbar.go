@@ -59,7 +59,8 @@ func RenderPlayerBar(
 		Foreground(th.Highlight)
 
 	isPlaying := (status == player.PlayStatus(player.StatusPlaying))
-	vizRendered := viz.Render(isPlaying, clamp(width/3, 15), th)
+	vizWidth := clamp(width*2/5, 20)
+	vizRendered := viz.Render(isPlaying, vizWidth, th)
 
 	line1Left := fmt.Sprintf("%s %s", currStation.CountryFlag(), titleStyle.Render(currStation.Name))
 	if currStation.Genre != "" {
@@ -77,7 +78,11 @@ func RenderPlayerBar(
 	if trackDisplay == "" {
 		trackDisplay = currStation.Name
 	}
-	line2Left := trackStyle.Render("♪ " + truncate(trackDisplay, clamp(width/2, 20)))
+	maxTrackWidth := width - lipgloss.Width(vizRendered) - 8
+	if maxTrackWidth < 15 {
+		maxTrackWidth = 15
+	}
+	line2Left := trackStyle.Render("♪ " + truncate(trackDisplay, maxTrackWidth))
 
 	space2 := width - lipgloss.Width(line2Left) - lipgloss.Width(vizRendered) - 6
 	if space2 < 1 {

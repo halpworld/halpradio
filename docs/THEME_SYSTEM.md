@@ -58,19 +58,33 @@ type Theme struct {
 
 ## 🔊 Dynamic Audio Visualizers (`pkg/ui/components/visualizer.go`)
 
-When audio is playing, `halpradio` renders an animated visualizer in the Player Bar. Press `v` to cycle through 4 visualizer modes:
+<p align="center">
+  <img src="./images/visualizers.jpg" alt="halpradio Animated Animal DJ Visualizers" width="800" />
+</p>
+
+When audio is playing, `halpradio` renders a zero-jitter, beat-reactive animated visualizer in the Player Bar. Press `v` to cycle through visualizer modes:
 
 ```
-Bars Mode:     ▃▅▇█▇▅▃ ▂▄▆█▆▄▂
-Waveform Mode: ~≈∼-∼≈~-~≈∼-∼≈~
-Spectrum Mode: ░▒▓█▓▒░░▒▓█▓▒░
-Minimal Mode:  ● ∙ ○ ∙ ● ∙ ○ ∙
+DJ Cat Mode:    🎧 (=^･ω･^=)ﾉ [💿 ◓] ♫  ▂▃▄▅▆
+DJ Dog Mode:    🎧  (∪･ω･∪) ﾉ [💿 ◑] ♫  ▂▃▄▅▆
+DJ Bear Mode:   🎧  ʕ •ᴥ•ʔ  ﾉ [💿 ◒] ♫  ▂▃▄▅▆
+DJ Frog Mode:   🎧  ( •⊖• ) ﾉ [💿 ◐] ♫  ▂▃▄▅▆
+DJ Bunny Mode:  🎧 ( •ㅅ• )  ﾉ [💿 ◓] ♫  ▂▃▄▅▆
+Bars Mode:      ♫  ▂▃▄▅▆▇█▇▆▅▄▃▂  ♬
+Waveform Mode:  ∿ _⎽⎼─⎻⎺▔⎺⎻─⎼⎽_ ∿
+Spectrum Mode:  🔊 BASS ███ MID ███ TREB ███
+Minimal Mode:   L:████░░░░ R:██████░░
 ```
 
-1. **Bars Equalizer**: Dynamic vertical block bars (` ▂▃▄▅▆▇█`) responding to time ticks.
-2. **Waveform**: Smooth sine wave unicode characters depicting audio oscillation.
-3. **Spectrum**: Multi-level block density visualizer.
-4. **Minimal**: Compact pulsing dot indicators for minimalistic terminal layouts.
+1. **Animated Animal DJs** (`dj-cat`, `dj-dog`, `dj-bear`, `dj-frog`, `dj-bunny`):
+   - **Zero-Jitter Normalized Poses**: Every pose (head + arm + deck) has an exact, invariant width (24 visual columns) for smooth, stable rendering without horizontal shifting.
+   - **Harmonic Multi-Frequency Equalizer Rack**: Solid 6-bar mini-EQ (` ▂▃▄▅▆`) driven by harmonic frequency physics (sub-bass kick, mid melody, treble shimmer) with smooth attack and exponential decay.
+   - **Rhythmic Groove**: Head bobbing and turntable vinyl rotation (`◓`, `◑`, `◒`, `◐`) tempo-matched to audio playback.
+   - **Sleep State**: When stopped/paused, the DJ rests peacefully on the turntable (`🎧 (= - ω - =)..zzZ [ 💿 ] ⏹ STOPPED`).
+2. **Bars Equalizer**: Dynamic vertical block bars (` ▂▃▄▅▆▇█`) responding to time ticks.
+3. **Waveform**: Smooth sine wave unicode characters depicting audio oscillation.
+4. **Spectrum**: Multi-band frequency equalizer.
+5. **Minimal**: Compact stereo VU meters.
 
 ---
 

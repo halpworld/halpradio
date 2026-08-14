@@ -46,7 +46,7 @@ halpradio
 - **🐙 1-Key GitHub PR Export**: Press `p` on any station to copy a clean YAML snippet directly to your clipboard, ready for submitting a PR to [`stations.yaml`](./stations.yaml)!
 - **🔒 Private / Custom Stations**: Add private stream URLs locally via interactive `[ a ] Add Station` dialog (saved in `~/.config/halpradio/stations.yaml`).
 - **🎨 6 Vibrant Themes**: Tokyo Night, Catppuccin Mocha, Retro Synthwave '84, Nord, Gruvbox Dark, and Dracula.
-- **🔊 Live Audio Equalizer**: Dynamic animated TUI visualizers (Bars, Waveform, Spectrum, Minimal).
+- **🎧 Animated Animal DJ Visualizers**: Beat-reactive terminal DJs (Cat 🐱, Dog 🐶, Bear 🐻, Frog 🐸, Bunny 🐰) spinning vinyl, scratching decks, and pumping a smooth multi-frequency equalizer rack!
 - **📻 Real-time ICY Metadata**: Displays live song title and artist information for supported Icecast/Shoutcast HTTP streams.
 - **⭐ Favorites System**: Bookmark stations with `f` for 1-key instant access across restarts.
 
@@ -54,24 +54,55 @@ halpradio
 
 ## 📺 Preview
 
+<p align="center">
+  <img src="./docs/images/preview.jpg" alt="halpradio TUI Preview" width="850" />
+</p>
+
 ```
-┌── 📻 HALPRADIO v0.0.2 ───────────────────────────────────────────────────────────── [ TOKYO NIGHT ] ┐
+┌── 📻 HALPRADIO v0.0.3 ───────────────────────────────────────────────────────────── [ TOKYO NIGHT ] ┐
 │                                                                                                    │
-│  [1] All Stations (128)   [2] Favorites (12)   [3] Categories   [4] Online Search (30,000+)       │
+│  [ 1: Catalog (128) ]   [ 2: Work Modes ]   [ 3: Genres ]   [ 4: Online Search ]   [ ▶ PLAY ]      │
 │ ────────────────────────────────────────────────────────────────────────────────────────────────── │
-│  ▶  ⭐  Lofi Girl Radio              [ Lofi / Chill ]             FR  •  128 kbps MP3            │
-│     ⭐  Nightwave Plaza              [ Vaporwave / Synth ]        US  •  320 kbps MP3            │
-│        Chillhop Music Radio          [ Lofi / HipHop ]            NL  •  192 kbps MP3            │
-│        SomaFM Groove Salad           [ Ambient / Downtempo ]      US  •  128 kbps MP3            │
-│        KEXP 90.3 FM                  [ Indie / Alternative ]      US  •  160 kbps AAC            │
-│        BBC Radio 6 Music             [ Eclectic / Rock ]          GB  •  128 kbps AAC            │
+│  ▶  ⭐  🇫🇷 Lofi Girl Radio            [ Lofi / Beats ]             FR  •  320 kbps MP3            │
+│     ⭐  🇺🇸 Nightwave Plaza            [ Vaporwave / Synth ]        US  •  192 kbps MP3            │
+│        🇳🇱 Chillhop Music Radio        [ Lofi / Jazz ]              NL  •  320 kbps MP3            │
+│        🇺🇸 SomaFM Groove Salad         [ Downtempo / Ambient ]      US  •  128 kbps MP3            │
+│        🇺🇸 KEXP 90.3 FM                [ Indie / Alt Rock ]         US  •  160 kbps AAC            │
+│        🇬🇧 BBC Radio 6 Music           [ Eclectic / Rock ]          GB  •  128 kbps AAC            │
 │ ────────────────────────────────────────────────────────────────────────────────────────────────── │
-│  NOW PLAYING: Lofi Girl Radio — Kupla & Philanthrope - Soft Wind                                   │
-│  VOLUME: [████████████████░░░░] 80%  •  BACKEND: mpv  •  VISUALIZER: ▃▅▇█▇▅▃ ▂▄▆█                      │
-│                                                                                                    │
-│  [?] WhichKey  [/] Search  [Space] Play/Pause  [f] Fav  [p] Export PR  [t] Theme  [q] Quit         │
+│  🇫🇷 Lofi Girl Radio (Lofi / Beats)                                    🔊 [████████░░] 80%          │
+│  ♪ Kupla & Philanthrope - Soft Wind           🎧 (=^･ω･^=)ﾉ [💿 ◓] ♫  ▂▃▄▅▆                        │
+│ ────────────────────────────────────────────────────────────────────────────────────────────────── │
+│  [?] WhichKey  [/] Search  [Space] Play/Pause  [v] Visualizer  [f] Fav  [t] Theme  [q] Quit        │
 └────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 🎧 Beat-Reactive Animal DJ Visualizers
+
+<p align="center">
+  <img src="./docs/images/visualizers.jpg" alt="halpradio Animated Animal DJ Visualizers" width="850" />
+</p>
+
+Press `v` anytime in **halpradio** to cycle through 5 animated animal DJs, classic bars, waveform, spectrum, or minimal meters:
+
+| Visualizer Mode | Animal Character | DJ Booth & Live Equalizer Preview |
+|---|---|---|
+| `dj-cat` *(default)* | 🐱 **DJ Cat** | `🎧 (=^･ω･^=)ﾉ [💿 ◓] ♫  ▂▃▄▅▆` |
+| `dj-dog` | 🐶 **DJ Dog** | `🎧  (∪･ω･∪) ﾉ [💿 ◑] ♫  ▂▃▄▅▆` |
+| `dj-bear` | 🐻 **DJ Bear** | `🎧  ʕ •ᴥ•ʔ  ﾉ [💿 ◒] ♫  ▂▃▄▅▆` |
+| `dj-frog` | 🐸 **DJ Frog** | `🎧  ( •⊖• ) ﾉ [💿 ◐] ♫  ▂▃▄▅▆` |
+| `dj-bunny` | 🐰 **DJ Bunny** | `🎧 ( •ㅅ• )  ﾉ [💿 ◓] ♫  ▂▃▄▅▆` |
+| `bars` | 📊 **Bars Equalizer** | `♫  ▂▃▄▅▆▇█▇▆▅▄▃▂  ♬` |
+| `wave` | ∿ **Waveform** | `∿ _⎽⎼─⎻⎺▔⎺⎻─⎼⎽_ ∿` |
+| `spectrum` | 🔊 **Spectrum** | `🔊 BASS ███ MID ███ TREB ███` |
+| `minimal` | 🎚️ **Minimal VU** | `L:████░░░░ R:██████░░` |
+
+- **Zero-Jitter Normalized Poses**: Every pose (head + arm + deck) has an exact, invariant width (24 visual columns) for smooth, stable rendering without horizontal shifting.
+- **Harmonic Multi-Frequency Equalizer Rack**: Solid 6-bar mini-EQ (` ▂▃▄▅▆`) driven by harmonic frequency physics (sub-bass kick, mid melody, treble shimmer) with smooth attack and exponential decay.
+- **Rhythmic Groove**: Head bobbing and turntable vinyl rotation (`◓`, `◑`, `◒`, `◐`) tempo-matched to audio playback.
+- **Sleep State**: When stopped/paused, the DJ rests peacefully on the turntable (`🎧 (= - ω - =)..zzZ [ 💿 ] ⏹ STOPPED`).
 
 ---
 
@@ -119,8 +150,8 @@ Download pre-compiled standalone tarballs from the [GitHub Releases](https://git
 **Manual Installation Steps:**
 ```bash
 # Example for macOS Apple Silicon:
-curl -LO https://github.com/halpworld/halpradio/releases/latest/download/halpradio_0.0.2_darwin_arm64.tar.gz
-tar -xzf halpradio_0.0.2_darwin_arm64.tar.gz
+curl -LO https://github.com/halpworld/halpradio/releases/latest/download/halpradio_0.0.3_darwin_arm64.tar.gz
+tar -xzf halpradio_0.0.3_darwin_arm64.tar.gz
 sudo mv halpradio /usr/local/bin/
 ```
 
@@ -194,7 +225,7 @@ Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Over
 | | `r` | Play random station |
 | | `+` / `-` | Volume up / down (5% step) |
 | | `m` | Mute / unmute |
-| | `v` | Cycle visualizer (`bars`, `waveform`, `spectrum`, `minimal`) |
+| | `v` | Cycle visualizer (`dj-cat`, `dj-dog`, `dj-bear`, `dj-frog`, `dj-bunny`, `bars`, `wave`, `spectrum`, `minimal`) |
 | **Catalog** | `f` | Toggle Favorite star ⭐ |
 | | `/` | Live fuzzy search / filter stations |
 | | `a` | Open **Add Custom Station** modal |

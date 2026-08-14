@@ -24,7 +24,7 @@ All user state and settings are stored in your platform's standard configuration
 volume: 80
 player_backend: "auto"     # auto, native, mpv, vlc, cvlc, ffplay, mplayer, mpg123
 theme: "tokyonight"        # tokyonight, catppuccin, synthwave, nord, gruvbox, dracula
-visualizer_mode: "bars"    # bars, waveform, spectrum, minimal
+visualizer_mode: "dj-cat"   # dj-cat, dj-dog, dj-bear, dj-frog, dj-bunny, bars, wave, spectrum, minimal, off
 last_station_id: ""        # Remembers last played station
 ```
 
@@ -33,31 +33,34 @@ last_station_id: ""        # Remembers last played station
 ## 🚩 Command-Line Flags
 
 ```bash
-# Force specific audio backend
-halpradio -backend mpv
+# Set audio player backend explicitly
+halpradio --backend=native
+halpradio --backend=mpv
+halpradio --backend=vlc
 
-# Force native Go audio engine (no mpv or vlc needed)
-halpradio -backend native
+# Choose initial color theme
+halpradio --theme=synthwave
+halpradio --theme=catppuccin
 
-# Launch with Synthwave '84 theme
-halpradio -theme synthwave
-
-# Display version information
-halpradio -version
+# Print version and system diagnostic report
+halpradio --version
 ```
 
 ---
 
-## ⌨️ Complete Keybindings Reference (LazyVim Style)
+## ⌨️ Global Keybindings Reference
 
-Press `?` or `F1` anywhere in **halpradio** to toggle the floating **WhichKey Help Overlay**.
-
-### 🧭 Navigation & Tab Controls
+### 🎧 Audio & Playback Controls
 
 | Keybinding | Action |
 |---|---|
-| `j` / `↓` | Move selection down |
-| `k` / `↑` | Move selection up |
+| `Space` / `Enter` | Toggle Play / Pause selected station |
+| `s` | Stop audio stream playback |
+| `r` | Play a random station |
+| `+` / `=` | Increase volume (+5%) |
+| `-` | Decrease volume (-5%) |
+| `m` | Mute / Unmute audio |
+| `v` | Cycle audio visualizer mode (`dj-cat` ➔ `dj-dog` ➔ `dj-bear` ➔ `dj-frog` ➔ `dj-bunny` ➔ `bars` ➔ `wave` ➔ `spectrum` ➔ `minimal` ➔ `off`) |
 | `h` / `←` | Focus left sidebar / Previous tab |
 | `l` / `→` | Focus main list / Next tab |
 | `1` - `4` | Direct jump to Tab (1: All, 2: Favorites, 3: Categories, 4: Online Search) |

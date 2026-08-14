@@ -12,7 +12,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/util"
 )
 
-var Version = "0.0.2"
+var Version = "0.0.3"
 
 func Run(embeddedCatalog []byte) {
 	backendFlag := flag.String("backend", "auto", "Audio player backend: auto, native, mpv, vlc, ffplay, mplayer, mpg123")
