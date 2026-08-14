@@ -1,0 +1,85 @@
+# Architecture Overview 🏗️
+
+`halpradio` is a keyboard-driven, terminal-based Internet Radio streaming application built in Go using the **Bubble Tea** TUI framework and **Lipgloss** styling library.
+
+---
+
+## 📐 Application Design Pattern (Elm Architecture)
+
+`halpradio` strictly follows the Model-View-Update (MVU) pattern mandated by [Bubble Tea](https://github.com/charmbracelet/bubbletea):
+
+```mermaid
+flowchart TD
+    User([User Keyboard / Mouse]) -->|Keypress / Mouse Event| Update[Update Loop `pkg/ui/update.go`]
+    AsyncEvents([Async Events: ICY Metadata / API]) -->|Tea Cmd / Msg| Update
+    Update -->|State Mutation| Model[Application State `pkg/ui/model.go`]
+    Model -->|Render Layout| View[View Orchestrator `pkg/ui/view.go`]
+    View -->|Lipgloss Styled Output| Terminal([Terminal Screen])
+
+    Update -->|Player Actions| PlayerMgr[Player Manager `pkg/player/player.go`]
+    PlayerMgr -->|ICY Metadata Callback| AsyncEvents
+```
+
+### Core Components of MVU:
+
+1. **Model ([`pkg/ui/model.go`](../pkg/ui/model.go))**  
+   Houses all application state including:
+   - Active tab index (`All Stations`, `Favorites`, `Categories`, `RadioBrowser API`)
+   - Station catalog & store handle ([`pkg/radio/store.go`](../pkg/radio/store.go))
+   - Audio player handle ([`pkg/player/player.go`](../pkg/player/player.go))
+   - UI focus states, list cursor selections, and search queries
+   - Active modals (Theme picker, Add station modal, WhichKey overlay)
+   - Current theme token definition ([`pkg/theme/theme.go`](../pkg/theme/theme.go))
+
+2. **Update ([`pkg/ui/update.go`](../pkg/ui/update.go))**  
+   Processes user inputs (LazyVim keybindings, search input) and asynchronous messages:
+   - `TrackUpdatedMsg`: Fired when ICY metadata detects a new song title.
+   - `RadioBrowserResultsMsg`: Fired when online station search returns results.
+   - `tea.WindowSizeMsg`: Terminal resize events to dynamically compute layout dimensions.
+
+3. **View ([`pkg/ui/view.go`](../pkg/ui/view.go))**  
+   Orchestrates sub-component renderers and applies active theme colors to construct the terminal frame.
+
+---
+
+## 📦 Package Hierarchy & Responsibilities
+
+```
+halpradio/
+├── main.go               # Entry point; embeds stations.yaml & invokes app.Run()
+├── stations.yaml         # Bundled station catalog
+├── docs/                 # Detailed technical documentation
+└── pkg/
+    ├── app/              # CLI flag parsing, configuration loading & app bootstrap
+    ├── player/           # Multi-backend audio playback engine & ICY stream reader
+    ├── radio/            # Station catalog store, YAML parser, & RadioBrowser client
+    ├── theme/            # Theme definitions & color palette registry
+    ├── ui/               # Main Bubble Tea Model, Update, View, and Keymap logic
+    │   └── components/   # Modular UI sub-views (Header, StationList, PlayerBar, Visualizer, Modals)
+    └── util/             # OS configuration directory resolution & clipboard utilities
+```
+
+### Module Breakdown:
+
+| Package | Key Types / Files | Responsibilities |
+|---|---|---|
+| [`pkg/app`](../pkg/app/app.go) | `Run()` | Parses CLI flags (`--backend`, `--theme`, `--version`), sets up store, instantiates `player.Manager`, initializes `tea.Program`. |
+| [`pkg/player`](../pkg/player/player.go) | `Player`, `Manager`, `TrackInfo` | Detects audio CLI backends (`mpv`, `vlc`, `ffplay`, etc.) or falls back to native Go audio. Runs ICY metadata streaming goroutine. |
+| [`pkg/radio`](../pkg/radio/store.go) | `Store`, `Station`, `RadioBrowserClient` | Manages bundled, local, and favorite stations. Interfaces with the external RadioBrowser HTTP API. |
+| [`pkg/theme`](../pkg/theme/theme.go) | `Theme`, `GetTheme()` | Defines 6 color palettes (Tokyo Night, Catppuccin, Synthwave, Nord, Gruvbox, Dracula). |
+| [`pkg/ui`](../pkg/ui/model.go) | `Model`, `KeyMap`, `Update()` | Coordinates global navigation state, search filtering, modal popups, and keybindings. |
+| [`pkg/ui/components`](../pkg/ui/components/) | `Header`, `StationList`, `PlayerBar`, `Visualizer` | Render pure, reusable Lipgloss UI components. |
+| [`pkg/util`](../pkg/util/config.go) | `GetConfigDir()`, `CopyToClipboard()` | Provides platform-agnostic file paths for `~/.config/halpradio/` and clipboard integration. |
+
+---
+
+## ⚡ Data Flow & Concurrency
+
+1. **Audio Playback Subprocess / Goroutine**:  
+   Audio playback runs asynchronously in a separate goroutine managed by `player.Manager`. This prevents audio streaming or network delays from blocking the Bubble Tea UI event loop.
+
+2. **ICY Metadata Extraction**:  
+   When a station starts playing, `player.Manager` launches an `http.Client` request with header `Icy-MetaData: 1`. As metadata frames arrive, the thread extracts the `StreamTitle` and dispatches `TrackUpdatedMsg` to the Bubble Tea program thread (`program.Send()`).
+
+3. **Local Persistence**:  
+   Favorites and custom user stations are saved to disk under `~/.config/halpradio/` in JSON/YAML format using non-blocking file operations.

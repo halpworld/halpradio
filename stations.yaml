@@ -1,0 +1,178 @@
+# halpradio Station Catalog
+# Submit Pull Requests to github.com/halpworld/halpradio to add your favorite stations!
+
+stations:
+  # Ambient & Electronic
+  - id: soma-groovesalad
+    name: "SomaFM: Groove Salad"
+    url: "https://ice1.somafm.com/groovesalad-128-mp3"
+    genre: "Ambient / Chillout"
+    country: "US"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://somafm.com"
+    activities: ["programming", "reading", "thinking", "relaxing"]
+
+  - id: soma-dronezone
+    name: "SomaFM: Drone Zone"
+    url: "https://ice1.somafm.com/dronezone-128-mp3"
+    genre: "Ambient / Drone"
+    country: "US"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://somafm.com"
+    activities: ["programming", "reading", "thinking"]
+
+  - id: soma-defcon
+    name: "SomaFM: DEF CON Radio"
+    url: "https://ice1.somafm.com/defcon-128-mp3"
+    genre: "Hacker / Electronic"
+    country: "US"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://somafm.com"
+    activities: ["programming"]
+
+  - id: nightwave-plaza
+    name: "Nightwave Plaza"
+    url: "https://radio.plaza.one/mp3"
+    genre: "Vaporwave / Future Funk"
+    country: "JP"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://plaza.one"
+    activities: ["programming", "cleaning", "relaxing"]
+
+  - id: chillhop-radio
+    name: "Chillhop Radio (FluxFM)"
+    url: "http://streams.fluxfm.de/Chillhop/mp3-320"
+    genre: "Lofi / Hip Hop"
+    country: "DE"
+    bitrate: 320
+    codec: "MP3"
+    homepage: "https://fluxfm.de"
+    activities: ["programming", "reading", "thinking", "relaxing"]
+
+  - id: lofi-girl
+    name: "Lofi Girl Stream"
+    url: "https://play.streamafrica.net/lofiradio"
+    genre: "Lofi / Beats"
+    country: "FR"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://lofigirl.com"
+    activities: ["programming", "reading", "thinking", "relaxing"]
+
+  # Rock & Alternative
+  - id: kexp-seattle
+    name: "KEXP 90.3 FM Seattle"
+    url: "http://live-mp3-128.kexp.org/kexp128.mp3"
+    genre: "Alternative / Indie"
+    country: "US"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://kexp.org"
+    activities: ["cleaning", "relaxing"]
+
+  - id: soma-indiepop
+    name: "SomaFM: Indie Pop Rocks!"
+    url: "https://ice1.somafm.com/indiepop-128-mp3"
+    genre: "Indie Rock / Pop"
+    country: "US"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://somafm.com"
+    activities: ["cleaning", "relaxing"]
+
+  - id: rock-antenne
+    name: "ROCK ANTENNE Heavy Metal"
+    url: "https://stream.rockantenne.de/heavy-metal/stream/mp3"
+    genre: "Heavy Metal / Rock"
+    country: "DE"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.rockantenne.de"
+    activities: ["cleaning"]
+
+  # Jazz & Classical
+  - id: jazz24
+    name: "Jazz24 (KNKX Seattle)"
+    url: "https://knkx-live-a.edge.audiocdn.com/6285_256k"
+    genre: "Jazz"
+    country: "US"
+    bitrate: 256
+    codec: "AAC"
+    homepage: "https://www.jazz24.org"
+    activities: ["reading", "thinking", "relaxing"]
+
+  - id: swiss-classic
+    name: "Radio Swiss Classic"
+    url: "http://stream.srg-ssr.ch/m/rsc_de/mp3_128"
+    genre: "Classical"
+    country: "CH"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.radioswissclassic.ch"
+    activities: ["reading", "thinking"]
+
+  - id: classic-fm
+    name: "Classic FM UK"
+    url: "https://media-ssl.musicradio.com/ClassicFM"
+    genre: "Classical"
+    country: "GB"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://www.classicfm.com"
+    activities: ["reading", "thinking"]
+
+  # Public Radio & News
+  - id: bbc-world-service
+    name: "BBC World Service"
+    url: "https://stream.live.vc.bbcmedia.co.uk/bbc_world_service"
+    genre: "News / Talk"
+    country: "GB"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.bbc.co.uk/worldserviceradio"
+    activities: ["news"]
+
+  - id: npr-news
+    name: "NPR News Program Stream"
+    url: "https://npr-ice.streamguys1.com/live.mp3"
+    genre: "News / Public Radio"
+    country: "US"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://npr.org"
+    activities: ["news"]
+
+  # Synthwave & Retro 80s
+  - id: soma-vaporwaves
+    name: "SomaFM: Vaporwaves"
+    url: "https://ice1.somafm.com/vaporwaves-128-mp3"
+    genre: "Synthwave / Vaporwave"
+    country: "US"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://somafm.com"
+    activities: ["programming", "relaxing"]
+
+  - id: soma-u80s
+    name: "SomaFM: Underground 80s"
+    url: "https://ice1.somafm.com/u80s-128-mp3"
+    genre: "80s / New Wave / Synth"
+    country: "US"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://somafm.com"
+    activities: ["cleaning", "relaxing"]
+
+  - id: soma-secret-agent
+    name: "SomaFM: Secret Agent"
+    url: "https://ice1.somafm.com/secretagent-128-mp3"
+    genre: "Spy / Lounge / 60s"
+    country: "US"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://somafm.com"
+    activities: ["programming", "thinking", "cleaning"]

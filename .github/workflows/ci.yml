@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+      fail-fast: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config
+
+      - name: Check code formatting
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "The following files are not properly formatted:"
+            gofmt -l .
+            exit 1
+          fi
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run unit tests with race detector
+        run: go test -v -race ./...
+
+  cross-compile:
+    name: Cross Compile Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Verify macOS ARM64 build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: "darwin"
+          GOARCH: "arm64"
+        run: go build -o /dev/null main.go
+
+      - name: Verify macOS AMD64 build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: "darwin"
+          GOARCH: "amd64"
+        run: go build -o /dev/null main.go
+
+      - name: Verify Linux AMD64 build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: "linux"
+          GOARCH: "amd64"
+        run: go build -o /dev/null main.go
+
+      - name: Verify Linux ARM64 build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: "linux"
+          GOARCH: "arm64"
+        run: go build -o /dev/null main.go

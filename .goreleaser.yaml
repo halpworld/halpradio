@@ -1,0 +1,66 @@
+version: 2
+
+project_name: halpradio
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: halpradio
+    main: ./main.go
+    binary: halpradio
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/halpworld/halpradio/pkg/app.Version={{.Version}}
+
+universal_binaries:
+  - id: halpradio
+    replace: false
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE
+      - stations.yaml
+
+checksum:
+  name_template: "checksums.txt"
+
+brews:
+  - name: halpradio
+    repository:
+      owner: halpworld
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    commit_author:
+      name: github-actions[bot]
+      email: 41898282+github-actions[bot]@users.noreply.github.com
+    homepage: "https://github.com/halpworld/halpradio"
+    description: "LazyVim-inspired Terminal Internet Radio Streamer"
+    license: "MIT"
+    install: |
+      bin.install "halpradio"
+    test: |
+      assert_match "halpradio", shell_output("#{bin}/halpradio -version")
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
