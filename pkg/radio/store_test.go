@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -206,5 +208,66 @@ func TestActivityMatching(t *testing.T) {
 
 	if !stFallback.MatchesActivity("cleaning") {
 		t.Errorf("Expected fallback activity match for cleaning on rock station")
+	}
+}
+
+func TestBundledStationsYAML(t *testing.T) {
+	data, err := os.ReadFile("../../stations.yaml")
+	if err != nil {
+		t.Fatalf("Failed to read stations.yaml: %v", err)
+	}
+
+	store := NewStore()
+	if err := store.Load(data); err != nil {
+		t.Fatalf("Failed to parse stations.yaml: %v", err)
+	}
+
+	stations := store.GetAllStations()
+	if len(stations) == 0 {
+		t.Fatalf("No stations loaded from stations.yaml")
+	}
+
+	seenIDs := make(map[string]bool)
+	requiredCountries := []string{"GB", "IE", "US", "CN", "JP", "AU", "IN", "SE"}
+	countryCounts := make(map[string]int)
+
+	for _, s := range stations {
+		if s.ID == "" {
+			t.Errorf("Station %q has empty ID", s.Name)
+		}
+		if seenIDs[s.ID] {
+			t.Errorf("Duplicate station ID: %s", s.ID)
+		}
+		seenIDs[s.ID] = true
+
+		if s.Name == "" {
+			t.Errorf("Station %s has empty Name", s.ID)
+		}
+		if s.URL == "" {
+			t.Errorf("Station %s has empty URL", s.ID)
+		}
+		if s.Genre == "" {
+			t.Errorf("Station %s has empty Genre", s.ID)
+		}
+		if len(s.Country) != 2 || s.Country != strings.ToUpper(s.Country) {
+			t.Errorf("Station %s has invalid country code %q", s.ID, s.Country)
+		}
+		if s.Bitrate <= 0 {
+			t.Errorf("Station %s has invalid bitrate %d", s.ID, s.Bitrate)
+		}
+		if s.Codec == "" {
+			t.Errorf("Station %s has empty Codec", s.ID)
+		}
+		if s.Homepage == "" {
+			t.Errorf("Station %s has empty Homepage", s.ID)
+		}
+
+		countryCounts[s.Country]++
+	}
+
+	for _, rc := range requiredCountries {
+		if count := countryCounts[rc]; count < 3 {
+			t.Errorf("Expected at least 3 stations for country %s, found %d", rc, count)
+		}
 	}
 }

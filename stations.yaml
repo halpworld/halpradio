@@ -176,3 +176,252 @@ stations:
     codec: "MP3"
     homepage: "https://somafm.com"
     activities: ["programming", "thinking", "cleaning"]
+
+  # United Kingdom (GB) Top Stations
+  - id: heart-uk
+    name: "Heart UK"
+    url: "http://media-ice.musicradio.com/HeartUKMP3"
+    genre: "Adult Contemporary / Pop / Hits"
+    country: "GB"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.heart.co.uk"
+    activities: ["cleaning", "relaxing"]
+
+  - id: capital-fm
+    name: "Capital FM London"
+    url: "http://media-ice.musicradio.com/CapitalMP3"
+    genre: "Top 40 / Pop / Hit Music"
+    country: "GB"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.capitalfm.com"
+    activities: ["programming", "cleaning"]
+
+  - id: smooth-radio-uk
+    name: "Smooth Radio UK"
+    url: "https://media-ssl.musicradio.com/SmoothUKMP3"
+    genre: "Soft Rock / Easy Listening / Soul"
+    country: "GB"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.smoothradio.com"
+    activities: ["relaxing", "reading", "thinking"]
+
+  # Ireland (IE) Top Stations
+  - id: rte-radio-1
+    name: "RTÉ Radio 1"
+    url: "http://icecast.rte.ie/radio1"
+    genre: "News / Talk / Variety"
+    country: "IE"
+    bitrate: 160
+    codec: "MP3"
+    homepage: "https://www.rte.ie/radio1"
+    activities: ["news", "thinking"]
+
+  - id: today-fm
+    name: "Today FM"
+    url: "https://stream.audioxi.com/TD"
+    genre: "Alternative / Pop / Rock"
+    country: "IE"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.todayfm.com"
+    activities: ["cleaning", "relaxing"]
+
+  - id: newstalk-ireland
+    name: "Newstalk Ireland"
+    url: "https://edge.audioxi.com/NT"
+    genre: "News / Talk / Current Affairs"
+    country: "IE"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.newstalk.com"
+    activities: ["news", "thinking"]
+
+  # United States (US) Top Stations
+  - id: radio-paradise
+    name: "Radio Paradise (Main Mix)"
+    url: "https://stream.radioparadise.com/mp3-320"
+    genre: "Eclectic / Rock / World"
+    country: "US"
+    bitrate: 320
+    codec: "MP3"
+    homepage: "https://radioparadise.com"
+    activities: ["programming", "reading", "relaxing"]
+
+  - id: classic-vinyl-hd
+    name: "Classic Vinyl HD"
+    url: "https://icecast.walmradio.com:8443/classic"
+    genre: "Classic Hits / 50s & 60s / Oldies"
+    country: "US"
+    bitrate: 320
+    codec: "MP3"
+    homepage: "https://walmradio.com/classic"
+    activities: ["relaxing", "cleaning"]
+
+  - id: smooth-jazz-101
+    name: "101 Smooth Jazz"
+    url: "http://jking.cdnstream1.com/b22139_128mp3"
+    genre: "Smooth Jazz / Chill"
+    country: "US"
+    bitrate: 192
+    codec: "MP3"
+    homepage: "http://101smoothjazz.com"
+    activities: ["relaxing", "reading", "thinking"]
+
+  # China (CN) Top Stations
+  - id: cnr-voice-of-china
+    name: "CNR-1 Voice of China (中国之声)"
+    url: "https://lhttp.qtfm.cn/live/15318317/64k.mp3"
+    genre: "News / Talk / National"
+    country: "CN"
+    bitrate: 64
+    codec: "MP3"
+    homepage: "https://www.cnr.cn"
+    activities: ["news", "thinking"]
+
+  - id: guangdong-music-fm
+    name: "Guangdong Music FM (广东音乐之声)"
+    url: "https://lhttp.qtfm.cn/live/1260/64k.mp3"
+    genre: "Mandopop / Cantopop / Hits"
+    country: "CN"
+    bitrate: 64
+    codec: "MP3"
+    homepage: "https://m.gdtv.cn"
+    activities: ["relaxing", "cleaning"]
+
+  - id: asiafm-hd
+    name: "AsiaFM HD (亚洲音乐台)"
+    url: "http://asiafm.hk:8000/asiahd"
+    genre: "Mandopop / Pop / HD Music"
+    country: "CN"
+    bitrate: 96
+    codec: "AAC"
+    homepage: "http://www.asiafm.net"
+    activities: ["programming", "relaxing"]
+
+  # Japan (JP) Top Stations
+  - id: j1-hits
+    name: "J1 Hits (Japan FM)"
+    url: "https://jenny.torontocast.com:2000/stream/J1HITS?_=184325"
+    genre: "J-Pop / Hits / Modern Pop"
+    country: "JP"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://en.j1fm.tokyo"
+    activities: ["programming", "cleaning", "relaxing"]
+
+  - id: shonan-beach-fm
+    name: "Shonan Beach FM 78.9 (湘南ビーチFM)"
+    url: "http://shonanbeachfm.out.airtime.pro:8000/shonanbeachfm_a"
+    genre: "Jazz / Smooth Jazz / Pop"
+    country: "JP"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.beachfm.co.jp"
+    activities: ["relaxing", "reading", "thinking"]
+
+  - id: asia-dream-japan-hits
+    name: "Asia DREAM Radio - Japan Hits"
+    url: "http://quincy.torontocast.com:2020/stream.mp3"
+    genre: "J-Pop / Japanese Idols / Top 40"
+    country: "JP"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://asiadreamradio.com"
+    activities: ["programming", "cleaning"]
+
+  # Australia (AU) Top Stations
+  - id: kiss-fm-australia
+    name: "Kiss FM Dance Australia"
+    url: "http://cc.net2streams.com:8565/kissfm.mp3"
+    genre: "Dance / Electronic / House"
+    country: "AU"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://kissfm.com.au"
+    activities: ["programming", "cleaning"]
+
+  - id: gold-1043
+    name: "Gold 104.3 Melbourne"
+    url: "http://playerservices.streamtheworld.com/api/livestream-redirect/ARN_GOLD1043.mp3"
+    genre: "Classic Hits / 80s & 90s / Pop"
+    country: "AU"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.gold1043.com.au"
+    activities: ["cleaning", "relaxing"]
+
+  - id: abc-triple-j
+    name: "ABC Triple J"
+    url: "http://live-radio01.mediahubaustralia.com/2TJW/mp3/;stream.nsv"
+    genre: "Alternative / Indie / New Music"
+    country: "AU"
+    bitrate: 56
+    codec: "AAC"
+    homepage: "https://www.abc.net.au/triplej"
+    activities: ["programming", "cleaning", "relaxing"]
+
+  # India (IN) Top Stations
+  - id: radio-bollyfm
+    name: "Radio BollyFM"
+    url: "http://stream.radiobollyfm.in:8201/hd?t=1526570335"
+    genre: "Bollywood / Hindi Hits / Pop"
+    country: "IN"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "http://www.radiobollyfm.in"
+    activities: ["cleaning", "relaxing", "programming"]
+
+  - id: hits-of-bollywood
+    name: "Hits of Bollywood"
+    url: "http://stream.zeno.fm/8ty8szwpwfeuv"
+    genre: "Bollywood / Desi / Hindi Top Tracks"
+    country: "IN"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "http://www.hitsofbollywood.com"
+    activities: ["cleaning", "relaxing"]
+
+  - id: mirchi-top-20
+    name: "Mirchi Top 20 (Radio Mirchi)"
+    url: "https://drive.uber.radio/uber/bollywoodnow/icecast.audio"
+    genre: "Bollywood / Top 20 Hits / Pop"
+    country: "IN"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://mirchi.in"
+    activities: ["programming", "cleaning", "relaxing"]
+
+  # Sweden (SE) Top Stations
+  - id: sr-p1
+    name: "Sveriges Radio P1"
+    url: "https://live1.sr.se/p1-aac-320"
+    genre: "News / Speech / Culture / Documentaries"
+    country: "SE"
+    bitrate: 320
+    codec: "AAC"
+    homepage: "https://sverigesradio.se/p1"
+    activities: ["news", "thinking", "reading"]
+
+  - id: sr-p3
+    name: "Sveriges Radio P3"
+    url: "https://live1.sr.se/p3-aac-320"
+    genre: "Pop / Indie / Hip Hop / Youth"
+    country: "SE"
+    bitrate: 320
+    codec: "AAC"
+    homepage: "https://sverigesradio.se/p3"
+    activities: ["programming", "cleaning", "relaxing"]
+
+  - id: mix-megapol
+    name: "Mix Megapol"
+    url: "http://tx-bauerse.sharp-stream.com/http_live.php?ua=WEB&i=mixmegapol_instream_se_mp3"
+    genre: "Adult Contemporary / Pop Hits"
+    country: "SE"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.mixmegapol.se"
+    activities: ["cleaning", "relaxing"]
+
