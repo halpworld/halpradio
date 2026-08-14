@@ -154,20 +154,32 @@ func RenderStationList(
 }
 
 func padRight(s string, width int) string {
-	runes := []rune(s)
-	if len(runes) >= width {
-		return string(runes[:width])
+	w := lipgloss.Width(s)
+	if w >= width {
+		runes := []rune(s)
+		for len(runes) > 0 && lipgloss.Width(string(runes)) > width {
+			runes = runes[:len(runes)-1]
+		}
+		return string(runes)
 	}
-	return s + strings.Repeat(" ", width-len(runes))
+	return s + strings.Repeat(" ", width-w)
 }
 
 func truncate(s string, max int) string {
-	runes := []rune(s)
-	if len(runes) > max {
-		if max > 3 {
-			return string(runes[:max-3]) + "..."
-		}
-		return string(runes[:max])
+	w := lipgloss.Width(s)
+	if w <= max {
+		return s
 	}
-	return s
+	if max <= 3 {
+		runes := []rune(s)
+		for len(runes) > 0 && lipgloss.Width(string(runes)) > max {
+			runes = runes[:len(runes)-1]
+		}
+		return string(runes)
+	}
+	runes := []rune(s)
+	for len(runes) > 0 && lipgloss.Width(string(runes)+"...") > max {
+		runes = runes[:len(runes)-1]
+	}
+	return string(runes) + "..."
 }
