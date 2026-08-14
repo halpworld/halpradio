@@ -57,9 +57,11 @@ echo "📦 Extracting binary..."
 tar -xzf "${TMP_DIR}/${TARBALL}" -C "${TMP_DIR}"
 
 # Determine installation directory
-INSTALL_DIR="/usr/local/bin"
+INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
+USE_SUDO=""
+
 if [ ! -w "${INSTALL_DIR}" ]; then
-  if command -v sudo >/dev/null 2>&1; then
+  if [ -t 0 ] && command -v sudo >/dev/null 2>&1; then
     USE_SUDO="sudo"
   else
     INSTALL_DIR="${HOME}/.local/bin"
