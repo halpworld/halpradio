@@ -55,6 +55,7 @@ stations:
 		"3: Favorites",
 		"4: RadioBrowser",
 		"5: Custom",
+		"6: History",
 	}
 
 	for _, size := range testSizes {

@@ -198,11 +198,17 @@ Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Over
 |---|---|---|
 | **Navigation** | `j` / `k` or `↓` / `↑` | Move down / up |
 | | `h` / `l` or `←` / `→` | Focus sidebar / main list or prev/next tab |
-| | `1` - `6` | Direct jump to Tab (1: Catalog, 2: Activities, 3: Genres, 4: Favorites, 5: Online, 6: Custom) |
+| | `1` - `7` | Direct jump to Tab (1: Catalog, 2: Activities, 3: Genres, 4: Favorites, 5: Online, 6: Custom, 7: History) |
+| | `H` | Jump directly to Track History tab |
 | | `g` / `G` | Jump to top / bottom of list |
 | | `Ctrl+u` / `Ctrl+d` | Half page up / down |
-| **Playback** | `Space` or `Enter` | Toggle Play / Pause selected station |
-| | `s` | Stop audio stream |
+| **Discovery & Sharing** | `y` | Yank / copy track metadata (`Artist - Title`) to system clipboard |
+| | `o` | Open streaming search in default web browser (Spotify, YT Music, Apple, DDG, Google) |
+| | `s` | Star / bookmark track to `~/.config/halpradio/saved_tracks.txt` (on History tab) |
+| | `c` | Clear track history log (on History tab) |
+| | `p` | Export station YAML snippet to clipboard for GitHub PR |
+| **Playback** | `Space` or `Enter` | Toggle Play / Pause selected station (or tune in from history) |
+| | `s` | Stop audio stream (on station tabs) |
 | | `r` | Play random station |
 | | `+` / `-` | Volume up / down (5% step) |
 | | `m` | Mute / unmute |
@@ -212,7 +218,6 @@ Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Over
 | | `w` / `c` | Jump & filter by Activity Mode / Genre Category |
 | | `a` | Open **Add Custom Station** modal |
 | | `e` / `d` | Edit / Delete local custom station |
-| | `p` | Export station YAML snippet to clipboard for GitHub PR |
 | **UI & Options**| `t` | Theme picker modal (Tokyo Night, Catppuccin, Synthwave, etc.) |
 | | `?` / `F1` | Toggle WhichKey help overlay |
 | | `q` / `Ctrl+c` | Quit halpradio |

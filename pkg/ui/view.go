@@ -45,7 +45,7 @@ func (m Model) View() string {
 	)
 	playerBarHeight := lipgloss.Height(playerBarView)
 
-	statusBarView := components.RenderStatusBar(m.SearchQuery, m.StatusMessage, width, m.Theme)
+	statusBarView := components.RenderStatusBar(m.SearchQuery, m.StatusMessage, m.ActiveTab, width, m.Theme)
 	statusBarHeight := lipgloss.Height(statusBarView)
 
 	mainContentHeight := height - headerHeight - playerBarHeight - statusBarHeight - 1
@@ -121,6 +121,14 @@ func (m Model) View() string {
 			m.Theme,
 		)
 		mainArea = lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, " ", stationListView)
+	} else if m.ActiveTab == 6 {
+		mainArea = components.RenderHistoryList(
+			m.Store.GetHistory(),
+			m.HistoryIndex,
+			width,
+			mainContentHeight,
+			m.Theme,
+		)
 	} else {
 		mainArea = components.RenderStationList(
 			m.Stations,

@@ -7,7 +7,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/theme"
 )
 
-func RenderStatusBar(searchQuery string, message string, width int, th theme.Theme) string {
+func RenderStatusBar(searchQuery string, message string, activeTab int, width int, th theme.Theme) string {
 	if searchQuery != "" {
 		searchStyle := lipgloss.NewStyle().
 			Background(th.Highlight).
@@ -38,45 +38,90 @@ func RenderStatusBar(searchQuery string, message string, width int, th theme.The
 		desc string
 	}
 
-	if width >= 90 {
-		items = []struct {
-			key  string
-			desc string
-		}{
-			{"j/k", "Nav"},
-			{"Space", "Play/Pause"},
-			{"f", "Fav"},
-			{"+/-", "Vol"},
-			{"/", "Search"},
-			{"a", "Add"},
-			{"p", "Export PR"},
-			{"t", "Theme"},
-			{"?", "WhichKey"},
-			{"q", "Quit"},
-		}
-	} else if width >= 65 {
-		items = []struct {
-			key  string
-			desc string
-		}{
-			{"j/k", "Nav"},
-			{"Space", "Play"},
-			{"f", "Fav"},
-			{"+/-", "Vol"},
-			{"/", "Search"},
-			{"?", "Help"},
-			{"q", "Quit"},
+	if activeTab == 6 {
+		// History & Song Discovery Hub legend
+		if width >= 90 {
+			items = []struct {
+				key  string
+				desc string
+			}{
+				{"j/k", "Nav"},
+				{"y", "Yank (Copy)"},
+				{"o", "Open Search"},
+				{"s", "Bookmark"},
+				{"c", "Clear"},
+				{"+/-", "Vol"},
+				{"?", "WhichKey"},
+				{"q", "Quit"},
+			}
+		} else if width >= 65 {
+			items = []struct {
+				key  string
+				desc string
+			}{
+				{"j/k", "Nav"},
+				{"y", "Yank"},
+				{"o", "Open"},
+				{"s", "Star"},
+				{"c", "Clear"},
+				{"?", "Help"},
+				{"q", "Quit"},
+			}
+		} else {
+			items = []struct {
+				key  string
+				desc string
+			}{
+				{"j/k", "Nav"},
+				{"y", "Yank"},
+				{"o", "Open"},
+				{"s", "Star"},
+				{"q", "Quit"},
+			}
 		}
 	} else {
-		items = []struct {
-			key  string
-			desc string
-		}{
-			{"j/k", "Nav"},
-			{"Space", "Play"},
-			{"/", "Search"},
-			{"?", "Help"},
-			{"q", "Quit"},
+		// Standard tabs legend
+		if width >= 90 {
+			items = []struct {
+				key  string
+				desc string
+			}{
+				{"j/k", "Nav"},
+				{"Space", "Play/Pause"},
+				{"f", "Fav"},
+				{"y", "Yank"},
+				{"+/-", "Vol"},
+				{"/", "Search"},
+				{"a", "Add"},
+				{"p", "Export PR"},
+				{"?", "WhichKey"},
+				{"q", "Quit"},
+			}
+		} else if width >= 65 {
+			items = []struct {
+				key  string
+				desc string
+			}{
+				{"j/k", "Nav"},
+				{"Space", "Play"},
+				{"f", "Fav"},
+				{"y", "Yank"},
+				{"+/-", "Vol"},
+				{"/", "Search"},
+				{"?", "Help"},
+				{"q", "Quit"},
+			}
+		} else {
+			items = []struct {
+				key  string
+				desc string
+			}{
+				{"j/k", "Nav"},
+				{"Space", "Play"},
+				{"/", "Search"},
+				{"?", "Help"},
+				{"q", "Quit"},
+			}
 		}
 	}
 

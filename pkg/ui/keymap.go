@@ -34,6 +34,10 @@ type KeyMap struct {
 	Theme      key.Binding
 	Help       key.Binding
 	Quit       key.Binding
+
+	YankTrack  key.Binding
+	OpenSearch key.Binding
+	HistoryTab key.Binding
 }
 
 func DefaultKeyMap() KeyMap {
@@ -145,6 +149,18 @@ func DefaultKeyMap() KeyMap {
 		Quit: key.NewBinding(
 			key.WithKeys("q", "ctrl+c"),
 			key.WithHelp("q", "quit"),
+		),
+		YankTrack: key.NewBinding(
+			key.WithKeys("y"),
+			key.WithHelp("y", "yank/copy track"),
+		),
+		OpenSearch: key.NewBinding(
+			key.WithKeys("o"),
+			key.WithHelp("o", "open search in browser"),
+		),
+		HistoryTab: key.NewBinding(
+			key.WithKeys("H"),
+			key.WithHelp("H", "history view"),
 		),
 	}
 }

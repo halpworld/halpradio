@@ -6,17 +6,20 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/halpworld/halpradio/pkg/util"
 	"gopkg.in/yaml.v3"
 )
 
 type Store struct {
+	mu        sync.RWMutex
 	Bundled   []Station          `json:"bundled"`
 	Local     []Station          `json:"local"`
 	SomaFM    []Station          `json:"somafm"`
 	Favorites map[string]bool    `json:"favorites"`
 	FavItems  map[string]Station `json:"fav_items"` // Store full station object for radiobrowser favorites
+	History   []HistoryEntry     `json:"history,omitempty"`
 }
 
 func NewStore() *Store {
@@ -26,6 +29,7 @@ func NewStore() *Store {
 		SomaFM:    make([]Station, 0),
 		Favorites: make(map[string]bool),
 		FavItems:  make(map[string]Station),
+		History:   make([]HistoryEntry, 0),
 	}
 }
 

@@ -42,6 +42,7 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 			formatRow("k / ↑", "Move up", 12),
 			formatRow("h / ←", "Prev tab / Sidebar", 12),
 			formatRow("l / →", "Next tab / Main list", 12),
+			formatRow("H / 7", "Jump to History tab", 12),
 			formatRow("g / G", "Jump top / bottom", 12),
 			formatRow("Ctrl+u/d", "Half page up / down", 12),
 			"",
@@ -54,19 +55,19 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 		}
 
 		col2 := []string{
-			sectionStyle.Render("⭐ STATIONS & SHARING"),
+			sectionStyle.Render("⭐ DISCOVERY & SHARING"),
+			formatRow("y", "Yank (copy) track info", 11),
+			formatRow("o", "Open streaming search", 11),
+			formatRow("s", "Bookmark track (in Hist)", 11),
 			formatRow("f", "Toggle Favorite star", 11),
-			formatRow("a", "Add custom station", 11),
-			formatRow("e", "Edit local station", 11),
-			formatRow("d", "Delete local station", 11),
+			formatRow("a / e / d", "Add / Edit / Del station", 11),
 			formatRow("p", "Export PR snippet", 11),
+			formatRow("c", "Clear history / Category", 11),
 			"",
 			sectionStyle.Render("🎨 INTERFACE & SEARCH"),
 			formatRow("/", "Live search bar", 11),
-			formatRow("w", "Filter activity mode", 11),
-			formatRow("c", "Filter genre category", 11),
-			formatRow("v", "Cycle visualizer mode", 11),
-			formatRow("t", "Open Theme Picker", 11),
+			formatRow("w / c", "Filter activity / genre", 11),
+			formatRow("v / t", "Visualizer / Theme", 11),
 			formatRow("? / F1", "Toggle this help menu", 11),
 			formatRow("q / ^c", "Quit halpradio", 11),
 		}
@@ -74,23 +75,23 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 		leftBox := strings.Join(col1, "\n")
 		rightBox := strings.Join(col2, "\n")
 		content = lipgloss.JoinHorizontal(lipgloss.Top, leftBox, "  ", rightBox)
-		boxWidth = 70
+		boxWidth = 72
 		if width >= 80 {
-			boxWidth = 76
+			boxWidth = 78
 		}
 	} else {
 		// 1-column compact layout for narrow/small terminals
 		rows := []string{
 			formatRow("j / k (↑/↓)", "Move selection", 14),
-			formatRow("h / l (←/→)", "Switch tab / pane", 14),
+			formatRow("h / l / H", "Switch tab / History", 14),
 			formatRow("Space/Enter", "Play / Pause stream", 14),
-			formatRow("s / r", "Stop / Random", 14),
+			formatRow("y / o", "Yank / Open search", 14),
+			formatRow("s / r", "Stop / Star / Random", 14),
 			formatRow("+ / - / m", "Volume ±5% / Mute", 14),
 			formatRow("f / a / e", "Fav / Add / Edit", 14),
-			formatRow("p", "Export PR snippet", 14),
-			formatRow("/ / w / c", "Search / Mode / Genre", 14),
-			formatRow("v / t", "Visualizer / Theme", 14),
-			formatRow("? / q", "Help / Quit", 14),
+			formatRow("p / c", "Export PR / Clear", 14),
+			formatRow("/ / w / v", "Search / Mode / Viz", 14),
+			formatRow("t / ? / q", "Theme / Help / Quit", 14),
 		}
 		content = strings.Join(rows, "\n")
 		boxWidth = lipgloss.Width(content) + 4

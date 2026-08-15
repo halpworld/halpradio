@@ -39,11 +39,12 @@ type Model struct {
 	Theme      theme.Theme
 	Visualizer *components.Visualizer
 
-	ActiveTab     int // 0: Catalog, 1: Activities, 2: Genres, 3: Favorites, 4: RadioBrowser, 5: Custom
+	ActiveTab     int // 0: Catalog, 1: Activities, 2: Genres, 3: Favorites, 4: RadioBrowser, 5: Custom, 6: History
 	ActiveFocus   FocusArea
 	Stations      []radio.Station
 	RBStations    []radio.Station
 	SelectedIndex int
+	HistoryIndex  int
 
 	Activities       []radio.Activity
 	SelectedActivity string
@@ -93,6 +94,7 @@ func NewModel(
 		ActivityIndex:    0,
 		Genres:           store.GetCategories(),
 		AddInputs:        make([]string, 5),
+		HistoryIndex:     0,
 	}
 
 	m.RefreshStations()
@@ -102,11 +104,12 @@ func NewModel(
 func (m *Model) SwitchTab(tabIndex int) {
 	if tabIndex < 0 {
 		tabIndex = 0
-	} else if tabIndex > 5 {
-		tabIndex = 5
+	} else if tabIndex > 6 {
+		tabIndex = 6
 	}
 	m.ActiveTab = tabIndex
 	m.SelectedIndex = 0
+	m.HistoryIndex = 0
 	if m.ActiveTab == 1 || m.ActiveTab == 2 {
 		m.ActiveFocus = FocusSidebar
 	} else {
@@ -131,6 +134,8 @@ func (m *Model) RefreshStations() {
 		baseList = m.RBStations
 	case 5:
 		baseList = m.Store.Local
+	case 6:
+		baseList = nil
 	default:
 		baseList = m.Store.GetAllStations()
 	}
@@ -159,7 +164,7 @@ func (m *Model) RefreshStations() {
 }
 
 func (m Model) WindowTitle() string {
-	tabNames := []string{"Catalog", "Activities", "Genres", "Favorites", "RadioBrowser", "Custom"}
+	tabNames := []string{"Catalog", "Activities", "Genres", "Favorites", "RadioBrowser", "Custom", "History"}
 	tabName := "Catalog"
 	if m.ActiveTab >= 0 && m.ActiveTab < len(tabNames) {
 		tabName = tabNames[m.ActiveTab]

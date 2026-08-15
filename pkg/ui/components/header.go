@@ -61,7 +61,8 @@ func RenderHeader(width int, activeTab int, status player.PlayStatus, backend st
 
 	// Tabs
 	var tabs []string
-	if width >= 86 {
+	padX := 1
+	if width >= 102 {
 		tabs = []string{
 			"1: Catalog",
 			"2: Activities",
@@ -69,17 +70,23 @@ func RenderHeader(width int, activeTab int, status player.PlayStatus, backend st
 			"4: Favorites",
 			"5: RadioBrowser",
 			"6: Custom",
+			"7: History",
 		}
-	} else if width >= 66 {
+	} else if width >= 78 {
 		tabs = []string{
-			"1: Catalog",
-			"2: Modes",
-			"3: Genres",
-			"4: Favs",
-			"5: Online",
-			"6: Custom",
+			"1:Catalog",
+			"2:Modes",
+			"3:Genres",
+			"4:Favs",
+			"5:Online",
+			"6:Custom",
+			"7:History",
+		}
+		if width < 84 {
+			padX = 0
 		}
 	} else {
+		padX = 0
 		tabs = []string{
 			"1:Cat",
 			"2:Act",
@@ -87,15 +94,11 @@ func RenderHeader(width int, activeTab int, status player.PlayStatus, backend st
 			"4:Fav",
 			"5:Web",
 			"6:Add",
+			"7:Hist",
 		}
 	}
 
 	var tabViews []string
-	padX := 1
-	if width < 55 {
-		padX = 0
-	}
-
 	for i, t := range tabs {
 		if i == activeTab {
 			style := lipgloss.NewStyle().

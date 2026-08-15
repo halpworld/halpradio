@@ -11,6 +11,7 @@ type Config struct {
 	Theme          string `yaml:"theme"`
 	VisualizerMode string `yaml:"visualizer_mode"`
 	LastStationID  string `yaml:"last_station_id"`
+	SearchProvider string `yaml:"search_provider,omitempty"`
 }
 
 func DefaultConfig() Config {
@@ -20,6 +21,7 @@ func DefaultConfig() Config {
 		Theme:          "tokyonight",
 		VisualizerMode: "dj-cat",
 		LastStationID:  "",
+		SearchProvider: "spotify",
 	}
 }
 
@@ -48,6 +50,10 @@ func GetLocalStationsFile() string {
 
 func GetFavoritesFile() string {
 	return filepath.Join(GetConfigDir(), "favorites.json")
+}
+
+func GetSavedTracksFile() string {
+	return filepath.Join(GetConfigDir(), "saved_tracks.txt")
 }
 
 func GetConfigFile() string {
