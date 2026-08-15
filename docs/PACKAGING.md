@@ -31,7 +31,7 @@ pkgrel=1
 pkgdesc="LazyVim-inspired Terminal Internet Radio Streamer"
 arch=('x86_64' 'aarch64')
 url="https://github.com/halpworld/halpradio"
-license=('MIT')
+license=('GPL-3.0-or-later')
 optdepends=(
     'mpv: Recommended audio backend for AAC/OGG/HLS support'
     'vlc: Alternative audio backend'
@@ -91,7 +91,7 @@ For Windows users using [Scoop](https://scoop.sh):
     "version": "0.0.3",
     "description": "LazyVim-inspired Terminal Internet Radio Streamer",
     "homepage": "https://github.com/halpworld/halpradio",
-    "license": "MIT",
+    "license": "GPL-3.0-or-later",
     "architecture": {
         "64bit": {
             "url": "https://github.com/halpworld/halpradio/releases/download/v0.0.3/halpradio_0.0.3_windows_amd64.zip",
@@ -128,7 +128,7 @@ buildGoModule rec {
   meta = with lib; {
     description = "LazyVim-inspired Terminal Internet Radio Streamer";
     homepage = "https://github.com/halpworld/halpradio";
-    license = licenses.mit;
+    license = licenses.gpl3Plus;
     maintainers = [ ];
     mainProgram = "halpradio";
   };

@@ -52,7 +52,7 @@ brews:
       email: 41898282+github-actions[bot]@users.noreply.github.com
     homepage: "https://github.com/halpworld/halpradio"
     description: "LazyVim-inspired Terminal Internet Radio Streamer"
-    license: "MIT"
+    license: "GPL-3.0-or-later"
     install: |
       bin.install "halpradio"
     test: |

@@ -15,7 +15,7 @@
 [![Go Version](https://img.shields.io/badge/Go-1.21%2B-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![Go Reference](https://pkg.go.dev/badge/github.com/halpworld/halpradio.svg)](https://pkg.go.dev/github.com/halpworld/halpradio)
 [![Go Report Card](https://goreportcard.com/badge/github.com/halpworld/halpradio)](https://goreportcard.com/report/github.com/halpworld/halpradio)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](./LICENSE)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg?style=flat-square)](./LICENSE)
 [![Stations](https://img.shields.io/badge/Stations-30%2C000%2B-ff69b4?style=flat-square&logo=radio)](./stations.yaml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](./CONTRIBUTING.md)
 
@@ -272,7 +272,7 @@ We love community contributions! Expanding the catalog takes less than 30 second
 
 ## 📄 License
 
-This project is licensed under the [MIT License](./LICENSE).
+This project is licensed under the [GNU General Public License v3.0 (GPL-3.0)](./LICENSE).
 
 ---
 

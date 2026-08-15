@@ -5,7 +5,7 @@ class Halpradio < Formula
   desc "LazyVim-inspired Terminal Internet Radio Streamer"
   homepage "https://github.com/halpworld/halpradio"
   version "0.0.3"
-  license "MIT"
+  license "GPL-3.0-or-later"
 
   on_macos do
     if Hardware::CPU.arm?
