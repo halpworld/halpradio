@@ -1,22 +1,23 @@
 <div align="center">
 
-```
-  █ || █  ███  █   ███  ███  ███  ███  █   ███ 
-  █═||═█ █───█ █   █──█ █──█ █──█ █──█ █  █───█
-  █ || █ █───█ █── █──█ ███─ █──█ █──█ █  █───█
-```
+<p align="center">
+  <img src="./docs/images/social-preview.jpg" alt="halpradio — LazyVim-inspired Terminal Internet Radio Streamer" width="850" />
+</p>
 
 # 📻 halpradio
 
-> **The ultimate terminal Internet Radio streaming application for developers who live in the command line.**  
-> *Built with Go & Bubble Tea, featuring a LazyVim-inspired keyboard-driven interface.*
+**The ultimate terminal Internet Radio streaming application for developers who live in the command line.**  
+*Built with Go & Bubble Tea, featuring a LazyVim-inspired keyboard-driven interface.*
 
 [![CI](https://github.com/halpworld/halpradio/actions/workflows/ci.yml/badge.svg)](https://github.com/halpworld/halpradio/actions/workflows/ci.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/halpworld/halpradio?style=flat-square&logo=github)](https://github.com/halpworld/halpradio/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/halpworld/halpradio?style=flat-square&logo=github&color=7aa2f7)](https://github.com/halpworld/halpradio/releases)
 [![Homebrew Tap](https://img.shields.io/badge/Homebrew-halpworld%2Ftap-orange?style=flat-square&logo=homebrew)](https://github.com/halpworld/homebrew-tap)
 [![Go Version](https://img.shields.io/badge/Go-1.21%2B-00ADD8?style=flat-square&logo=go)](https://golang.org)
+[![Go Reference](https://pkg.go.dev/badge/github.com/halpworld/halpradio.svg)](https://pkg.go.dev/github.com/halpworld/halpradio)
+[![Go Report Card](https://goreportcard.com/badge/github.com/halpworld/halpradio)](https://goreportcard.com/report/github.com/halpworld/halpradio)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](./LICENSE)
 [![Stations](https://img.shields.io/badge/Stations-30%2C000%2B-ff69b4?style=flat-square&logo=radio)](./stations.yaml)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](./CONTRIBUTING.md)
 
 </div>
 
@@ -36,26 +37,17 @@ curl -fsSL https://raw.githubusercontent.com/halpworld/halpradio/main/install.sh
 halpradio
 ```
 
----
-
-## ✨ Features
-
-- **⚡ LazyVim-Inspired UX**: Vim navigation (`j/k`, `h/l`, `g/G`, `Ctrl+u/d`, `/` search), split tab views, status badges, and Which-Key overlay (`?`).
-- **🎵 Multi-Backend Audio Engine**: Auto-detects `mpv`, `vlc`/`cvlc`, `ffplay`, `mplayer`, or `mpg123`. Falls back to built-in **native Go audio engine** (`oto/v3` + `go-mp3`) with zero external binary dependencies required.
-- **📻 30,000+ Online Stations**: Discover global internet radio via built-in **RadioBrowser API** integration or listen to curated bundled stations.
-- **🐙 1-Key GitHub PR Export**: Press `p` on any station to copy a clean YAML snippet directly to your clipboard, ready for submitting a PR to [`stations.yaml`](./stations.yaml)!
-- **🔒 Private / Custom Stations**: Add private stream URLs locally via interactive `[ a ] Add Station` dialog (saved in `~/.config/halpradio/stations.yaml`).
-- **🎨 6 Vibrant Themes**: Tokyo Night, Catppuccin Mocha, Retro Synthwave '84, Nord, Gruvbox Dark, and Dracula.
-- **🎧 Animated Animal DJ Visualizers**: Beat-reactive terminal DJs (Cat 🐱, Dog 🐶, Bear 🐻, Frog 🐸, Bunny 🐰) spinning vinyl, scratching decks, and pumping a smooth multi-frequency equalizer rack!
-- **📻 Real-time ICY Metadata**: Displays live song title and artist information for supported Icecast/Shoutcast HTTP streams.
-- **⭐ Favorites System**: Bookmark stations with `f` for 1-key instant access across restarts.
+### 🐳 Instant Container Run (Docker)
+```bash
+docker run --rm -it --device /dev/snd halpworld/halpradio:latest
+```
 
 ---
 
-## 📺 Preview
+## 📺 Real TUI Screenshot Preview
 
 <p align="center">
-  <img src="./docs/images/preview.jpg" alt="halpradio TUI Preview" width="850" />
+  <img src="./docs/images/preview.jpg" alt="halpradio TUI Interface — Real Terminal Screenshot" width="850" />
 </p>
 
 ```
@@ -79,10 +71,25 @@ halpradio
 
 ---
 
+## ✨ Why halpradio? (Comparison with Other Terminal Players)
+
+| Feature | 📻 **halpradio** | PyRadio | Curseradio | radio-active | mocp / cmus |
+|---|:---:|:---:|:---:|:---:|:---:|
+| **Zero-Dependency Audio Engine** | ✅ **Yes** (`oto/v3` Go native) | ❌ (requires MPV/VLC) | ❌ (requires MPV) | ❌ (requires FFmpeg) | ❌ (C daemons) |
+| **Multi-Backend Auto Detection** | ✅ `mpv` > `vlc` > `ffplay` > `native` | ⚠️ Limited | ⚠️ MPV only | ⚠️ FFmpeg only | ❌ Self only |
+| **Beat-Reactive Animated Visualizers** | ✅ **5 Animal DJs + EQ Spectrum** | ❌ None | ❌ None | ❌ None | ⚠️ Basic VU |
+| **Live ICY Metadata (Song / Artist)** | ✅ **Real-time Async Extraction** | ⚠️ Partial | ❌ None | ⚠️ Partial | ⚠️ Track only |
+| **30,000+ Online Station Search** | ✅ **Built-in RadioBrowser API** | ❌ Manual list | ❌ TuneIn scrap | ⚠️ Search only | ❌ Local files |
+| **Vim Navigation & Which-Key (`?`)** | ✅ **Full Vim Modal UX** | ⚠️ Basic keys | ⚠️ Basic keys | ❌ Non-modal | ⚠️ Custom maps |
+| **Modern Theme Engine** | ✅ **6 Themes** (Tokyo Night, Synthwave, etc.) | ⚠️ Curses colors | ❌ Basic curses | ❌ Basic | ⚠️ Simple skins |
+| **1-Key PR Clipboard Export (`p`)** | ✅ **Instant YAML snippet for PRs** | ❌ Manual | ❌ Manual | ❌ Manual | ❌ N/A |
+
+---
+
 ## 🎧 Beat-Reactive Animal DJ Visualizers
 
 <p align="center">
-  <img src="./docs/images/visualizers.jpg" alt="halpradio Animated Animal DJ Visualizers" width="850" />
+  <img src="./docs/images/visualizers.jpg" alt="halpradio Animated Animal DJ Visualizers — Real Terminal Screenshot" width="850" />
 </p>
 
 Press `v` anytime in **halpradio** to cycle through 5 animated animal DJs, classic bars, waveform, spectrum, or minimal meters:
@@ -106,20 +113,16 @@ Press `v` anytime in **halpradio** to cycle through 5 animated animal DJs, class
 
 ---
 
-## 📦 Installation Options
+## 📦 Complete Installation Options
 
 ### Method 1: Homebrew (macOS & Linux) — Recommended
 
 ```bash
-# Add official halpradio tap and install
-brew tap halpworld/tap
-brew install halpradio
-
-# Or install directly with a single command:
+# Install directly from the official tap
 brew install halpworld/tap/halpradio
 ```
 
-To update in the future:
+To upgrade anytime:
 ```bash
 brew upgrade halpradio
 ```
@@ -146,14 +149,7 @@ Download pre-compiled standalone tarballs from the [GitHub Releases](https://git
 | **macOS** | Intel x86_64 | `halpradio_*_darwin_amd64.tar.gz` |
 | **Linux** | x86_64 | `halpradio_*_linux_amd64.tar.gz` |
 | **Linux** | ARM64 / Raspberry Pi / AWS Graviton | `halpradio_*_linux_arm64.tar.gz` |
-
-**Manual Installation Steps:**
-```bash
-# Example for macOS Apple Silicon:
-curl -LO https://github.com/halpworld/halpradio/releases/latest/download/halpradio_0.0.3_darwin_arm64.tar.gz
-tar -xzf halpradio_0.0.3_darwin_arm64.tar.gz
-sudo mv halpradio /usr/local/bin/
-```
+| **Windows** | x86_64 / ARM64 | `halpradio_*_windows_*.zip` |
 
 ---
 
@@ -165,47 +161,38 @@ If you have Go 1.21+ installed:
 go install github.com/halpworld/halpradio@latest
 ```
 
-Ensure `$(go env GOPATH)/bin` is in your `$PATH`.
-
 ---
 
 ### Method 5: Build From Source
 
 ```bash
-# Clone the repository
 git clone https://github.com/halpworld/halpradio.git
 cd halpradio
-
-# Build executable
 go build -o halpradio main.go
-
-# Run halpradio
 ./halpradio
 ```
 
+For Arch Linux (AUR), Scoop (Windows), or Nix packaging, see the [Packaging Guide](./docs/PACKAGING.md).
+
 ---
 
-## 🔊 Audio Player Backends & Dependencies
+## 🔊 Audio Player Backends & Codec Support
 
 `halpradio` works **completely out of the box** using its built-in **native Go audio engine** (`oto/v3` + `go-mp3`) with zero external binary dependencies required!
 
-For enhanced stream stability and support for AAC / OGG formats, installing `mpv` (recommended) or `vlc` is optional but encouraged:
+| Audio Backend | Priority | MP3 | AAC | OGG | FLAC | HLS / M3U8 | Dependencies |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **mpv** *(recommended)* | 1st | ✅ | ✅ | ✅ | ✅ | ✅ | `brew install mpv` / `apt install mpv` |
+| **vlc / cvlc** | 2nd | ✅ | ✅ | ✅ | ✅ | ✅ | `brew install vlc` / `apt install vlc` |
+| **ffplay** | 3rd | ✅ | ✅ | ✅ | ✅ | ✅ | `ffmpeg` |
+| **native (Go oto)** | 4th | ✅ | ❌ | ❌ | ❌ | ❌ | **Zero dependencies (built-in)** |
+
+`halpradio` will automatically detect `mpv` > `vlc` > `ffplay` > `native` on startup. You can override this anytime with the `-backend` flag:
 
 ```bash
-# macOS
-brew install mpv
-
-# Ubuntu / Debian
-sudo apt install mpv
-
-# Arch Linux
-sudo pacman -S mpv
-
-# Fedora
-sudo dnf install mpv
+halpradio -backend mpv
+halpradio -backend native
 ```
-
-`halpradio` will automatically detect `mpv` > `vlc` > `ffplay` > `native` on startup.
 
 ---
 
@@ -238,18 +225,28 @@ Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Over
 
 ---
 
-## 🚩 Command-Line Flags
+## 🎨 Themes & Customization
 
-```bash
-# Launch with explicit audio backend (mpv, vlc, ffplay, native)
-halpradio -backend mpv
+Switch themes on the fly by pressing `t` or pass `-theme <name>` via CLI:
 
-# Launch with specific color theme
-halpradio -theme synthwave
+- 🌌 **Tokyo Night** (`tokyonight`) — Neon blue and purple developer aesthetic
+- ☕ **Catppuccin Mocha** (`catppuccin`) — Soothing pastel dark palette
+- 🌆 **Retro Synthwave '84** (`synthwave`) — Vibrant neon magenta and cyan
+- ❄️ **Nord** (`nord`) — Cool arctic blue minimalism
+- 🪵 **Gruvbox Dark** (`gruvbox`) — Warm retro terminal tones
+- 🧛 **Dracula** (`dracula`) — High-contrast gothic vampire theme
 
-# Display version
-halpradio -version
-```
+---
+
+## 📻 Curated Station Categories & Activity Modes
+
+Explore hundreds of curated streams across diverse activity moods and global genres:
+
+- 🎧 **Focus & Flow**: Lofi Girl Radio, Chillhop Music, SomaFM Groove Salad, DEF CON Radio, Nightwave Plaza
+- ☕ **Acoustic & Coffee**: Cafe De Paris, Smooth Jazz Florida, Swiss Classic, Instrumental Ambient
+- 🚀 **High Energy Coding**: Synthwave 1980s, Cyberpunk FM, Goa Psytrance, Digitally Imported (DI.FM)
+- 🌏 **Global Radio**: BBC Radio 6 Music (UK), KEXP 90.3 FM Seattle (US), Radio Paradise (US), FM 802 Osaka (JP), Big B Radio K-Pop (KR), FIP Radio (FR), Triple J (AU)
+- 📰 **News & Public Broadcasts**: NPR 24 Hour Program Stream, BBC World Service, Deutschlandfunk
 
 ---
 
@@ -262,6 +259,7 @@ Explore detailed technical documentation in the [`docs/`](./docs) folder:
 - 📻 **[Station Catalog & RadioBrowser Integration](./docs/STATION_MANAGEMENT.md)**: Station storage hierarchy (`stations.yaml`, local config, favorites), RadioBrowser API client, and PR export workflow.
 - 🎨 **[Theme System & Audio Visualizers](./docs/THEME_SYSTEM.md)**: Lipgloss styling system, theme palettes, and TUI visualizer algorithms.
 - ⚙️ **[Configuration & Keybindings](./docs/CONFIGURATION.md)**: Directory layout, `config.yaml` options, CLI flags, and complete keymap reference.
+- 📦 **[Packaging & Distribution Guide](./docs/PACKAGING.md)**: Specifications for Homebrew, Arch Linux AUR, Docker, Scoop, and Nix.
 - 🤝 **[Developer & Contribution Guide](./docs/CONTRIBUTING.md)**: Developer setup, code standards, unit testing, and Pull Request checklist.
 - 🤖 **[AI Agent Integration Guide](./docs/AGENTS.md)**: Guidelines for AI coding agents (**Google Antigravity** via [`AGENTS.md`](./AGENTS.md) & **Claude Code** via [`CLAUDE.md`](./CLAUDE.md)).
 
@@ -272,8 +270,9 @@ Explore detailed technical documentation in the [`docs/`](./docs) folder:
 We love community contributions! Expanding the catalog takes less than 30 seconds:
 
 1. Select any station in **halpradio** and press `p` (copies formatted YAML to clipboard).
-2. Paste the snippet into [`stations.yaml`](./stations.yaml) and submit a Pull Request.
-3. See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.
+2. Paste the snippet into [`stations.yaml`](./stations.yaml) and submit a [Pull Request](https://github.com/halpworld/halpradio/pulls).
+3. Alternatively, submit a [Station Suggestion Issue](https://github.com/halpworld/halpradio/issues/new?template=station_request.yml).
+4. See [CONTRIBUTING.md](./CONTRIBUTING.md) for full guidelines.
 
 ---
 

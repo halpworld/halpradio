@@ -1,0 +1,82 @@
+name: "🐛 Bug Report"
+description: "File an issue for a problem, audio playback failure, or crash in halpradio"
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem in **halpradio**!
+        Please verify if the issue persists when running with different audio backends (`halpradio -backend mpv` vs `halpradio -backend native`).
+  - type: input
+    id: version
+    attributes:
+      label: "halpradio Version"
+      description: "Output of `halpradio -version` or git commit hash."
+      placeholder: "e.g., v0.0.3 or git-commit-hash"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: "Operating System"
+      description: "What OS and architecture are you running?"
+      options:
+        - "macOS (Apple Silicon / ARM64)"
+        - "macOS (Intel x86_64)"
+        - "Linux (x86_64)"
+        - "Linux (ARM64 / Raspberry Pi)"
+        - "Windows / WSL"
+        - "Other"
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: "Audio Backend"
+      description: "Which audio playback backend was active when the issue occurred?"
+      options:
+        - "mpv"
+        - "vlc / cvlc"
+        - "ffplay"
+        - "native (oto/v3 Go engine)"
+        - "mplayer / mpg123"
+        - "Auto-detected (not specified)"
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: "Terminal Emulator"
+      description: "What terminal emulator are you using?"
+      placeholder: "e.g., Ghostty, Kitty, iTerm2, Alacritty, WezTerm, Windows Terminal"
+    validations:
+      required: false
+  - type: textarea
+    id: description
+    attributes:
+      label: "Bug Description"
+      description: "A clear and concise description of what the bug is."
+      placeholder: "Describe what went wrong..."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: "Steps to Reproduce"
+      description: "Steps to reproduce the behavior."
+      value: |
+        1. Run 'halpradio'
+        2. Navigate to station '...'
+        3. Press '...'
+        4. See error
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: "Logs or Terminal Output"
+      description: "Paste any relevant terminal error logs or stack traces."
+      render: shell
+    validations:
+      required: false

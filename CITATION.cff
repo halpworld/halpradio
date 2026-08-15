@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use halpradio or reference it in your work, please cite it as below."
+title: "halpradio: LazyVim-inspired Terminal Internet Radio Streamer"
+authors:
+  - family-names: "halpworld"
+    given-names: "halpradio contributors"
+date-released: 2026-01-01
+url: "https://github.com/halpworld/halpradio"
+repository-code: "https://github.com/halpworld/halpradio"
+keywords:
+  - "terminal"
+  - "tui"
+  - "internet-radio"
+  - "bubbletea"
+  - "golang"
+  - "music-streaming"
+  - "audio-player"
+license: "MIT"

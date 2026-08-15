@@ -1,0 +1,68 @@
+name: "📻 Station Suggestion"
+description: "Suggest a radio station to be added to the bundled halpradio catalog"
+title: "[Station]: "
+labels: ["station-addition", "community"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Suggest a radio station to be included in the curated [`stations.yaml`](https://github.com/halpworld/halpradio/blob/main/stations.yaml) catalog!
+        *Tip: You can also submit a direct Pull Request by pressing `p` in halpradio to copy formatted station YAML to your clipboard.*
+  - type: input
+    id: station_name
+    attributes:
+      label: "Station Name"
+      placeholder: "e.g., Lofi Girl Radio, KEXP 90.3 FM, BBC Radio 6 Music"
+    validations:
+      required: true
+  - type: input
+    id: stream_url
+    attributes:
+      label: "Stream URL (Direct HTTP/HTTPS audio stream or playlist)"
+      placeholder: "https://example.com/stream.mp3"
+    validations:
+      required: true
+  - type: input
+    id: genre
+    attributes:
+      label: "Genre / Activity Mode"
+      placeholder: "e.g., Lofi / Beats, Jazz, Synthwave, Classical, News"
+    validations:
+      required: true
+  - type: input
+    id: country
+    attributes:
+      label: "Country Code (2-letter ISO 3166-1 alpha-2 uppercase)"
+      placeholder: "e.g., US, GB, JP, FR, DE, BR"
+    validations:
+      required: true
+  - type: input
+    id: bitrate_codec
+    attributes:
+      label: "Bitrate (kbps) & Codec"
+      placeholder: "e.g., 320 kbps MP3 or 128 kbps AAC"
+    validations:
+      required: false
+  - type: input
+    id: homepage
+    attributes:
+      label: "Official Station Homepage"
+      placeholder: "https://www.station-website.com"
+    validations:
+      required: false
+  - type: textarea
+    id: yaml_snippet
+    attributes:
+      label: "YAML Snippet (if exported via 'p' in halpradio)"
+      placeholder: |
+        - id: "custom-station-id"
+          name: "Station Name"
+          url: "https://stream.url/audio.mp3"
+          genre: "Lofi / Beats"
+          country: "US"
+          bitrate: 320
+          codec: "MP3"
+          homepage: "https://example.com"
+      render: yaml
+    validations:
+      required: false
