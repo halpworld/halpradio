@@ -26,7 +26,7 @@ For Arch Linux users, the binary package can be built using the following `PKGBU
 ```bash
 # Maintainer: halpworld <https://github.com/halpworld>
 pkgname=halpradio-bin
-pkgver=0.0.3
+pkgver=0.0.4
 pkgrel=1
 pkgdesc="LazyVim-inspired Terminal Internet Radio Streamer"
 arch=('x86_64' 'aarch64')
@@ -88,17 +88,17 @@ For Windows users using [Scoop](https://scoop.sh):
 
 ```json
 {
-    "version": "0.0.3",
+    "version": "0.0.4",
     "description": "LazyVim-inspired Terminal Internet Radio Streamer",
     "homepage": "https://github.com/halpworld/halpradio",
     "license": "GPL-3.0-or-later",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/halpworld/halpradio/releases/download/v0.0.3/halpradio_0.0.3_windows_amd64.zip",
+            "url": "https://github.com/halpworld/halpradio/releases/download/v0.0.4/halpradio_0.0.4_windows_amd64.zip",
             "bin": "halpradio.exe"
         },
         "arm64": {
-            "url": "https://github.com/halpworld/halpradio/releases/download/v0.0.3/halpradio_0.0.3_windows_arm64.zip",
+            "url": "https://github.com/halpworld/halpradio/releases/download/v0.0.4/halpradio_0.0.4_windows_arm64.zip",
             "bin": "halpradio.exe"
         }
     }
@@ -114,7 +114,7 @@ For Windows users using [Scoop](https://scoop.sh):
 
 buildGoModule rec {
   pname = "halpradio";
-  version = "0.0.3";
+  version = "0.0.4";
 
   src = fetchFromGitHub {
     owner = "halpworld";
