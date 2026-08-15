@@ -59,7 +59,7 @@ type Theme struct {
 ## 🔊 Dynamic Audio Visualizers (`pkg/ui/components/visualizer.go`)
 
 <p align="center">
-  <img src="./images/visualizers.jpg" alt="halpradio Animated Animal DJ Visualizers" width="800" />
+  <img src="./images/preview.png" alt="halpradio Theme & Visualizer in Action — Real Terminal Screenshot" width="800" />
 </p>
 
 When audio is playing, `halpradio` renders a zero-jitter, beat-reactive animated visualizer in the Player Bar. Press `v` to cycle through visualizer modes:

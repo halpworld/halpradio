@@ -44,30 +44,28 @@ docker run --rm -it --device /dev/snd halpworld/halpradio:latest
 
 ---
 
-## 📺 Real TUI Screenshot Preview
+## 📺 Live Demo & Real Screenshots
 
 <p align="center">
-  <img src="./docs/images/preview.jpg" alt="halpradio TUI Interface — Real Terminal Screenshot" width="850" />
+  <img src="./docs/images/demo.gif" alt="halpradio Interactive Terminal Demo" width="850" />
 </p>
 
-```
-┌── 📻 HALPRADIO v0.0.3 ───────────────────────────────────────────────────────────── [ TOKYO NIGHT ] ┐
-│                                                                                                    │
-│  [ 1: Catalog (128) ]   [ 2: Work Modes ]   [ 3: Genres ]   [ 4: Online Search ]   [ ▶ PLAY ]      │
-│ ────────────────────────────────────────────────────────────────────────────────────────────────── │
-│  ▶  ⭐  🇫🇷 Lofi Girl Radio            [ Lofi / Beats ]             FR  •  320 kbps MP3            │
-│     ⭐  🇺🇸 Nightwave Plaza            [ Vaporwave / Synth ]        US  •  192 kbps MP3            │
-│        🇳🇱 Chillhop Music Radio        [ Lofi / Jazz ]              NL  •  320 kbps MP3            │
-│        🇺🇸 SomaFM Groove Salad         [ Downtempo / Ambient ]      US  •  128 kbps MP3            │
-│        🇺🇸 KEXP 90.3 FM                [ Indie / Alt Rock ]         US  •  160 kbps AAC            │
-│        🇬🇧 BBC Radio 6 Music           [ Eclectic / Rock ]          GB  •  128 kbps AAC            │
-│ ────────────────────────────────────────────────────────────────────────────────────────────────── │
-│  🇫🇷 Lofi Girl Radio (Lofi / Beats)                                    🔊 [████████░░] 80%          │
-│  ♪ Kupla & Philanthrope - Soft Wind           🎧 (=^･ω･^=)ﾉ [💿 ◓] ♫  ▂▃▄▅▆                        │
-│ ────────────────────────────────────────────────────────────────────────────────────────────────── │
-│  [?] WhichKey  [/] Search  [Space] Play/Pause  [v] Visualizer  [f] Fav  [t] Theme  [q] Quit        │
-└────────────────────────────────────────────────────────────────────────────────────────────────────┘
-```
+### 📻 Main Station Catalog & Live Audio Playback
+<p align="center">
+  <img src="./docs/images/preview.png" alt="halpradio Main Station Catalog — Real Terminal Screenshot" width="850" />
+</p>
+
+### 💼 Activity Modes & Split-View Sidebar
+<p align="center">
+  <img src="./docs/images/workmodes.png" alt="halpradio Work Modes Tab — Real Terminal Screenshot" width="850" />
+</p>
+
+### ⌨️ WhichKey Overlay & Theme Selection
+<p align="center">
+  <img src="./docs/images/whichkey.png" alt="halpradio WhichKey Help Overlay — Real Terminal Screenshot" width="420" />
+  &nbsp;&nbsp;
+  <img src="./docs/images/themes.png" alt="halpradio Theme Selection Picker — Real Terminal Screenshot" width="420" />
+</p>
 
 ---
 
@@ -88,13 +86,9 @@ docker run --rm -it --device /dev/snd halpworld/halpradio:latest
 
 ## 🎧 Beat-Reactive Animal DJ Visualizers
 
-<p align="center">
-  <img src="./docs/images/visualizers.jpg" alt="halpradio Animated Animal DJ Visualizers — Real Terminal Screenshot" width="850" />
-</p>
-
 Press `v` anytime in **halpradio** to cycle through 5 animated animal DJs, classic bars, waveform, spectrum, or minimal meters:
 
-| Visualizer Mode | Animal Character | DJ Booth & Live Equalizer Preview |
+| Visualizer Mode | Animal Character | DJ Booth & Live Equalizer Render |
 |---|---|---|
 | `dj-cat` *(default)* | 🐱 **DJ Cat** | `🎧 (=^･ω･^=)ﾉ [💿 ◓] ♫  ▂▃▄▅▆` |
 | `dj-dog` | 🐶 **DJ Dog** | `🎧  (∪･ω･∪) ﾉ [💿 ◑] ♫  ▂▃▄▅▆` |
