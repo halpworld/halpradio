@@ -31,7 +31,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tickCmd()
 
 	case TrackUpdatedMsg:
-		return m, nil
+		return m, tea.SetWindowTitle(m.WindowTitle())
 
 	case FlashMessageMsg:
 		m.StatusMessage = string(msg)

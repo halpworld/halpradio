@@ -24,11 +24,11 @@ flowchart TD
 
 1. **Model ([`pkg/ui/model.go`](../pkg/ui/model.go))**  
    Houses all application state including:
-   - Active tab index (`All Stations`, `Favorites`, `Categories`, `RadioBrowser API`)
+   - Active tab index (`1: Catalog`, `2: Activities`, `3: Genres`, `4: Favorites`, `5: RadioBrowser`, `6: Custom`)
    - Station catalog & store handle ([`pkg/radio/store.go`](../pkg/radio/store.go))
    - Audio player handle ([`pkg/player/player.go`](../pkg/player/player.go))
-   - UI focus states, list cursor selections, and search queries
-   - Active modals (Theme picker, Add station modal, WhichKey overlay)
+   - UI focus states (`FocusMainList`, `FocusSidebar`), list cursor selections, and search queries
+   - Active modals (Theme picker, Add station modal, WhichKey overlay, PR export modal)
    - Current theme token definition ([`pkg/theme/theme.go`](../pkg/theme/theme.go))
 
 2. **Update ([`pkg/ui/update.go`](../pkg/ui/update.go))**  
@@ -36,6 +36,7 @@ flowchart TD
    - `TrackUpdatedMsg`: Fired when ICY metadata detects a new song title.
    - `RadioBrowserResultsMsg`: Fired when online station search returns results.
    - `tea.WindowSizeMsg`: Terminal resize events to dynamically compute layout dimensions.
+   - `tea.SetWindowTitle`: Dispatches OSC 2 escape sequences to update native terminal window/tab titles dynamically.
 
 3. **View ([`pkg/ui/view.go`](../pkg/ui/view.go))**  
    Orchestrates sub-component renderers and applies active theme colors to construct the terminal frame.
@@ -83,3 +84,10 @@ halpradio/
 
 3. **Local Persistence**:  
    Favorites and custom user stations are saved to disk under `~/.config/halpradio/` in JSON/YAML format using non-blocking file operations.
+
+4. **Terminal Viewport & Tab Compatibility**:  
+   To prevent vertical scrolling and title clipping across diverse terminal emulators (Ghostty, WezTerm, Kitty, iTerm2, Alacritty, Tmux, Apple Terminal, Windows Terminal):
+   - Total rendered height is strictly bounded (`lipgloss.Height(view) <= terminal_height - 1`).
+   - Component inner dimensions explicitly account for Lipgloss borders and padding (`innerHeight := height - 2`).
+   - Column allocation is dynamically responsive, dropping secondary columns (Bitrate/Codec/Flag) when width is constrained.
+   - Dynamic terminal window titles are emitted via `tea.SetWindowTitle()` (OSC 2 sequence), syncing active tab and track status with the host terminal's native tab bar.

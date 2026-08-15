@@ -34,8 +34,8 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 	var content string
 	var boxWidth int
 
-	if width >= 80 {
-		// 2-column layout (calibrated for standard 80+ column terminals)
+	if width >= 72 {
+		// 2-column layout (calibrated for standard 72+ column terminals)
 		col1 := []string{
 			sectionStyle.Render("🧭 NAVIGATION"),
 			formatRow("j / ↓", "Move down", 12),
@@ -73,45 +73,38 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 
 		leftBox := strings.Join(col1, "\n")
 		rightBox := strings.Join(col2, "\n")
-		content = lipgloss.JoinHorizontal(lipgloss.Top, leftBox, "   ", rightBox)
-		boxWidth = 78
+		content = lipgloss.JoinHorizontal(lipgloss.Top, leftBox, "  ", rightBox)
+		boxWidth = 70
+		if width >= 80 {
+			boxWidth = 76
+		}
 	} else {
-		// 1-column layout for narrower terminals
+		// 1-column compact layout for narrow/small terminals
 		rows := []string{
-			sectionStyle.Render("🧭 NAVIGATION"),
-			formatRow("j/k or ↑/↓", "Move selection", 14),
-			formatRow("h/l or ←/→", "Switch tab / pane", 14),
-			formatRow("g / G", "Jump top / bottom", 14),
-			formatRow("Ctrl+u / d", "Half page up / down", 14),
-			"",
-			sectionStyle.Render("🎵 PLAYBACK & AUDIO"),
-			formatRow("Space / Enter", "Play / Pause stream", 14),
-			formatRow("s / r", "Stop / Random station", 14),
+			formatRow("j / k (↑/↓)", "Move selection", 14),
+			formatRow("h / l (←/→)", "Switch tab / pane", 14),
+			formatRow("Space/Enter", "Play / Pause stream", 14),
+			formatRow("s / r", "Stop / Random", 14),
 			formatRow("+ / - / m", "Volume ±5% / Mute", 14),
-			"",
-			sectionStyle.Render("⭐ STATIONS & SETTINGS"),
-			formatRow("f / a / e / d", "Fav / Add / Edit / Delete", 14),
-			formatRow("p", "Export PR YAML snippet", 14),
+			formatRow("f / a / e", "Fav / Add / Edit", 14),
+			formatRow("p", "Export PR snippet", 14),
 			formatRow("/ / w / c", "Search / Mode / Genre", 14),
 			formatRow("v / t", "Visualizer / Theme", 14),
-			formatRow("? / q", "Help / Quit halpradio", 14),
+			formatRow("? / q", "Help / Quit", 14),
 		}
 		content = strings.Join(rows, "\n")
-		boxWidth = lipgloss.Width(content) + 6
+		boxWidth = lipgloss.Width(content) + 4
 		if boxWidth > width-2 {
 			boxWidth = width - 2
 		}
-		if boxWidth < 46 {
-			boxWidth = 46
+		if boxWidth < 40 {
+			boxWidth = 40
 		}
 	}
 
-	tipText := "💡 Tip: Press 'p' on any station to copy a Pull Request YAML snippet!"
-	if boxWidth < 74 {
-		tipText = "💡 Tip: Press 'p' to copy a Pull Request YAML snippet!"
-	}
-	if boxWidth < 58 {
-		tipText = "💡 Tip: Press 'p' to export PR snippet!"
+	tipText := "💡 Tip: Press 'p' to copy a Pull Request snippet!"
+	if boxWidth < 55 {
+		tipText = "💡 Tip: Press 'p' to export PR!"
 	}
 
 	githubTip := lipgloss.NewStyle().
@@ -119,23 +112,31 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 		Italic(true).
 		Render(tipText)
 
-	renderedBody := lipgloss.JoinVertical(
-		lipgloss.Left,
-		lipgloss.NewStyle().Width(boxWidth-4).Align(lipgloss.Center).Render(titleStyle.Render("⌨  HALPRADIO KEYBOARD SHORTCUTS")),
-		"",
-		content,
-		"",
-		lipgloss.NewStyle().Width(boxWidth-4).Align(lipgloss.Center).Render(githubTip),
-		"",
-		lipgloss.NewStyle().Width(boxWidth-4).Align(lipgloss.Center).Foreground(th.Muted).Render("Press [ Esc ] or [ ? ] to return"),
-	)
+	var bodyElements []string
+	bodyElements = append(bodyElements, lipgloss.NewStyle().Width(boxWidth-4).Align(lipgloss.Center).Render(titleStyle.Render("⌨  HALPRADIO SHORTCUTS")))
+	if height >= 24 {
+		bodyElements = append(bodyElements, "")
+	}
+	bodyElements = append(bodyElements, content)
+	if height >= 24 {
+		bodyElements = append(bodyElements, "")
+	}
+	bodyElements = append(bodyElements, lipgloss.NewStyle().Width(boxWidth-4).Align(lipgloss.Center).Render(githubTip))
+	if height >= 22 {
+		bodyElements = append(bodyElements, lipgloss.NewStyle().Width(boxWidth-4).Align(lipgloss.Center).Foreground(th.Muted).Render("Press [ Esc ] or [ ? ] to return"))
+	}
+
+	padY := 1
+	if height < 26 {
+		padY = 0
+	}
 
 	modalBox := lipgloss.NewStyle().
 		Border(lipgloss.DoubleBorder()).
 		BorderForeground(th.Primary).
-		Padding(1, 2).
+		Padding(padY, 1).
 		Width(boxWidth).
-		Render(renderedBody)
+		Render(lipgloss.JoinVertical(lipgloss.Left, bodyElements...))
 
 	return PlaceOverlay(modalBox, width, height)
 }

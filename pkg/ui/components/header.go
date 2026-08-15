@@ -60,28 +60,54 @@ func RenderHeader(width int, activeTab int, status player.PlayStatus, backend st
 		Italic(true)
 
 	// Tabs
-	tabs := []string{
-		"1: Catalog",
-		"2: Activities",
-		"3: Genres",
-		"4: Favorites",
-		"5: RadioBrowser",
-		"6: Custom",
+	var tabs []string
+	if width >= 86 {
+		tabs = []string{
+			"1: Catalog",
+			"2: Activities",
+			"3: Genres",
+			"4: Favorites",
+			"5: RadioBrowser",
+			"6: Custom",
+		}
+	} else if width >= 66 {
+		tabs = []string{
+			"1: Catalog",
+			"2: Modes",
+			"3: Genres",
+			"4: Favs",
+			"5: Online",
+			"6: Custom",
+		}
+	} else {
+		tabs = []string{
+			"1:Cat",
+			"2:Act",
+			"3:Gen",
+			"4:Fav",
+			"5:Web",
+			"6:Add",
+		}
 	}
 
 	var tabViews []string
+	padX := 1
+	if width < 55 {
+		padX = 0
+	}
+
 	for i, t := range tabs {
 		if i == activeTab {
 			style := lipgloss.NewStyle().
 				Background(th.Primary).
 				Foreground(th.BadgeText).
 				Bold(true).
-				Padding(0, 1)
+				Padding(0, padX)
 			tabViews = append(tabViews, style.Render(t))
 		} else {
 			style := lipgloss.NewStyle().
 				Foreground(th.Foreground).
-				Padding(0, 1)
+				Padding(0, padX)
 			tabViews = append(tabViews, style.Render(t))
 		}
 	}
@@ -94,16 +120,42 @@ func RenderHeader(width int, activeTab int, status player.PlayStatus, backend st
 		backendStyle.Render(fmt.Sprintf("[%s]", backend)),
 	)
 
-	headerBox := lipgloss.JoinHorizontal(
-		lipgloss.Center,
-		renderedLogo,
-		strings.Repeat(" ", clamp(width-65, 2)),
-		topRight,
-	)
+	logoWidth := lipgloss.Width(renderedLogo)
+	topRightWidth := lipgloss.Width(topRight)
+	neededWidth := logoWidth + topRightWidth + 2
 
-	divider := lipgloss.NewStyle().
-		Foreground(th.Border).
-		Render(strings.Repeat("─", width))
+	var headerBox string
+	if width >= neededWidth {
+		spaceCount := width - logoWidth - topRightWidth
+		if spaceCount < 1 {
+			spaceCount = 1
+		}
+		headerBox = lipgloss.JoinHorizontal(
+			lipgloss.Center,
+			renderedLogo,
+			strings.Repeat(" ", spaceCount),
+			topRight,
+		)
+	} else {
+		compactTitle := halpStyle.Render("HALPRADIO") + iconStyle.Render(" 📻")
+		spaceCount := width - lipgloss.Width(compactTitle) - topRightWidth
+		if spaceCount < 1 {
+			spaceCount = 1
+		}
+		headerBox = lipgloss.JoinHorizontal(
+			lipgloss.Center,
+			compactTitle,
+			strings.Repeat(" ", spaceCount),
+			topRight,
+		)
+	}
+
+	divider := ""
+	if width > 0 {
+		divider = lipgloss.NewStyle().
+			Foreground(th.Border).
+			Render(strings.Repeat("─", width))
+	}
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,

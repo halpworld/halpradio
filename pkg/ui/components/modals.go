@@ -10,9 +10,12 @@ import (
 )
 
 func RenderPRExportModal(st radio.Station, width int, height int, th theme.Theme) string {
-	boxWidth := 68
-	if width < 72 {
+	boxWidth := 66
+	if width < 70 {
 		boxWidth = width - 4
+	}
+	if boxWidth < 36 {
+		boxWidth = 36
 	}
 
 	titleStyle := lipgloss.NewStyle().
@@ -26,8 +29,7 @@ func RenderPRExportModal(st radio.Station, width int, height int, th theme.Theme
 	codeStyle := lipgloss.NewStyle().
 		Background(th.Border).
 		Foreground(th.Highlight).
-		Padding(1, 2).
-		Margin(1, 0)
+		Padding(0, 1)
 
 	instructionStyle := lipgloss.NewStyle().
 		Foreground(th.Secondary).
@@ -39,24 +41,25 @@ func RenderPRExportModal(st radio.Station, width int, height int, th theme.Theme
 		lipgloss.Left,
 		titleStyle.Render("🐙 CONTRIBUTE TO HALPRADIO ON GITHUB"),
 		"",
-		descStyle.Render(fmt.Sprintf("Station '%s' has been copied to your clipboard in YAML format!", st.Name)),
-		"",
-		descStyle.Render("To share this station with all halpradio users:"),
+		descStyle.Render(fmt.Sprintf("Station '%s' copied to clipboard!", truncate(st.Name, boxWidth-8))),
 		instructionStyle.Render("1. Fork https://github.com/halpworld/halpradio"),
-		instructionStyle.Render("2. Paste the snippet below into 'stations.yaml'"),
-		instructionStyle.Render("3. Open a Pull Request on GitHub!"),
+		instructionStyle.Render("2. Paste snippet into 'stations.yaml' & open PR!"),
 		"",
 		codeStyle.Render(yamlSnippet),
 		"",
 		lipgloss.NewStyle().Foreground(th.Playing).Bold(true).Render("✓ Copied snippet to system clipboard!"),
-		"",
 		lipgloss.NewStyle().Foreground(th.Muted).Render("Press [ Esc ] or [ Enter ] to close"),
 	)
+
+	padY := 1
+	if height < 24 {
+		padY = 0
+	}
 
 	modalBox := lipgloss.NewStyle().
 		Border(lipgloss.DoubleBorder()).
 		BorderForeground(th.Primary).
-		Padding(1, 2).
+		Padding(padY, 2).
 		Width(boxWidth).
 		Render(msg)
 
@@ -137,16 +140,21 @@ func RenderAddStationModal(
 		Foreground(th.Primary).
 		Align(lipgloss.Center)
 
-	labels := []string{
-		"Station Name *:",
-		"Stream URL (http/https) *:",
-		"Genre / Tags (e.g. Ambient/Chill):",
-		"Country Code (2 letters e.g. US, GB, SE):",
-		"Bitrate (kbps e.g. 128, 320):",
+	fieldWidth := boxWidth - 16
+	if fieldWidth < 15 {
+		fieldWidth = 15
+	}
+
+	shortLabels := []string{
+		"Name *:",
+		"URL *:",
+		"Genre:",
+		"Country:",
+		"Bitrate:",
 	}
 
 	var rows []string
-	for i, label := range labels {
+	for i := range shortLabels {
 		val := ""
 		if i < len(inputs) {
 			val = inputs[i]
@@ -157,24 +165,27 @@ func RenderAddStationModal(
 			lblStyle = lblStyle.Bold(true).Foreground(th.Primary)
 		}
 
-		cursor := ""
+		cursor := " "
 		if i == focusIdx {
 			cursor = "█"
 		}
 
+		fieldText := padRight(truncate(val, fieldWidth-2)+cursor, fieldWidth)
 		fieldBox := lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(func() lipgloss.Color {
-				if i == focusIdx {
-					return th.Primary
-				}
-				return th.Border
-			}()).
-			Padding(0, 1).
-			Width(boxWidth - 10).
-			Render(val + cursor)
+			Background(th.Border).
+			Foreground(th.Foreground).
+			Padding(0, 1)
+		if i == focusIdx {
+			fieldBox = fieldBox.Background(th.Primary).Foreground(th.BadgeText).Bold(true)
+		}
 
-		rows = append(rows, lipgloss.JoinVertical(lipgloss.Left, lblStyle.Render(label), fieldBox))
+		row := lipgloss.JoinHorizontal(
+			lipgloss.Center,
+			lblStyle.Render(padRight(shortLabels[i], 10)),
+			" ",
+			fieldBox.Render(fieldText),
+		)
+		rows = append(rows, row)
 	}
 
 	errView := ""
@@ -192,10 +203,15 @@ func RenderAddStationModal(
 		lipgloss.NewStyle().Foreground(th.Playing).Render("[ Tab / j / k ] Next field   [ Enter ] Save   [ Esc ] Cancel"),
 	)
 
+	padY := 1
+	if height < 24 {
+		padY = 0
+	}
+
 	modalBox := lipgloss.NewStyle().
 		Border(lipgloss.DoubleBorder()).
 		BorderForeground(th.Primary).
-		Padding(1, 2).
+		Padding(padY, 2).
 		Width(boxWidth).
 		Render(content)
 

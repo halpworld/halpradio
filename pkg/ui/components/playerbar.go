@@ -62,13 +62,25 @@ func RenderPlayerBar(
 	vizWidth := clamp(width*2/5, 20)
 	vizRendered := viz.Render(isPlaying, vizWidth, th)
 
-	line1Left := fmt.Sprintf("%s %s", currStation.CountryFlag(), titleStyle.Render(currStation.Name))
-	if currStation.Genre != "" {
+	innerW := width - 6
+	if innerW < 20 {
+		innerW = 20
+	}
+
+	line1Right := volStyle.Render(volText)
+	volWidth := lipgloss.Width(line1Right)
+	maxLine1Left := innerW - volWidth - 2
+	if maxLine1Left < 10 {
+		maxLine1Left = 10
+	}
+
+	stationName := truncate(currStation.Name, maxLine1Left-4)
+	line1Left := fmt.Sprintf("%s %s", currStation.CountryFlag(), titleStyle.Render(stationName))
+	if currStation.Genre != "" && lipgloss.Width(line1Left)+lipgloss.Width(" ("+currStation.Genre+")") <= maxLine1Left {
 		line1Left += " " + genreStyle.Render("("+currStation.Genre+")")
 	}
-	line1Right := volStyle.Render(volText)
 
-	space1 := width - lipgloss.Width(line1Left) - lipgloss.Width(line1Right) - 6
+	space1 := innerW - lipgloss.Width(line1Left) - volWidth
 	if space1 < 1 {
 		space1 = 1
 	}
@@ -78,13 +90,14 @@ func RenderPlayerBar(
 	if trackDisplay == "" {
 		trackDisplay = currStation.Name
 	}
-	maxTrackWidth := width - lipgloss.Width(vizRendered) - 8
-	if maxTrackWidth < 15 {
-		maxTrackWidth = 15
+	vizW := lipgloss.Width(vizRendered)
+	maxTrackWidth := innerW - vizW - 4
+	if maxTrackWidth < 10 {
+		maxTrackWidth = 10
 	}
 	line2Left := trackStyle.Render("♪ " + truncate(trackDisplay, maxTrackWidth))
 
-	space2 := width - lipgloss.Width(line2Left) - lipgloss.Width(vizRendered) - 6
+	space2 := innerW - lipgloss.Width(line2Left) - vizW
 	if space2 < 1 {
 		space2 = 1
 	}

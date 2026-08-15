@@ -50,24 +50,16 @@ halpradio --version
 
 ## ⌨️ Global Keybindings Reference
 
-### 🎧 Audio & Playback Controls
+### 🧭 Navigation & Panes
 
 | Keybinding | Action |
 |---|---|
-| `Space` / `Enter` | Toggle Play / Pause selected station |
-| `s` | Stop audio stream playback |
-| `r` | Play a random station |
-| `+` / `=` | Increase volume (+5%) |
-| `-` | Decrease volume (-5%) |
-| `m` | Mute / Unmute audio |
-| `v` | Cycle audio visualizer mode (`dj-cat` ➔ `dj-dog` ➔ `dj-bear` ➔ `dj-frog` ➔ `dj-bunny` ➔ `bars` ➔ `wave` ➔ `spectrum` ➔ `minimal` ➔ `off`) |
-| `h` / `←` | Focus left sidebar / Previous tab |
-| `l` / `→` | Focus main list / Next tab |
-| `1` - `4` | Direct jump to Tab (1: All, 2: Favorites, 3: Categories, 4: Online Search) |
-| `g` | Jump to top of list |
-| `G` | Jump to bottom of list |
-| `Ctrl+u` | Scroll half page up |
-| `Ctrl+d` | Scroll half page down |
+| `j` / `k` or `↓` / `↑` | Move selection down / up |
+| `h` / `l` or `←` / `→` | Switch focus between sidebar and main list / Prev & next tab |
+| `1` - `6` | Direct jump to Tab (`1: Catalog`, `2: Activities`, `3: Genres`, `4: Favorites`, `5: RadioBrowser`, `6: Custom`) |
+| `Tab` / `Shift+Tab` | Cycle focus between sidebar and station list |
+| `g` / `G` | Jump to top / bottom of list |
+| `Ctrl+u` / `Ctrl+d` | Scroll half page up / down |
 
 ### 🎵 Playback & Audio Controls
 
@@ -78,26 +70,27 @@ halpradio --version
 | `r` | Play a random station |
 | `+` / `=` | Increase volume (+5%) |
 | `-` | Decrease volume (-5%) |
-| `m` | Mute / Unmute audio |
-| `v` | Cycle audio visualizer mode (`bars` ➔ `waveform` ➔ `spectrum` ➔ `minimal`) |
+| `m` | Toggle Mute / Unmute audio |
+| `v` | Cycle audio visualizer mode (`dj-cat` ➔ `dj-dog` ➔ `dj-bear` ➔ `dj-frog` ➔ `dj-bunny` ➔ `bars` ➔ `wave` ➔ `spectrum` ➔ `minimal` ➔ `off`) |
 
 ### 📻 Station & Catalog Management
 
 | Keybinding | Action |
 |---|---|
 | `f` | Toggle favorite star ⭐ |
-| `/` | Live fuzzy search / filter stations |
+| `/` | Focus live search bar |
+| `w` | Filter by activity work mode (Programming, Cleaning, Reading, Thinking, Relaxing, News) |
+| `c` | Filter by genre category |
 | `a` | Open **Add Custom Station** modal |
 | `e` | Edit local custom station |
 | `d` | Delete local custom station |
-| `p` | Export station YAML snippet to clipboard for GitHub PR |
-| `c` | Filter by genre category |
+| `p` | Export station YAML snippet to system clipboard for GitHub PR |
 
-### 🛠️ App & System
+### 🛠️ Interface & Modals
 
 | Keybinding | Action |
 |---|---|
 | `t` | Open **Theme Picker** modal |
 | `?` / `F1` | Toggle **WhichKey Overlay** |
-| `q` / `Ctrl+c` | Quit halpradio |
 | `Esc` | Close active modal dialog or clear search filter |
+| `q` / `Ctrl+c` | Quit halpradio |

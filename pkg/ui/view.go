@@ -49,8 +49,8 @@ func (m Model) View() string {
 	statusBarHeight := lipgloss.Height(statusBarView)
 
 	mainContentHeight := height - headerHeight - playerBarHeight - statusBarHeight - 1
-	if mainContentHeight < 5 {
-		mainContentHeight = 5
+	if mainContentHeight < 3 {
+		mainContentHeight = 3
 	}
 
 	var mainArea string
@@ -64,18 +64,23 @@ func (m Model) View() string {
 				selectedStr = str
 			}
 		}
+		sidebarW := 26
+		if width < 65 {
+			sidebarW = 18
+		}
 		sidebarView := components.RenderSidebar(
 			" WORK MODES ",
 			actItems,
 			selectedStr,
 			m.ActivityIndex,
+			sidebarW,
 			mainContentHeight,
 			m.ActiveFocus == FocusSidebar,
 			m.Theme,
 		)
-		listWidth := width - 28
-		if listWidth < 30 {
-			listWidth = 30
+		listWidth := width - sidebarW - 1
+		if listWidth < 20 {
+			listWidth = 20
 		}
 		stationListView := components.RenderStationList(
 			m.Stations,
@@ -88,18 +93,23 @@ func (m Model) View() string {
 		)
 		mainArea = lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, " ", stationListView)
 	} else if m.ActiveTab == 2 {
+		sidebarW := 26
+		if width < 65 {
+			sidebarW = 18
+		}
 		sidebarView := components.RenderSidebar(
 			" GENRES / TAGS ",
 			m.Genres,
 			m.SelectedGenre,
 			m.GenreIndex,
+			sidebarW,
 			mainContentHeight,
 			m.ActiveFocus == FocusSidebar,
 			m.Theme,
 		)
-		listWidth := width - 28
-		if listWidth < 30 {
-			listWidth = 30
+		listWidth := width - sidebarW - 1
+		if listWidth < 20 {
+			listWidth = 20
 		}
 		stationListView := components.RenderStationList(
 			m.Stations,

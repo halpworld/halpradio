@@ -33,20 +33,51 @@ func RenderStatusBar(searchQuery string, message string, width int, th theme.The
 	descStyle := lipgloss.NewStyle().
 		Foreground(th.Muted)
 
-	items := []struct {
+	var items []struct {
 		key  string
 		desc string
-	}{
-		{"j/k", "Nav"},
-		{"Space", "Play/Pause"},
-		{"f", "Fav"},
-		{"+/-", "Vol"},
-		{"/", "Search"},
-		{"a", "Add"},
-		{"p", "Export PR"},
-		{"t", "Theme"},
-		{"?", "WhichKey"},
-		{"q", "Quit"},
+	}
+
+	if width >= 90 {
+		items = []struct {
+			key  string
+			desc string
+		}{
+			{"j/k", "Nav"},
+			{"Space", "Play/Pause"},
+			{"f", "Fav"},
+			{"+/-", "Vol"},
+			{"/", "Search"},
+			{"a", "Add"},
+			{"p", "Export PR"},
+			{"t", "Theme"},
+			{"?", "WhichKey"},
+			{"q", "Quit"},
+		}
+	} else if width >= 65 {
+		items = []struct {
+			key  string
+			desc string
+		}{
+			{"j/k", "Nav"},
+			{"Space", "Play"},
+			{"f", "Fav"},
+			{"+/-", "Vol"},
+			{"/", "Search"},
+			{"?", "Help"},
+			{"q", "Quit"},
+		}
+	} else {
+		items = []struct {
+			key  string
+			desc string
+		}{
+			{"j/k", "Nav"},
+			{"Space", "Play"},
+			{"/", "Search"},
+			{"?", "Help"},
+			{"q", "Quit"},
+		}
 	}
 
 	var pills []string
@@ -59,7 +90,7 @@ func RenderStatusBar(searchQuery string, message string, width int, th theme.The
 	barStyle := lipgloss.NewStyle().
 		Background(th.Background).
 		Foreground(th.Foreground).
-		Width(width)
+		MaxWidth(width)
 
 	return barStyle.Render(legend)
 }

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -157,9 +158,35 @@ func (m *Model) RefreshStations() {
 	}
 }
 
+func (m Model) WindowTitle() string {
+	tabNames := []string{"Catalog", "Activities", "Genres", "Favorites", "RadioBrowser", "Custom"}
+	tabName := "Catalog"
+	if m.ActiveTab >= 0 && m.ActiveTab < len(tabNames) {
+		tabName = tabNames[m.ActiveTab]
+	}
+
+	st := m.Player.CurrentStation()
+	if st != nil && m.Player.Status() == player.StatusPlaying {
+		track := m.Player.CurrentTrack()
+		if track != "" {
+			return fmt.Sprintf("▶ %s - %s | halpradio", track, st.Name)
+		}
+		return fmt.Sprintf("▶ %s | halpradio", st.Name)
+	}
+	if st != nil && m.Player.Status() == player.StatusConnecting {
+		return fmt.Sprintf("⟳ Connecting: %s | halpradio", st.Name)
+	}
+	if st != nil && m.Player.Status() == player.StatusPaused {
+		return fmt.Sprintf("⏸ %s | halpradio", st.Name)
+	}
+
+	return fmt.Sprintf("halpradio - %d: %s", m.ActiveTab+1, tabName)
+}
+
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		tickCmd(),
+		tea.SetWindowTitle(m.WindowTitle()),
 	)
 }
 

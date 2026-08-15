@@ -19,24 +19,48 @@ func RenderStationList(
 	th theme.Theme,
 ) string {
 	if len(stations) == 0 {
+		emptyWidth := width - 4
+		if emptyWidth < 20 {
+			emptyWidth = 20
+		}
 		emptyStyle := lipgloss.NewStyle().
 			Foreground(th.Muted).
-			Padding(2, 4).
+			Padding(1, 2).
+			Width(emptyWidth).
 			Italic(true)
 		return emptyStyle.Render("No stations found. Press [ / ] to search or [ a ] to add a new custom station.")
 	}
 
-	contentWidth := width - 4
-	if contentWidth < 40 {
-		contentWidth = 40
+	showBitrateAndCodec := (width >= 55)
+	showCountry := (width >= 40)
+
+	countryWidth := 5
+	bitrateWidth := 7
+	codecWidth := 5
+	favWidth := 3
+
+	fixedWidth := 5 + 2 + favWidth // prefix + fav sep + fav
+	if showCountry {
+		fixedWidth += 2 + countryWidth
+	}
+	if showBitrateAndCodec {
+		fixedWidth += 2 + bitrateWidth + 2 + codecWidth
+	}
+	fixedWidth += 2 // sep between name and genre
+
+	avail := width - fixedWidth
+	if avail < 16 {
+		avail = 16
 	}
 
-	nameWidth := clamp(int(float64(contentWidth)*0.36), 15)
-	genreWidth := clamp(int(float64(contentWidth)*0.28), 12)
-	countryWidth := 8
-	bitrateWidth := 8
-	codecWidth := 6
-	favWidth := 4
+	nameWidth := int(float64(avail) * 0.58)
+	if nameWidth < 8 {
+		nameWidth = 8
+	}
+	genreWidth := avail - nameWidth
+	if genreWidth < 6 {
+		genreWidth = 6
+	}
 
 	headerStyle := lipgloss.NewStyle().
 		Bold(true).
@@ -45,19 +69,23 @@ func RenderStationList(
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(th.Border)
 
-	colName := padRight("STATION NAME", nameWidth)
-	colGenre := padRight("GENRE", genreWidth)
-	colCountry := padRight("FLAG", countryWidth)
-	colBitrate := padRight("BITRATE", bitrateWidth)
-	colCodec := padRight("CODEC", codecWidth)
-	colFav := padRight("FAV", favWidth)
-
-	headerLine := fmt.Sprintf("   %s  %s  %s  %s  %s  %s", colName, colGenre, colCountry, colBitrate, colCodec, colFav)
+	var headerCols []string
+	headerCols = append(headerCols, padRight("STATION NAME", nameWidth))
+	headerCols = append(headerCols, padRight("GENRE", genreWidth))
+	if showCountry {
+		headerCols = append(headerCols, padRight("FLAG", countryWidth))
+	}
+	if showBitrateAndCodec {
+		headerCols = append(headerCols, padRight("BITRATE", bitrateWidth))
+		headerCols = append(headerCols, padRight("CODEC", codecWidth))
+	}
+	headerCols = append(headerCols, padRight("FAV", favWidth))
+	headerLine := "     " + strings.Join(headerCols, "  ")
 	renderedHeader := headerStyle.Render(headerLine)
 
-	maxVisibleRows := height - 3
-	if maxVisibleRows < 3 {
-		maxVisibleRows = 3
+	maxVisibleRows := height - 2
+	if maxVisibleRows < 1 {
+		maxVisibleRows = 1
 	}
 
 	startIdx := 0
@@ -103,16 +131,19 @@ func RenderStationList(
 			codec = "MP3"
 		}
 
-		rowText := fmt.Sprintf("%s%s %s  %s  %s  %s  %s  %s",
-			cursor,
-			playIcon,
-			padRight(name, nameWidth),
-			padRight(genre, genreWidth),
-			padRight(flag, countryWidth),
-			padRight(bitrate, bitrateWidth),
-			padRight(codec, codecWidth),
-			padRight(favIcon, favWidth),
-		)
+		var cols []string
+		cols = append(cols, padRight(name, nameWidth))
+		cols = append(cols, padRight(genre, genreWidth))
+		if showCountry {
+			cols = append(cols, padRight(flag, countryWidth))
+		}
+		if showBitrateAndCodec {
+			cols = append(cols, padRight(bitrate, bitrateWidth))
+			cols = append(cols, padRight(codec, codecWidth))
+		}
+		cols = append(cols, padRight(favIcon, favWidth))
+
+		rowText := fmt.Sprintf("%s%s %s", cursor, playIcon, strings.Join(cols, "  "))
 
 		var lineStyle lipgloss.Style
 

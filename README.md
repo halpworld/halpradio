@@ -217,7 +217,7 @@ Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Over
 |---|---|---|
 | **Navigation** | `j` / `k` or `↓` / `↑` | Move down / up |
 | | `h` / `l` or `←` / `→` | Focus sidebar / main list or prev/next tab |
-| | `1` - `4` | Direct jump to Tab (1: All, 2: Favs, 3: Cats, 4: Search) |
+| | `1` - `6` | Direct jump to Tab (1: Catalog, 2: Activities, 3: Genres, 4: Favorites, 5: Online, 6: Custom) |
 | | `g` / `G` | Jump to top / bottom of list |
 | | `Ctrl+u` / `Ctrl+d` | Half page up / down |
 | **Playback** | `Space` or `Enter` | Toggle Play / Pause selected station |
@@ -228,6 +228,7 @@ Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Over
 | | `v` | Cycle visualizer (`dj-cat`, `dj-dog`, `dj-bear`, `dj-frog`, `dj-bunny`, `bars`, `wave`, `spectrum`, `minimal`) |
 | **Catalog** | `f` | Toggle Favorite star ⭐ |
 | | `/` | Live fuzzy search / filter stations |
+| | `w` / `c` | Jump & filter by Activity Mode / Genre Category |
 | | `a` | Open **Add Custom Station** modal |
 | | `e` / `d` | Edit / Delete local custom station |
 | | `p` | Export station YAML snippet to clipboard for GitHub PR |

@@ -13,16 +13,31 @@ func RenderSidebar(
 	items []string,
 	selectedItem string,
 	selectedIndex int,
+	width int,
 	height int,
 	isFocused bool,
 	th theme.Theme,
 ) string {
+	boxWidth := width - 2 // Account for 2 border columns
+	if boxWidth < 12 {
+		boxWidth = 12
+	}
+	contentWidth := boxWidth - 2 // Account for 2 padding columns (Padding 0, 1)
+	if contentWidth < 8 {
+		contentWidth = 8
+	}
+
+	innerHeight := height - 2
+	if innerHeight < 1 {
+		innerHeight = 1
+	}
+
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(th.Border).
 		Padding(0, 1).
-		Width(24).
-		Height(height)
+		Width(boxWidth).
+		Height(innerHeight)
 
 	headerStyle := lipgloss.NewStyle().
 		Bold(true).
@@ -34,7 +49,7 @@ func RenderSidebar(
 	if title == "" {
 		title = " GENRES / TAGS "
 	}
-	renderedTitle := headerStyle.Render(title)
+	renderedTitle := headerStyle.Render(padRight(truncate(title, contentWidth), contentWidth))
 
 	var rows []string
 	allSelected := (selectedItem == "" || selectedItem == "all")
@@ -52,7 +67,8 @@ func RenderSidebar(
 		allItemStyle = allItemStyle.Foreground(th.Foreground)
 	}
 
-	rows = append(rows, allItemStyle.Render(" • All Stations"))
+	allLabel := padRight(truncate(" • All Stations", contentWidth), contentWidth)
+	rows = append(rows, allItemStyle.Render(allLabel))
 
 	for i, item := range items {
 		idx := i + 1
@@ -72,12 +88,17 @@ func RenderSidebar(
 			style = lipgloss.NewStyle().Foreground(th.Foreground)
 		}
 
-		rows = append(rows, style.Render(fmt.Sprintf(" • %s", truncate(item, 18))))
+		maxItemLen := contentWidth - 4
+		if maxItemLen < 4 {
+			maxItemLen = 4
+		}
+		itemLabel := padRight(fmt.Sprintf(" • %s", truncate(item, maxItemLen)), contentWidth)
+		rows = append(rows, style.Render(itemLabel))
 	}
 
-	maxVisible := height - 3
-	if maxVisible < 3 {
-		maxVisible = 3
+	maxVisible := innerHeight - 2
+	if maxVisible < 1 {
+		maxVisible = 1
 	}
 
 	startIdx := 0
