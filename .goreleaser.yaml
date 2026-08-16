@@ -27,11 +27,13 @@ universal_binaries:
     replace: false
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
     files:
       - README.md
       - LICENSE
@@ -46,6 +48,7 @@ brews:
       owner: halpworld
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
     skip_upload: "{{ if not .Env.HOMEBREW_TAP_TOKEN }}true{{ else }}false{{ end }}"
     commit_author:
       name: github-actions[bot]
