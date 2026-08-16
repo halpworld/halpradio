@@ -13,7 +13,7 @@ body:
     attributes:
       label: "halpradio Version"
       description: "Output of `halpradio -version` or git commit hash."
-      placeholder: "e.g., v0.0.4 or git-commit-hash"
+      placeholder: "e.g., v0.0.5 or git-commit-hash"
     validations:
       required: true
   - type: dropdown

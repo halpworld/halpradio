@@ -33,7 +33,7 @@ if [ -z "${VERSION}" ]; then
   echo "🔍 Fetching latest halpradio release..."
   VERSION=$(curl -s "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
   if [ -z "${VERSION}" ]; then
-    VERSION="v0.0.4"
+    VERSION="v0.0.5"
   fi
 fi
 
