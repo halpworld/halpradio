@@ -5,6 +5,30 @@ import (
 	"time"
 )
 
+func TestDefaultConfigs(t *testing.T) {
+	p := DefaultPomodoroConfig()
+	if p.FocusDuration != 25*time.Minute {
+		t.Errorf("Expected 25m focus duration, got %v", p.FocusDuration)
+	}
+	if p.ShortBreakDuration != 5*time.Minute {
+		t.Errorf("Expected 5m short break, got %v", p.ShortBreakDuration)
+	}
+	if p.LongBreakDuration != 15*time.Minute {
+		t.Errorf("Expected 15m long break, got %v", p.LongBreakDuration)
+	}
+	if p.CyclesBeforeLongBreak != 4 {
+		t.Errorf("Expected 4 cycles, got %d", p.CyclesBeforeLongBreak)
+	}
+
+	s := DefaultSleepConfig()
+	if s.Duration != 30*time.Minute {
+		t.Errorf("Expected 30m sleep, got %v", s.Duration)
+	}
+	if s.FadeDuration != 10*time.Second {
+		t.Errorf("Expected 10s fade, got %v", s.FadeDuration)
+	}
+}
+
 func TestSleepTimerLifecycle(t *testing.T) {
 	tm := NewTimer()
 	if tm.IsActive() {
@@ -154,14 +178,124 @@ func TestTimerPauseResumeAndReset(t *testing.T) {
 		t.Errorf("Expected 15m remaining while paused, got %v", tm.TimeRemaining)
 	}
 
-	resumeEv := tm.Resume()
+	// Test TogglePause
+	resumeEv := tm.TogglePause()
 	if tm.State != StateRunning || resumeEv.Type != EventTimerResumed {
-		t.Errorf("Expected running state, got %v", tm.State)
+		t.Errorf("Expected running state after toggle pause, got %v", tm.State)
 	}
+
+	pauseEv = tm.TogglePause()
+	if tm.State != StatePaused || pauseEv.Type != EventTimerPaused {
+		t.Errorf("Expected paused state after second toggle pause, got %v", tm.State)
+	}
+
+	tm.Resume()
 
 	tm.ResetCurrentInterval()
 	if tm.TimeRemaining != 20*time.Minute {
 		t.Errorf("Expected 20m after reset, got %v", tm.TimeRemaining)
+	}
+}
+
+func TestTimerStop(t *testing.T) {
+	tm := NewTimer()
+	stopEv := tm.Stop()
+	if stopEv.Type != EventNone {
+		t.Errorf("Expected EventNone when stopping inactive timer, got %v", stopEv.Type)
+	}
+
+	tm.StartPomodoro(DefaultPomodoroConfig())
+	if !tm.IsActive() {
+		t.Fatalf("Expected active timer")
+	}
+
+	stopEv = tm.Stop()
+	if stopEv.Type != EventTimerCancelled {
+		t.Errorf("Expected EventTimerCancelled, got %v", stopEv.Type)
+	}
+	if tm.IsActive() {
+		t.Errorf("Expected timer inactive after stop")
+	}
+}
+
+func TestTimerDescriptionsAndBadges(t *testing.T) {
+	tm := NewTimer()
+
+	// Inactive state
+	if tm.WindowTitleBadge() != "" {
+		t.Errorf("Expected empty window badge when inactive, got %s", tm.WindowTitleBadge())
+	}
+	if tm.PhaseDescription() != "Inactive" {
+		t.Errorf("Expected Inactive description, got %s", tm.PhaseDescription())
+	}
+
+	// Sleep Timer
+	tm.StartSleep(30*time.Minute, 10*time.Second, false, false, "", 80)
+	if tm.WindowTitleBadge() != "[⏳ 30:00] " {
+		t.Errorf("Unexpected sleep badge: %s", tm.WindowTitleBadge())
+	}
+	if tm.PhaseDescription() != "Sleep Countdown" {
+		t.Errorf("Unexpected sleep phase description: %s", tm.PhaseDescription())
+	}
+
+	// Sleep Fading
+	tm.Tick(29*time.Minute + 55*time.Second)
+	if tm.BadgeText() != "🌙 00:05 (Sleep Fade)" {
+		t.Errorf("Unexpected fading badge text: %s", tm.BadgeText())
+	}
+	if tm.PhaseDescription() != "Sleep Countdown (Volume Fade-out)" {
+		t.Errorf("Unexpected fading phase description: %s", tm.PhaseDescription())
+	}
+
+	// Pomodoro Timer Phases
+	cfg := DefaultPomodoroConfig()
+	cfg.CyclesBeforeLongBreak = 4
+	tm.StartPomodoro(cfg)
+
+	if tm.PhaseDescription() != "Focus Interval #1 of 4" {
+		t.Errorf("Unexpected focus phase description: %s", tm.PhaseDescription())
+	}
+	if tm.WindowTitleBadge() != "[🍅 25:00] " {
+		t.Errorf("Unexpected focus window title badge: %s", tm.WindowTitleBadge())
+	}
+	if tm.FormattedTime() != "25:00" {
+		t.Errorf("Unexpected formatted time: %s", tm.FormattedTime())
+	}
+
+	// Pause Pomodoro
+	tm.Pause()
+	if tm.BadgeText() != "⏸ 25:00 (Focus Paused)" {
+		t.Errorf("Unexpected paused badge text: %s", tm.BadgeText())
+	}
+	if tm.WindowTitleBadge() != "[⏸ 25:00] " {
+		t.Errorf("Unexpected paused window badge: %s", tm.WindowTitleBadge())
+	}
+	tm.Resume()
+
+	// Short break
+	tm.SkipPhase()
+	if tm.BadgeText() != "☕ 05:00 (Break #1)" {
+		t.Errorf("Unexpected short break badge text: %s", tm.BadgeText())
+	}
+	if tm.PhaseDescription() != "Short Rest Break #1" {
+		t.Errorf("Unexpected short break phase description: %s", tm.PhaseDescription())
+	}
+	if tm.WindowTitleBadge() != "[☕ 05:00] " {
+		t.Errorf("Unexpected short break window title badge: %s", tm.WindowTitleBadge())
+	}
+
+	// Long break
+	tm.PomodoroPhase = PhaseLongBreak
+	tm.TotalDuration = 15 * time.Minute
+	tm.TimeRemaining = 15 * time.Minute
+	if tm.BadgeText() != "🌴 15:00 (Long Break)" {
+		t.Errorf("Unexpected long break badge text: %s", tm.BadgeText())
+	}
+	if tm.PhaseDescription() != "Long Rest Break (Cycles Completed)" {
+		t.Errorf("Unexpected long break phase description: %s", tm.PhaseDescription())
+	}
+	if tm.WindowTitleBadge() != "[🌴 15:00] " {
+		t.Errorf("Unexpected long break window title badge: %s", tm.WindowTitleBadge())
 	}
 }
 
@@ -178,6 +312,12 @@ func TestTimerAddMinutes(t *testing.T) {
 	if tm.TimeRemaining != 5*time.Minute {
 		t.Errorf("Expected 5m remaining after AddMinutes(-10), got %v", tm.TimeRemaining)
 	}
+
+	// Subtracting more than remaining clamps to 1s
+	tm.AddMinutes(-20)
+	if tm.TimeRemaining != 1*time.Second {
+		t.Errorf("Expected 1s remaining after large subtraction, got %v", tm.TimeRemaining)
+	}
 }
 
 func TestFormatDuration(t *testing.T) {
@@ -185,6 +325,7 @@ func TestFormatDuration(t *testing.T) {
 		d        time.Duration
 		expected string
 	}{
+		{-5 * time.Second, "00:00"},
 		{0, "00:00"},
 		{59 * time.Second, "00:59"},
 		{5 * time.Minute, "05:00"},
@@ -204,6 +345,9 @@ func TestBadgeTextAndProgress(t *testing.T) {
 	tm := NewTimer()
 	if tm.BadgeText() != "" {
 		t.Errorf("Expected empty badge for inactive timer")
+	}
+	if tm.Progress() != 0.0 {
+		t.Errorf("Expected 0 progress when inactive")
 	}
 
 	tm.StartPomodoro(PomodoroConfig{

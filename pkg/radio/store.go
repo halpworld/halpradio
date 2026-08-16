@@ -106,6 +106,7 @@ func (s *Store) SyncFavorites() {
 }
 
 func (s *Store) SaveFavorites() error {
+	_ = util.EnsureConfigDir()
 	favFile := util.GetFavoritesFile()
 	data, err := json.MarshalIndent(s.FavItems, "", "  ")
 	if err != nil {
@@ -115,6 +116,7 @@ func (s *Store) SaveFavorites() error {
 }
 
 func (s *Store) SaveLocalStations() error {
+	_ = util.EnsureConfigDir()
 	localFile := util.GetLocalStationsFile()
 	catalog := StationCatalog{Stations: s.Local}
 	data, err := yaml.Marshal(catalog)

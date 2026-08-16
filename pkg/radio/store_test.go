@@ -271,3 +271,121 @@ func TestBundledStationsYAML(t *testing.T) {
 		}
 	}
 }
+
+func TestStoreLocalStationsAndCategories(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	store := NewStore()
+
+	// 1. Add Local Station
+	st1 := Station{
+		Name:     "My Local Radio",
+		URL:      "http://local.stream/live",
+		Genre:    "Jazz / Lo-Fi",
+		Country:  "SE",
+		Bitrate:  320,
+		Codec:    "MP3",
+		Homepage: "http://local.stream",
+	}
+
+	if err := store.AddOrUpdateLocalStation(st1); err != nil {
+		t.Fatalf("AddOrUpdateLocalStation failed: %v", err)
+	}
+
+	if len(store.Local) != 1 {
+		t.Fatalf("Expected 1 local station, got %d", len(store.Local))
+	}
+	generatedID := store.Local[0].ID
+	if generatedID != "custom-1" {
+		t.Errorf("Expected generated ID custom-1, got %s", generatedID)
+	}
+
+	// 2. Update existing station
+	st1Updated := store.Local[0]
+	st1Updated.Name = "My Updated Local Radio"
+	if err := store.AddOrUpdateLocalStation(st1Updated); err != nil {
+		t.Fatalf("Update local station failed: %v", err)
+	}
+	if len(store.Local) != 1 || store.Local[0].Name != "My Updated Local Radio" {
+		t.Errorf("Station was not properly updated in-place: %+v", store.Local)
+	}
+
+	// 3. Add second station with explicit ID
+	st2 := Station{
+		ID:      "custom-synth",
+		Name:    "Synth Radio",
+		URL:     "http://synth.stream",
+		Genre:   "Synthwave / Cyberpunk",
+		Country: "US",
+	}
+	if err := store.AddOrUpdateLocalStation(st2); err != nil {
+		t.Fatalf("Adding second station failed: %v", err)
+	}
+	if len(store.Local) != 2 {
+		t.Fatalf("Expected 2 local stations, got %d", len(store.Local))
+	}
+
+	// 4. Test GetCategories
+	cats := store.GetCategories()
+	if len(cats) == 0 {
+		t.Errorf("Expected non-empty categories, got %v", cats)
+	}
+	hasJazz := false
+	for _, c := range cats {
+		if c == "Jazz" || c == "Lo-Fi" || c == "Synthwave" {
+			hasJazz = true
+			break
+		}
+	}
+	if !hasJazz {
+		t.Errorf("Expected parsed genre categories, got %v", cats)
+	}
+
+	// 5. Test GetAllStations deduplication
+	all := store.GetAllStations()
+	if len(all) != 2 {
+		t.Errorf("Expected 2 all stations, got %d", len(all))
+	}
+
+	// 6. Test DeleteLocalStation
+	if err := store.DeleteLocalStation(generatedID); err != nil {
+		t.Fatalf("DeleteLocalStation failed: %v", err)
+	}
+	if len(store.Local) != 1 || store.Local[0].ID != "custom-synth" {
+		t.Errorf("Delete failed, remaining stations: %+v", store.Local)
+	}
+}
+
+func TestStoreFilterCombinations(t *testing.T) {
+	stations := []Station{
+		{ID: "s1", Name: "Focus Beats", Genre: "Lofi / Chill", Country: "JP", Activities: []string{"programming"}},
+		{ID: "s2", Name: "Workout Rock", Genre: "Rock / Metal", Country: "US", Activities: []string{"workout"}},
+		{ID: "s3", Name: "Chill Classical", Genre: "Classical", Country: "DE"},
+	}
+
+	// Match by activity
+	res := FilterWithActivity(stations, "", "", "programming")
+	if len(res) != 1 || res[0].ID != "s1" {
+		t.Errorf("Expected match for programming activity, got %v", res)
+	}
+
+	// Match by genre
+	res = FilterWithActivity(stations, "", "metal", "")
+	if len(res) != 1 || res[0].ID != "s2" {
+		t.Errorf("Expected match for genre metal, got %v", res)
+	}
+
+	// Match by query on country code
+	res = FilterWithActivity(stations, "de", "", "")
+	if len(res) != 1 || res[0].ID != "s3" {
+		t.Errorf("Expected match for query 'de', got %v", res)
+	}
+
+	// 'all' activity and genre should not filter out
+	res = FilterWithActivity(stations, "", "all", "all")
+	if len(res) != 3 {
+		t.Errorf("Expected all 3 stations when filtering 'all', got %d", len(res))
+	}
+}

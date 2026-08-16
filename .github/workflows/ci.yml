@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   test:
@@ -20,6 +21,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -44,8 +47,20 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
-      - name: Run unit tests with race detector
-        run: go test -v -race ./...
+      - name: Run unit tests with race detector and coverage
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Compute coverage delta & publish motivational report
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          chmod +x .github/scripts/coverage_report.sh
+          ./.github/scripts/coverage_report.sh
 
   cross-compile:
     name: Cross Compile Check
