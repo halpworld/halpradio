@@ -165,5 +165,21 @@ stations:
 				t.Errorf("AddModal at %dx%d rendered height %d > %d", size.w, size.h, h, size.h)
 			}
 		}
+
+		// Test Timer modal (Menu, Active Dashboard, Custom Sleep, Config)
+		for screen := 0; screen <= 2; screen++ {
+			m := NewModel(store, pm, cfg)
+			m.Width = size.w
+			m.Height = size.h
+			m.ShowTimerModal = true
+			m.TimerModalScreen = screen
+			if screen == 0 {
+				m.Timer.StartPomodoro(m.Timer.PomodoroCfg)
+			}
+			view := m.View()
+			if h := lipgloss.Height(view); h > size.h {
+				t.Errorf("TimerModal (screen %d) at %dx%d rendered height %d > %d", screen, size.w, size.h, h, size.h)
+			}
+		}
 	}
 }

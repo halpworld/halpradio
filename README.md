@@ -75,6 +75,7 @@ docker run --rm -it --device /dev/snd halpworld/halpradio:latest
 |---|:---:|:---:|:---:|:---:|:---:|
 | **Zero-Dependency Audio Engine** | ✅ **Yes** (`oto/v3` Go native) | ❌ (requires MPV/VLC) | ❌ (requires MPV) | ❌ (requires FFmpeg) | ❌ (C daemons) |
 | **Multi-Backend Auto Detection** | ✅ `mpv` > `vlc` > `ffplay` > `native` | ⚠️ Limited | ⚠️ MPV only | ⚠️ FFmpeg only | ❌ Self only |
+| **Pomodoro & Sleep Timers (`z`)** | ✅ **Intervals, Station Switch & OS Notify** | ❌ None | ❌ None | ❌ None | ⚠️ Basic sleep |
 | **Beat-Reactive Animated Visualizers** | ✅ **5 Animal DJs + EQ Spectrum** | ❌ None | ❌ None | ❌ None | ⚠️ Basic VU |
 | **Live ICY Metadata (Song / Artist)** | ✅ **Real-time Async Extraction** | ⚠️ Partial | ❌ None | ⚠️ Partial | ⚠️ Track only |
 | **30,000+ Online Station Search** | ✅ **Built-in RadioBrowser API** | ❌ Manual list | ❌ TuneIn scrap | ⚠️ Search only | ❌ Local files |
@@ -104,6 +105,30 @@ Press `v` anytime in **halpradio** to cycle through 5 animated animal DJs, class
 - **Harmonic Multi-Frequency Equalizer Rack**: Solid 6-bar mini-EQ (` ▂▃▄▅▆`) driven by harmonic frequency physics (sub-bass kick, mid melody, treble shimmer) with smooth attack and exponential decay.
 - **Rhythmic Groove**: Head bobbing and turntable vinyl rotation (`◓`, `◑`, `◒`, `◐`) tempo-matched to audio playback.
 - **Sleep State**: When stopped/paused, the DJ rests peacefully on the turntable (`🎧 (= - ω - =)..zzZ [ 💿 ] ⏹ STOPPED`).
+
+---
+
+## ⏱️ Developer Pomodoro Focus Mode & Sleep Timer
+
+Press `z` or `Z` anywhere in **halpradio** to open the **Timer & Pomodoro Focus Modal**:
+
+<p align="center">
+  <b>🍅 Pomodoro Focus Sprints &nbsp;|&nbsp; ☕ Short & Long Breaks &nbsp;|&nbsp; ⏳ Sleep Timer with Volume Fade-Out</b>
+</p>
+
+### 🍅 Developer Pomodoro Mode
+- **Sprint & Rest Intervals**: Seamlessly cycle between Focus sessions (default: `25 min`), Short Breaks (`5 min`), and Long Breaks (`15 min` after 4 completed cycles).
+- **Auto Station Switching**: Automatically tune into your deep focus station (e.g. *Lofi Girl / Synthwave*) during sprints, and switch to relaxing sounds (e.g. *Ambient Cafe / Jazz*) or silence during breaks.
+- **Live Visual Countdown**: Real-time progress bar and badges displayed directly in the playerbar (`🍅 18:42 (#2/4)` / `☕ 04:50 (Break)`), statusbar, and OSC native terminal tab title (`[🍅 18:42] ▶ Track | halpradio`).
+
+### ⏳ Sleep Timer & Smooth Volume Fade-Out
+- **Quick Presets**: Instant `15 min`, `30 min`, `45 min`, `60 min`, `90 min`, or custom minute countdowns.
+- **Graceful Volume Fade-Out**: Smoothly scales audio volume down to 0% during the final 10 seconds before stopping playback, keeping your initial volume preference intact for next morning.
+
+### 🔔 System Desktop Events & OS Integration
+- **Cross-Platform Desktop Notifications**: Native notifications on macOS (`osascript` with Glass chime), Linux (`notify-send`), and Windows (PowerShell toast notifications).
+- **Terminal Bell (`\a`)**: Optional audio bell cue on interval transitions.
+- **Custom Shell Event Hook**: Execute your own shell script on timer transitions with rich environment variables (`HALPRADIO_EVENT`, `HALPRADIO_PHASE`, `HALPRADIO_CYCLE`, `HALPRADIO_STATION_NAME`), perfect for triggering macOS Focus Mode, smart desk lights, Waybar/Polybar, or Slack status!
 
 ---
 
@@ -209,6 +234,7 @@ Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Over
 | | `p` | Export station YAML snippet to clipboard for GitHub PR |
 | **Playback** | `Space` or `Enter` | Toggle Play / Pause selected station (or tune in from history) |
 | | `s` | Stop audio stream (on station tabs) |
+| | `z` / `Z` | Open **Sleep Timer & Pomodoro Focus** modal |
 | | `r` | Play random station |
 | | `+` / `-` | Volume up / down (5% step) |
 | | `m` | Mute / unmute |

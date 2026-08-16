@@ -17,6 +17,7 @@
 - `pkg/radio/store.go`: Station catalog store (`bundled`, `local`, `favorites`), YAML/JSON persistence.
 - `pkg/radio/radiobrowser.go`: RadioBrowser HTTP search client.
 - `pkg/theme/theme.go`: Theme definitions (`tokyonight`, `catppuccin`, `synthwave`, `nord`, `gruvbox`, `dracula`).
+- `pkg/timer/`: Pomodoro focus state machine, sleep timer countdown, and OS notification dispatcher.
 - `pkg/ui/model.go` & `update.go` & `view.go`: Bubble Tea Model, Update loop, View orchestrator.
 - `pkg/ui/components/`: Sub-views (`header`, `sidebar`, `stationlist`, `playerbar`, `statusbar`, `visualizer`, `modals`, `whichkey`).
 - `pkg/util/`: Path resolution (`~/.config/halpradio/`) and clipboard helper.

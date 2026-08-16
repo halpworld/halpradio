@@ -17,6 +17,7 @@ func RenderPlayerBar(
 	volume int,
 	isMuted bool,
 	viz *Visualizer,
+	timerBadge string,
 	width int,
 	th theme.Theme,
 ) string {
@@ -26,11 +27,25 @@ func RenderPlayerBar(
 		Padding(0, 1).
 		Width(width - 2)
 
+	timerBadgeStyle := lipgloss.NewStyle().
+		Background(th.Highlight).
+		Foreground(th.BadgeText).
+		Bold(true).
+		Padding(0, 1)
+
 	if currStation == nil {
 		idleStyle := lipgloss.NewStyle().
 			Foreground(th.Muted).
 			Italic(true)
-		return boxStyle.Render(idleStyle.Render("No station selected. Navigate with j/k and press [ Space ] or [ Enter ] to start listening!"))
+		msg := idleStyle.Render("No station selected. Navigate with j/k and press [ Space ] or [ Enter ] to start listening!")
+		if timerBadge != "" {
+			return boxStyle.Render(lipgloss.JoinHorizontal(lipgloss.Center,
+				timerBadgeStyle.Render(timerBadge),
+				" ",
+				msg,
+			))
+		}
+		return boxStyle.Render(msg)
 	}
 
 	titleStyle := lipgloss.NewStyle().
@@ -67,7 +82,13 @@ func RenderPlayerBar(
 		innerW = 20
 	}
 
-	line1Right := volStyle.Render(volText)
+	rightParts := []string{}
+	if timerBadge != "" {
+		rightParts = append(rightParts, timerBadgeStyle.Render(timerBadge))
+	}
+	rightParts = append(rightParts, volStyle.Render(volText))
+	line1Right := strings.Join(rightParts, "  ")
+
 	volWidth := lipgloss.Width(line1Right)
 	maxLine1Left := innerW - volWidth - 2
 	if maxLine1Left < 10 {

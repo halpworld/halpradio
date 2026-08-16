@@ -40,7 +40,7 @@ func RenderStatusBar(searchQuery string, message string, activeTab int, width in
 
 	if activeTab == 6 {
 		// History & Song Discovery Hub legend
-		if width >= 90 {
+		if width >= 95 {
 			items = []struct {
 				key  string
 				desc string
@@ -49,6 +49,7 @@ func RenderStatusBar(searchQuery string, message string, activeTab int, width in
 				{"y", "Yank (Copy)"},
 				{"o", "Open Search"},
 				{"s", "Bookmark"},
+				{"z", "Timer"},
 				{"c", "Clear"},
 				{"+/-", "Vol"},
 				{"?", "WhichKey"},
@@ -63,6 +64,7 @@ func RenderStatusBar(searchQuery string, message string, activeTab int, width in
 				{"y", "Yank"},
 				{"o", "Open"},
 				{"s", "Star"},
+				{"z", "Timer"},
 				{"c", "Clear"},
 				{"?", "Help"},
 				{"q", "Quit"},
@@ -75,19 +77,20 @@ func RenderStatusBar(searchQuery string, message string, activeTab int, width in
 				{"j/k", "Nav"},
 				{"y", "Yank"},
 				{"o", "Open"},
-				{"s", "Star"},
+				{"z", "Timer"},
 				{"q", "Quit"},
 			}
 		}
 	} else {
 		// Standard tabs legend
-		if width >= 90 {
+		if width >= 95 {
 			items = []struct {
 				key  string
 				desc string
 			}{
 				{"j/k", "Nav"},
 				{"Space", "Play/Pause"},
+				{"z", "Timer/Pomo"},
 				{"f", "Fav"},
 				{"y", "Yank"},
 				{"+/-", "Vol"},
@@ -104,6 +107,7 @@ func RenderStatusBar(searchQuery string, message string, activeTab int, width in
 			}{
 				{"j/k", "Nav"},
 				{"Space", "Play"},
+				{"z", "Timer"},
 				{"f", "Fav"},
 				{"y", "Yank"},
 				{"+/-", "Vol"},
@@ -118,6 +122,7 @@ func RenderStatusBar(searchQuery string, message string, activeTab int, width in
 			}{
 				{"j/k", "Nav"},
 				{"Space", "Play"},
+				{"z", "Timer"},
 				{"/", "Search"},
 				{"?", "Help"},
 				{"q", "Quit"},
