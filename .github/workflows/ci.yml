@@ -44,8 +44,16 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
-      - name: Run unit tests with race detector
-        run: go test -v -race ./...
+      - name: Run unit tests with race detector and coverage
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Publish test coverage report to step summary
+        if: runner.os == 'Linux'
+        run: |
+          echo "### 🧪 Test Coverage Report" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          go tool cover -func=coverage.out >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
   cross-compile:
     name: Cross Compile Check

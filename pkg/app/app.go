@@ -3,6 +3,7 @@ package app
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -14,15 +15,29 @@ import (
 
 var Version = "0.0.4"
 
-func Run(embeddedCatalog []byte) {
-	backendFlag := flag.String("backend", "auto", "Audio player backend: auto, native, mpv, vlc, ffplay, mplayer, mpg123")
-	themeFlag := flag.String("theme", "", "Color theme: tokyonight, catppuccin, synthwave, nord, gruvbox, dracula")
-	versionFlag := flag.Bool("version", false, "Show halpradio version")
-	flag.Parse()
+type AppInstance struct {
+	Program *tea.Program
+	Player  *player.Manager
+	Config  util.Config
+	Store   *radio.Store
+}
+
+// SetupApp parses CLI flags, loads configuration, and initializes the AppInstance.
+func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstance, bool, error) {
+	fs := flag.NewFlagSet("halpradio", flag.ContinueOnError)
+	fs.SetOutput(out)
+
+	backendFlag := fs.String("backend", "auto", "Audio player backend: auto, native, mpv, vlc, ffplay, mplayer, mpg123")
+	themeFlag := fs.String("theme", "", "Color theme: tokyonight, catppuccin, synthwave, nord, gruvbox, dracula")
+	versionFlag := fs.Bool("version", false, "Show halpradio version")
+
+	if err := fs.Parse(args); err != nil {
+		return nil, false, err
+	}
 
 	if *versionFlag {
-		fmt.Printf("halpradio v%s - LazyVim-inspired Terminal Internet Radio Streamer\n", Version)
-		os.Exit(0)
+		fmt.Fprintf(out, "halpradio v%s - LazyVim-inspired Terminal Internet Radio Streamer\n", Version)
+		return nil, true, nil
 	}
 
 	cfg, err := util.LoadConfig()
@@ -57,11 +72,28 @@ func Run(embeddedCatalog []byte) {
 		tea.WithMouseCellMotion(),
 	)
 
-	if _, err := program.Run(); err != nil {
+	return &AppInstance{
+		Program: program,
+		Player:  pm,
+		Config:  cfg,
+		Store:   store,
+	}, false, nil
+}
+
+func Run(embeddedCatalog []byte) {
+	appInst, isVersion, err := SetupApp(os.Args[1:], embeddedCatalog, os.Stdout)
+	if err != nil {
+		os.Exit(1)
+	}
+	if isVersion {
+		os.Exit(0)
+	}
+
+	if _, err := appInst.Program.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running halpradio: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Clean up player on exit
-	_ = pm.Stop()
+	_ = appInst.Player.Stop()
 }

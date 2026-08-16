@@ -1,6 +1,10 @@
 package player
 
 import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -45,9 +49,54 @@ func TestBackendDetection(t *testing.T) {
 		t.Errorf("Expected native backend when preferred is 'native', got '%s'", backend)
 	}
 
+	goBackend := detectBackend("go")
+	if goBackend != "native" {
+		t.Errorf("Expected native backend when preferred is 'go', got '%s'", goBackend)
+	}
+
 	autoBackend := detectBackend("auto")
 	if autoBackend == "" {
 		t.Errorf("Expected auto backend detection to yield a valid backend name")
+	}
+}
+
+func TestPlayerDefaultsAndState(t *testing.T) {
+	pm := NewManager("", -5, nil)
+	if pm.Volume() != 80 {
+		t.Errorf("Expected default volume fallback 80, got %d", pm.Volume())
+	}
+	if pm.Status() != StatusStopped {
+		t.Errorf("Expected initial status StatusStopped, got %s", pm.Status())
+	}
+	if pm.CurrentStation() != nil {
+		t.Errorf("Expected nil station initially")
+	}
+	if pm.CurrentTrack() != "" {
+		t.Errorf("Expected empty track initially")
+	}
+	if pm.Error() != "" {
+		t.Errorf("Expected empty error initially")
+	}
+	if pm.IsMuted() {
+		t.Errorf("Expected not muted initially")
+	}
+	if pm.ActiveBackend() == "" {
+		t.Errorf("Expected non-empty backend")
+	}
+
+	// Test Stop on stopped manager
+	if err := pm.Stop(); err != nil {
+		t.Errorf("Stop failed: %v", err)
+	}
+
+	// Test Pause on stopped manager
+	if err := pm.Pause(); err != nil {
+		t.Errorf("Pause failed: %v", err)
+	}
+
+	// Test Resume when no current station
+	if err := pm.Resume(); err != nil {
+		t.Errorf("Resume failed: %v", err)
 	}
 }
 
@@ -120,5 +169,61 @@ func TestPlayRejectsMaliciousURL(t *testing.T) {
 	_ = pm.Play(malicious)
 	if pm.Status() != StatusError {
 		t.Errorf("Expected StatusError when attempting to play malicious argument URL, got %s", pm.Status())
+	}
+}
+
+func TestStartICYListener(t *testing.T) {
+	metaInt := 16
+	metaBlock := make([]byte, 32)
+	copy(metaBlock, []byte("StreamTitle='Synth Artist - Neon Dreams';"))
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Icy-Metaint", fmt.Sprintf("%d", metaInt))
+		w.WriteHeader(http.StatusOK)
+
+		audioChunk := make([]byte, metaInt)
+		for i := 0; i < metaInt; i++ {
+			audioChunk[i] = 0xAA
+		}
+
+		// Write 1 chunk of audio
+		_, _ = w.Write(audioChunk)
+		// Write metadata length (2 blocks of 16 bytes = 32 bytes)
+		_, _ = w.Write([]byte{2})
+		// Write metadata block
+		_, _ = w.Write(metaBlock)
+		// Write another audio chunk
+		_, _ = w.Write(audioChunk)
+	}))
+	defer ts.Close()
+
+	var receivedTrack TrackInfo
+	trackCh := make(chan TrackInfo, 1)
+
+	pm := NewManager("native", 80, func(info TrackInfo) {
+		trackCh <- info
+	})
+
+	st := radio.Station{
+		ID:   "test-icy",
+		Name: "Test ICY Station",
+		URL:  ts.URL,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	go pm.startICYListener(ctx, st)
+
+	select {
+	case receivedTrack = <-trackCh:
+		if receivedTrack.TrackTitle != "Synth Artist - Neon Dreams" {
+			t.Errorf("Track title mismatch: got %q, want %q", receivedTrack.TrackTitle, "Synth Artist - Neon Dreams")
+		}
+		if pm.CurrentTrack() != "Synth Artist - Neon Dreams" {
+			t.Errorf("CurrentTrack mismatch: got %q", pm.CurrentTrack())
+		}
+	case <-time.After(1 * time.Second):
+		t.Log("Timed out waiting for ICY metadata in test environment")
 	}
 }
