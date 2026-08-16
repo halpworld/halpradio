@@ -53,8 +53,126 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TrackUpdatedMsg:
 		if msg.TrackTitle != "" {
 			m.Store.AddHistory(msg.StationID, msg.StationName, msg.TrackTitle)
+			if m.Config.SongNotifications && m.Desktop != nil {
+				m.Desktop.NotifySong(msg.StationName, msg.TrackTitle)
+			}
+		}
+		if m.Desktop != nil {
+			st := m.Player.CurrentStation()
+			stName := msg.StationName
+			genre := ""
+			streamURL := ""
+			if st != nil {
+				if stName == "" {
+					stName = st.Name
+				}
+				genre = st.Genre
+				streamURL = st.URL
+			}
+			trackTitle := msg.TrackTitle
+			if trackTitle == "" {
+				trackTitle = m.Player.CurrentTrack()
+			}
+			m.Desktop.UpdatePlayback(
+				string(m.Player.Status()),
+				stName,
+				genre,
+				trackTitle,
+				streamURL,
+				m.Player.Volume(),
+				m.Player.IsMuted(),
+				m.Player.ActiveBackend(),
+			)
 		}
 		return m, tea.SetWindowTitle(m.WindowTitle())
+
+	case MediaPlayPauseMsg:
+		m.TogglePlayPause()
+		return m, tea.SetWindowTitle(m.WindowTitle())
+
+	case MediaPlayMsg:
+		if m.Player.Status() == player.StatusPaused && m.Player.CurrentStation() != nil {
+			_ = m.Player.Resume()
+			st := m.Player.CurrentStation()
+			m.PlayingID = st.ID
+			m.StatusMessage = fmt.Sprintf("Resumed %s", st.Name)
+		} else if len(m.Stations) > 0 && m.SelectedIndex < len(m.Stations) {
+			st := m.Stations[m.SelectedIndex]
+			_ = m.Player.Play(st)
+			m.PlayingID = st.ID
+			m.StatusMessage = fmt.Sprintf("Playing %s [%s]", st.Name, m.Player.ActiveBackend())
+			if m.Config.SongNotifications && m.Desktop != nil {
+				m.Desktop.NotifySong(st.Name, st.Name)
+			}
+		}
+		m.SyncDesktop()
+		return m, tea.SetWindowTitle(m.WindowTitle())
+
+	case MediaPauseMsg:
+		if m.Player.Status() == player.StatusPlaying {
+			_ = m.Player.Pause()
+			m.PlayingID = ""
+			m.StatusMessage = "Audio playback paused"
+		}
+		m.SyncDesktop()
+		return m, tea.SetWindowTitle(m.WindowTitle())
+
+	case MediaStopMsg:
+		_ = m.Player.Stop()
+		m.PlayingID = ""
+		m.StatusMessage = "Audio playback stopped"
+		m.SyncDesktop()
+		return m, tea.SetWindowTitle(m.WindowTitle())
+
+	case MediaNextMsg:
+		m.PlayNextStation()
+		return m, tea.SetWindowTitle(m.WindowTitle())
+
+	case MediaPrevMsg:
+		m.PlayPrevStation()
+		return m, tea.SetWindowTitle(m.WindowTitle())
+
+	case MediaVolUpMsg:
+		v := m.Player.SetVolume(m.Player.Volume() + 5)
+		m.StatusMessage = fmt.Sprintf("Volume: %d%%", v)
+		m.SyncDesktop()
+		return m, nil
+
+	case MediaVolDownMsg:
+		v := m.Player.SetVolume(m.Player.Volume() - 5)
+		m.StatusMessage = fmt.Sprintf("Volume: %d%%", v)
+		m.SyncDesktop()
+		return m, nil
+
+	case MediaMuteMsg:
+		isMuted := m.Player.ToggleMute()
+		if isMuted {
+			m.StatusMessage = "Muted"
+		} else {
+			m.StatusMessage = fmt.Sprintf("Unmuted (%d%%)", m.Player.Volume())
+		}
+		m.SyncDesktop()
+		return m, nil
+
+	case MediaRandomMsg:
+		if len(m.Stations) > 0 {
+			idx := rand.Intn(len(m.Stations))
+			m.SelectedIndex = idx
+			st := m.Stations[idx]
+			_ = m.Player.Play(st)
+			m.PlayingID = st.ID
+			m.StatusMessage = fmt.Sprintf("Playing Random: %s", st.Name)
+			m.SyncDesktop()
+			if m.Config.SongNotifications && m.Desktop != nil {
+				m.Desktop.NotifySong(st.Name, st.Name)
+			}
+		}
+		return m, tea.SetWindowTitle(m.WindowTitle())
+
+	case MediaQuitMsg:
+		_ = m.Player.Stop()
+		m.SyncDesktop()
+		return m, tea.Quit
 
 	case FlashMessageMsg:
 		m.StatusMessage = string(msg)
@@ -418,6 +536,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+		case key.Matches(msg, m.KeyMap.NextStation):
+			if m.ActiveTab != 6 {
+				m.PlayNextStation()
+			}
+
+		case key.Matches(msg, m.KeyMap.PrevStation):
+			if m.ActiveTab != 6 {
+				m.PlayPrevStation()
+			}
+
 		case key.Matches(msg, m.KeyMap.PlayPause):
 			if m.ActiveTab == 6 {
 				hist := m.Store.GetHistory()
@@ -436,6 +564,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						_ = m.Player.Play(*targetStation)
 						m.PlayingID = targetStation.ID
 						m.StatusMessage = fmt.Sprintf("Playing %s [%s]", targetStation.Name, m.Player.ActiveBackend())
+						m.SyncDesktop()
+						if m.Config.SongNotifications && m.Desktop != nil {
+							m.Desktop.NotifySong(targetStation.Name, targetStation.Name)
+						}
 					} else {
 						m.StatusMessage = fmt.Sprintf("Track '%s' recorded from %s", entry.FullDisplay(), entry.StationName)
 					}
@@ -449,10 +581,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					_ = m.Player.Pause()
 					m.PlayingID = ""
 					m.StatusMessage = fmt.Sprintf("Paused %s", st.Name)
+					m.SyncDesktop()
 				} else {
 					_ = m.Player.Play(st)
 					m.PlayingID = st.ID
 					m.StatusMessage = fmt.Sprintf("Playing %s [%s]", st.Name, m.Player.ActiveBackend())
+					m.SyncDesktop()
+					if m.Config.SongNotifications && m.Desktop != nil {
+						m.Desktop.NotifySong(st.Name, st.Name)
+					}
 				}
 			}
 
@@ -472,6 +609,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				_ = m.Player.Stop()
 				m.PlayingID = ""
 				m.StatusMessage = "Audio playback stopped"
+				m.SyncDesktop()
 			}
 
 		case key.Matches(msg, m.KeyMap.YankTrack):
@@ -536,15 +674,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				_ = m.Player.Play(st)
 				m.PlayingID = st.ID
 				m.StatusMessage = fmt.Sprintf("Playing Random: %s", st.Name)
+				m.SyncDesktop()
+				if m.Config.SongNotifications && m.Desktop != nil {
+					m.Desktop.NotifySong(st.Name, st.Name)
+				}
 			}
 
 		case key.Matches(msg, m.KeyMap.VolUp):
 			v := m.Player.SetVolume(m.Player.Volume() + 5)
 			m.StatusMessage = fmt.Sprintf("Volume: %d%%", v)
+			m.SyncDesktop()
 
 		case key.Matches(msg, m.KeyMap.VolDown):
 			v := m.Player.SetVolume(m.Player.Volume() - 5)
 			m.StatusMessage = fmt.Sprintf("Volume: %d%%", v)
+			m.SyncDesktop()
 
 		case key.Matches(msg, m.KeyMap.Mute):
 			isMuted := m.Player.ToggleMute()
@@ -553,6 +697,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.StatusMessage = fmt.Sprintf("Unmuted (%d%%)", m.Player.Volume())
 			}
+			m.SyncDesktop()
 
 		case key.Matches(msg, m.KeyMap.Search):
 			m.IsSearching = true

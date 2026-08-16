@@ -12,6 +12,9 @@ type KeyMap struct {
 	HalfPageUp   key.Binding
 	HalfPageDown key.Binding
 
+	NextStation key.Binding
+	PrevStation key.Binding
+
 	PlayPause  key.Binding
 	Stop       key.Binding
 	RandomPlay key.Binding
@@ -75,28 +78,36 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("ctrl+d", "pgdown"),
 			key.WithHelp("ctrl+d", "page down"),
 		),
+		NextStation: key.NewBinding(
+			key.WithKeys("n", "]", "ctrl+n", "next", "nexttrack", "media_next", "medianext", "xf86audionext"),
+			key.WithHelp("n/]", "next station"),
+		),
+		PrevStation: key.NewBinding(
+			key.WithKeys("N", "[", "ctrl+p", "prev", "previous", "media_prev", "mediaprev", "xf86audioprev"),
+			key.WithHelp("N/[", "prev station"),
+		),
 		PlayPause: key.NewBinding(
-			key.WithKeys("space", "enter"),
+			key.WithKeys("space", "enter", "play", "pause", "playpause", "media_play_pause", "mediaplaypause", "xf86audioplay", "xf86audiopause"),
 			key.WithHelp("space/enter", "play/pause"),
 		),
 		Stop: key.NewBinding(
-			key.WithKeys("s"),
-			key.WithHelp("s", "stop audio"),
+			key.WithKeys("s", "x", "stop", "media_stop", "mediastop", "xf86audiostop"),
+			key.WithHelp("s/x", "stop audio"),
 		),
 		RandomPlay: key.NewBinding(
-			key.WithKeys("r"),
+			key.WithKeys("r", "R"),
 			key.WithHelp("r", "random station"),
 		),
 		VolUp: key.NewBinding(
-			key.WithKeys("+", "="),
-			key.WithHelp("+", "vol up"),
+			key.WithKeys("+", "=", ">", "volume_up", "volup", "xf86audioraisevolume"),
+			key.WithHelp("+/=", "vol up"),
 		),
 		VolDown: key.NewBinding(
-			key.WithKeys("-", "_"),
+			key.WithKeys("-", "_", "<", "volume_down", "voldown", "xf86audiolowervolume"),
 			key.WithHelp("-", "vol down"),
 		),
 		Mute: key.NewBinding(
-			key.WithKeys("m"),
+			key.WithKeys("m", "M", "0", "mute", "volume_mute", "xf86audiomute"),
 			key.WithHelp("m", "mute/unmute"),
 		),
 		Search: key.NewBinding(

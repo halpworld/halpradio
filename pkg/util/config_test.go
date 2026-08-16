@@ -41,6 +41,15 @@ func TestConfigDefaults(t *testing.T) {
 	if !cfg.EventTerminalBell {
 		t.Errorf("Expected EventTerminalBell true by default")
 	}
+	if !cfg.SongNotifications {
+		t.Errorf("Expected SongNotifications true by default")
+	}
+	if !cfg.MPRISEnabled {
+		t.Errorf("Expected MPRISEnabled true by default")
+	}
+	if !cfg.IPCEnabled {
+		t.Errorf("Expected IPCEnabled true by default")
+	}
 }
 
 func TestConfigPathsAndLifecycle(t *testing.T) {

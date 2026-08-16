@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/halpworld/halpradio/pkg/desktop"
 	"github.com/halpworld/halpradio/pkg/player"
 	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/util"
@@ -176,4 +177,40 @@ func TestUpDownNavigationOnCatalogMovesStationCursor(t *testing.T) {
 	if m.SelectedIndex != 1 {
 		t.Errorf("Expected SelectedIndex 1 after pressing 'k', got %d", m.SelectedIndex)
 	}
+}
+
+func TestStationNavigationHelpersDirect(t *testing.T) {
+	m := createTestModel()
+	m.SyncDesktop() // Should be safe with nil Desktop
+
+	desktopMgr := desktop.NewManager(desktop.DesktopConfig{
+		NotificationsEnabled: true,
+		MPRISEnabled:         false,
+		IPCEnabled:           false,
+	}, nil)
+	defer desktopMgr.Close()
+	m.SetDesktop(desktopMgr)
+
+	// Play next station
+	m.PlayNextStation()
+	if m.SelectedIndex != 1 {
+		t.Errorf("expected selectedIndex 1 after PlayNextStation(), got %d", m.SelectedIndex)
+	}
+
+	// Play prev station
+	m.PlayPrevStation()
+	if m.SelectedIndex != 0 {
+		t.Errorf("expected selectedIndex 0 after PlayPrevStation(), got %d", m.SelectedIndex)
+	}
+
+	// Toggle play pause
+	m.TogglePlayPause()
+	m.TogglePlayPause()
+
+	// Empty list safety
+	emptyModel := NewModel(radio.NewStore(), player.NewManager("auto", 80, nil), util.DefaultConfig())
+	emptyModel.Stations = nil
+	emptyModel.PlayNextStation()
+	emptyModel.PlayPrevStation()
+	emptyModel.TogglePlayPause()
 }

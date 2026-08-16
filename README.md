@@ -75,7 +75,9 @@ docker run --rm -it --device /dev/snd halpworld/halpradio:latest
 | Feature | 📻 **halpradio** | PyRadio | Curseradio | radio-active | mocp / cmus |
 |---|:---:|:---:|:---:|:---:|:---:|
 | **Zero-Dependency Audio Engine** | ✅ **Yes** (`oto/v3` Go native) | ❌ (requires MPV/VLC) | ❌ (requires MPV) | ❌ (requires FFmpeg) | ❌ (C daemons) |
-| **Multi-Backend Auto Detection** | ✅ `mpv` > `vlc` > `ffplay` > `native` | ⚠️ Limited | ⚠️ MPV only | ⚠️ FFmpeg only | ❌ Self only |
+| **Linux MPRIS v2 & Media Keys** | ✅ **Native D-Bus + `playerctl`** | ❌ None | ❌ None | ❌ None | ⚠️ Basic MPRIS |
+| **Song Change Desktop Notifications** | ✅ **Native macOS/Linux/Win + Dedupe** | ❌ None | ❌ None | ❌ None | ❌ None |
+| **CLI & Hotkey Remote (`halpradio remote`)** | ✅ **macOS Shortcuts, Raycast, tmux** | ❌ None | ❌ None | ❌ None | ⚠️ Socket |
 | **Pomodoro & Sleep Timers (`z`)** | ✅ **Intervals, Station Switch & OS Notify** | ❌ None | ❌ None | ❌ None | ⚠️ Basic sleep |
 | **Beat-Reactive Animated Visualizers** | ✅ **5 Animal DJs + EQ Spectrum** | ❌ None | ❌ None | ❌ None | ⚠️ Basic VU |
 | **Live ICY Metadata (Song / Artist)** | ✅ **Real-time Async Extraction** | ⚠️ Partial | ❌ None | ⚠️ Partial | ⚠️ Track only |
@@ -216,13 +218,49 @@ halpradio -backend native
 
 ---
 
-## ⌨️ Navigation & Keybindings (Vim Style)
+## 🖥️ Desktop Integration: MPRIS v2, Media Keys & CLI Remote
+
+`halpradio` provides deep desktop operating system integration across **macOS** and **Linux**:
+
+### 🐧 Linux MPRIS v2 D-Bus Interface
+Registers standard D-Bus service `org.mpris.MediaPlayer2.halpradio` on the session bus.
+- Control halpradio seamlessly from your keyboard media keys, GNOME / KDE Plasma media panels, and Waybar/Polybar modules.
+- Supports standard MPRIS methods: `PlayPause`, `Play`, `Pause`, `Stop`, `Next`, `Previous`, `Quit`.
+- Control from terminal: `playerctl play-pause`, `playerctl next`, `playerctl previous`, `playerctl stop`.
+
+### 🍎 macOS & CLI Remote Control (`halpradio remote`)
+Control playback instantly without focusing the terminal window:
+```bash
+halpradio remote play-pause  # Toggle play / pause
+halpradio remote next        # Jump to next station
+halpradio remote prev        # Jump to previous station
+halpradio remote volup       # Volume +5%
+halpradio remote voldown     # Volume -5%
+halpradio remote mute        # Toggle mute
+halpradio remote random      # Play random station
+halpradio remote status      # Inspect playback status
+```
+- **macOS Shortcuts / Raycast / Alfred**: Map `halpradio remote play-pause` to hardware F7/F8/F9 or hotkeys.
+- **tmux**: Add `bind-key P run-shell "halpradio remote play-pause"` to `~/.tmux.conf`.
+
+### 📢 Song Change Desktop Notifications
+Whenever a radio station broadcasts a new track title via ICY metadata, `halpradio` fires a native desktop notification banner:
+- **Title**: `📻 halpradio — [Station Name]`
+- **Body**: `🎶 [Artist] - [Title]`
+- Built-in deduplication ensures zero spam.
+- Toggle via `-notifications=false` or `song_notifications: false` in `config.yaml`.
+
+---
+
+## ⌨️ Navigation & Keybindings (Vim & Media Style)
 
 Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Overlay**.
 
 | Category | Keybinding | Action |
 |---|---|---|
 | **Navigation** | `j` / `k` or `↓` / `↑` | Move down / up |
+| | `n` / `]` | Jump and play **Next station** in active list |
+| | `N` / `[` | Jump and play **Previous station** in active list |
 | | `h` / `l` or `←` / `→` | Focus sidebar / main list or prev/next tab |
 | | `1` - `7` | Direct jump to Tab (1: Catalog, 2: Activities, 3: Genres, 4: Favorites, 5: Online, 6: Custom, 7: History) |
 | | `H` | Jump directly to Track History tab |
@@ -233,12 +271,12 @@ Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Over
 | | `s` | Star / bookmark track to `~/.config/halpradio/saved_tracks.txt` (on History tab) |
 | | `c` | Clear track history log (on History tab) |
 | | `p` | Export station YAML snippet to clipboard for GitHub PR |
-| **Playback** | `Space` or `Enter` | Toggle Play / Pause selected station (or tune in from history) |
-| | `s` | Stop audio stream (on station tabs) |
+| **Playback** | `Space` / `Enter` / ⏯️ | Toggle Play / Pause selected station (or tune in from history) |
+| | `s` / `x` / ⏹️ | Stop audio stream (on station tabs) |
 | | `z` / `Z` | Open **Sleep Timer & Pomodoro Focus** modal |
-| | `r` | Play random station |
-| | `+` / `-` | Volume up / down (5% step) |
-| | `m` | Mute / unmute |
+| | `r` / `R` | Play random station |
+| | `+` / `-` / `=` / `>` | Volume up / down (5% step, supports ANSI, ISO, AZERTY, QWERTZ) |
+| | `m` / `M` / `0` | Mute / unmute |
 | | `v` | Cycle visualizer (`dj-cat`, `dj-dog`, `dj-bear`, `dj-frog`, `dj-bunny`, `bars`, `wave`, `spectrum`, `minimal`) |
 | **Catalog** | `f` | Toggle Favorite star ⭐ |
 | | `/` | Live fuzzy search / filter stations |

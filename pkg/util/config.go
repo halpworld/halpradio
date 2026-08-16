@@ -24,6 +24,9 @@ type Config struct {
 	EventNotifyDesktop   bool   `yaml:"event_notify_desktop"`
 	EventTerminalBell    bool   `yaml:"event_terminal_bell"`
 	EventCommandHook     string `yaml:"event_command_hook,omitempty"`
+	SongNotifications    bool   `yaml:"song_notifications"`
+	MPRISEnabled         bool   `yaml:"mpris_enabled"`
+	IPCEnabled           bool   `yaml:"ipc_enabled"`
 }
 
 func DefaultConfig() Config {
@@ -44,6 +47,9 @@ func DefaultConfig() Config {
 		EventNotifyDesktop:   true,
 		EventTerminalBell:    true,
 		EventCommandHook:     "",
+		SongNotifications:    true,
+		MPRISEnabled:         true,
+		IPCEnabled:           true,
 	}
 }
 

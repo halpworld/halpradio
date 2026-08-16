@@ -6,6 +6,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/halpworld/halpradio/pkg/desktop"
+	"github.com/halpworld/halpradio/pkg/player"
 	"github.com/halpworld/halpradio/pkg/radio"
 )
 
@@ -63,6 +65,79 @@ func TestUpdateMessages(t *testing.T) {
 	m = mModel.(Model)
 	if cmd == nil {
 		t.Errorf("Expected non-nil tickCmd from TickMsg")
+	}
+}
+
+func TestMediaActionMessages(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	m := createTestModel()
+	initialIdx := m.SelectedIndex
+
+	// MediaNextMsg
+	mModel, _ := m.Update(MediaNextMsg{})
+	m = mModel.(Model)
+	if len(m.Stations) > 1 && m.SelectedIndex == initialIdx {
+		t.Errorf("MediaNextMsg did not advance selected station")
+	}
+
+	// MediaPrevMsg
+	mModel, _ = m.Update(MediaPrevMsg{})
+	m = mModel.(Model)
+	if m.SelectedIndex != initialIdx {
+		t.Errorf("MediaPrevMsg did not return to previous station")
+	}
+
+	// MediaVolUpMsg
+	vol := m.Player.Volume()
+	mModel, _ = m.Update(MediaVolUpMsg{})
+	m = mModel.(Model)
+	if m.Player.Volume() != vol+5 {
+		t.Errorf("MediaVolUpMsg expected volume %d, got %d", vol+5, m.Player.Volume())
+	}
+
+	// MediaVolDownMsg
+	mModel, _ = m.Update(MediaVolDownMsg{})
+	m = mModel.(Model)
+	if m.Player.Volume() != vol {
+		t.Errorf("MediaVolDownMsg expected volume %d, got %d", vol, m.Player.Volume())
+	}
+
+	// MediaMuteMsg
+	mModel, _ = m.Update(MediaMuteMsg{})
+	m = mModel.(Model)
+	if !m.Player.IsMuted() {
+		t.Errorf("MediaMuteMsg expected muted")
+	}
+
+	// MediaPlayPauseMsg
+	mModel, _ = m.Update(MediaPlayPauseMsg{})
+	m = mModel.(Model)
+
+	// MediaPlayMsg & MediaPauseMsg
+	mModel, _ = m.Update(MediaPlayMsg{})
+	m = mModel.(Model)
+
+	mModel, _ = m.Update(MediaPauseMsg{})
+	m = mModel.(Model)
+
+	// MediaStopMsg
+	mModel, _ = m.Update(MediaStopMsg{})
+	m = mModel.(Model)
+	if m.Player.Status() != player.StatusStopped {
+		t.Errorf("MediaStopMsg expected stopped status")
+	}
+
+	// MediaRandomMsg
+	mModel, _ = m.Update(MediaRandomMsg{})
+	m = mModel.(Model)
+
+	// MediaQuitMsg
+	_, quitCmd := m.Update(MediaQuitMsg{})
+	if quitCmd == nil {
+		t.Errorf("MediaQuitMsg expected tea.Quit command")
 	}
 }
 
@@ -132,17 +207,22 @@ func TestUpdateKeyboardNavigationAndShortcuts(t *testing.T) {
 		t.Errorf("Expected IsSearching false after Esc")
 	}
 
-	// 4. Volume controls (+, -) and Mute (m)
+	// 4. Volume controls (+, -, =) and Mute (m, 0)
 	initialVol := m.Player.Volume()
 	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'+'}})
 	m = mModel.(Model)
 	if m.Player.Volume() != initialVol+5 {
 		t.Errorf("Volume did not increase by 5: was %d, now %d", initialVol, m.Player.Volume())
 	}
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'='}})
+	m = mModel.(Model)
+	if m.Player.Volume() != initialVol+10 {
+		t.Errorf("Volume did not increase by 5 with '=': was %d, now %d", initialVol+5, m.Player.Volume())
+	}
 	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'-'}})
 	m = mModel.(Model)
-	if m.Player.Volume() != initialVol {
-		t.Errorf("Volume did not decrease back to initial: %d", m.Player.Volume())
+	if m.Player.Volume() != initialVol+5 {
+		t.Errorf("Volume did not decrease back: %d", m.Player.Volume())
 	}
 	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 	m = mModel.(Model)
@@ -155,14 +235,36 @@ func TestUpdateKeyboardNavigationAndShortcuts(t *testing.T) {
 		t.Errorf("Expected unmuted player after second 'm'")
 	}
 
-	// 5. Visualizer mode cycle (v)
+	// 5. Next & Prev station navigation keys (n, ], N, [)
+	idxBefore := m.SelectedIndex
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = mModel.(Model)
+	if len(m.Stations) > 1 && m.SelectedIndex == idxBefore {
+		t.Errorf("Expected selected index to advance after 'n'")
+	}
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	m = mModel.(Model)
+
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
+	m = mModel.(Model)
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	m = mModel.(Model)
+
+	// 6. Stop key variant (x)
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	m = mModel.(Model)
+	if m.Player.Status() != player.StatusStopped {
+		t.Errorf("Expected player stopped after 'x'")
+	}
+
+	// 7. Visualizer mode cycle (v)
 	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
 	m = mModel.(Model)
 	if m.Visualizer == nil {
 		t.Errorf("Expected visualizer to remain valid after cycle")
 	}
 
-	// 6. Favorite toggle (f)
+	// 8. Favorite toggle (f)
 	if len(m.Stations) > 0 {
 		targetID := m.Stations[m.SelectedIndex].ID
 		mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
@@ -172,7 +274,7 @@ func TestUpdateKeyboardNavigationAndShortcuts(t *testing.T) {
 		}
 	}
 
-	// 7. PR Export modal (p)
+	// 9. PR Export modal (p)
 	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 	m = mModel.(Model)
 	if !m.ShowPRExport {
@@ -184,7 +286,7 @@ func TestUpdateKeyboardNavigationAndShortcuts(t *testing.T) {
 		t.Errorf("Expected ShowPRExport false after Esc")
 	}
 
-	// 8. Add Station modal (a)
+	// 10. Add Station modal (a)
 	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 	m = mModel.(Model)
 	if !m.ShowAddModal {
@@ -197,10 +299,41 @@ func TestUpdateKeyboardNavigationAndShortcuts(t *testing.T) {
 		t.Errorf("Expected ShowAddModal false after Esc")
 	}
 
-	// 9. Quit key (q)
+	// 11. Quit key (q)
 	_, quitCmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	if quitCmd == nil {
 		t.Errorf("Expected tea.Quit command after 'q'")
+	}
+}
+
+func TestDesktopSongNotificationIntegration(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	m := createTestModel()
+	m.Config.SongNotifications = true
+
+	desktopMgr := desktop.NewManager(desktop.DesktopConfig{
+		NotificationsEnabled: true,
+		MPRISEnabled:         false,
+		IPCEnabled:           false,
+	}, nil)
+	defer desktopMgr.Close()
+
+	m.SetDesktop(desktopMgr)
+
+	// Send track updated message
+	mModel, _ := m.Update(TrackUpdatedMsg{
+		StationID:   "lofi-girl",
+		StationName: "Lofi Girl",
+		TrackTitle:  "Kupla - Kingdom in Blue",
+	})
+	m = mModel.(Model)
+
+	info := m.Desktop.GetPlaybackInfo()
+	if info.Track != "Kupla - Kingdom in Blue" {
+		t.Errorf("Expected desktop playback track 'Kupla - Kingdom in Blue', got %q", info.Track)
 	}
 }
 
