@@ -25,7 +25,10 @@ func Run(embeddedCatalog []byte) {
 		os.Exit(0)
 	}
 
-	cfg := util.DefaultConfig()
+	cfg, err := util.LoadConfig()
+	if err != nil {
+		cfg = util.DefaultConfig()
+	}
 	if *backendFlag != "" && *backendFlag != "auto" {
 		cfg.PlayerBackend = *backendFlag
 	}

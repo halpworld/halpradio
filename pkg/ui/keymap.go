@@ -38,6 +38,7 @@ type KeyMap struct {
 	YankTrack  key.Binding
 	OpenSearch key.Binding
 	HistoryTab key.Binding
+	Timer      key.Binding
 }
 
 func DefaultKeyMap() KeyMap {
@@ -161,6 +162,10 @@ func DefaultKeyMap() KeyMap {
 		HistoryTab: key.NewBinding(
 			key.WithKeys("H"),
 			key.WithHelp("H", "history view"),
+		),
+		Timer: key.NewBinding(
+			key.WithKeys("z", "Z"),
+			key.WithHelp("z", "sleep/pomodoro timer"),
 		),
 	}
 }

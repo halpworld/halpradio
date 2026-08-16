@@ -5,12 +5,14 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/halpworld/halpradio/pkg/player"
 	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/theme"
+	"github.com/halpworld/halpradio/pkg/timer"
 	"github.com/halpworld/halpradio/pkg/util"
 )
 
@@ -28,6 +30,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.Player.Status() == player.StatusError && m.Player.Error() != "" {
 			m.StatusMessage = fmt.Sprintf("Error: %s", m.Player.Error())
 		}
+
+		now := time.Time(msg)
+		if m.LastTickTime.IsZero() {
+			m.LastTickTime = now
+		}
+		delta := now.Sub(m.LastTickTime)
+		if delta <= 0 || delta > 2*time.Second {
+			delta = 150 * time.Millisecond
+		}
+		m.LastTickTime = now
+
+		if m.Timer != nil && m.Timer.IsActive() {
+			events := m.Timer.Tick(delta)
+			for _, ev := range events {
+				m.handleTimerEvent(ev)
+			}
+		}
+
 		return m, tickCmd()
 
 	case TrackUpdatedMsg:
@@ -89,6 +109,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleAddModalKey(msg)
 		}
 
+		if m.ShowTimerModal {
+			return m.handleTimerModalKey(msg)
+		}
+
 		if m.IsSearching {
 			switch msg.String() {
 			case "esc":
@@ -122,6 +146,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.KeyMap.Theme):
 			m.ShowThemePicker = true
+
+		case key.Matches(msg, m.KeyMap.Timer):
+			m.openTimerModal()
 
 		case msg.String() == "tab":
 			if m.ActiveTab == 1 || m.ActiveTab == 2 {
@@ -601,11 +628,313 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+func (m *Model) openTimerModal() {
+	m.ShowTimerModal = true
+	m.TimerModalScreen = 0
+	m.TimerMenuCursor = 0
+	m.TimerPomodoroInputs = []string{
+		fmt.Sprintf("%d", int(m.Timer.PomodoroCfg.FocusDuration.Minutes())),
+		fmt.Sprintf("%d", int(m.Timer.PomodoroCfg.ShortBreakDuration.Minutes())),
+		fmt.Sprintf("%d", int(m.Timer.PomodoroCfg.LongBreakDuration.Minutes())),
+		fmt.Sprintf("%d", m.Timer.PomodoroCfg.CyclesBeforeLongBreak),
+		m.Timer.PomodoroCfg.FocusStationID,
+		m.Timer.PomodoroCfg.BreakStationID,
+		m.Timer.PomodoroCfg.CommandHook,
+	}
+	m.TimerPomodoroFocusIdx = 0
+	m.TimerPomodoroNotifyDesktop = m.Timer.PomodoroCfg.NotifyDesktop
+	m.TimerPomodoroNotifyBell = m.Timer.PomodoroCfg.NotifyTerminalBell
+}
+
 func (m *Model) applyTheme(name string) {
 	m.Config.Theme = name
 	m.Theme = theme.GetTheme(name)
 	m.ShowThemePicker = false
 	m.StatusMessage = fmt.Sprintf("Theme changed to %s", m.Theme.Name)
+}
+
+func (m *Model) handleTimerEvent(ev timer.Event) {
+	switch ev.Type {
+	case timer.EventSleepFadeStart:
+		if m.TimerFadeOriginalVol == 0 {
+			m.TimerFadeOriginalVol = m.Player.Volume()
+		}
+		fadedVol := int(float64(m.TimerFadeOriginalVol) * ev.FadeVolumePercent)
+		if fadedVol < 0 {
+			fadedVol = 0
+		}
+		_ = m.Player.SetVolume(fadedVol)
+
+	case timer.EventSleepComplete:
+		_ = m.Player.Stop()
+		m.PlayingID = ""
+		if m.TimerFadeOriginalVol > 0 {
+			_ = m.Player.SetVolume(m.TimerFadeOriginalVol)
+			m.TimerFadeOriginalVol = 0
+		}
+		m.StatusMessage = "🌙 Sleep timer completed. Playback stopped."
+		timer.DispatchEvent(ev, m.Timer.SleepCfg.NotifyDesktop, m.Timer.SleepCfg.NotifyTerminalBell, m.Timer.SleepCfg.CommandHook)
+
+	case timer.EventFocusStart:
+		if ev.StationID != "" && ev.StationID != m.PlayingID {
+			m.tuneToStationByID(ev.StationID)
+		}
+		m.StatusMessage = fmt.Sprintf("🍅 %s", ev.Message)
+		timer.DispatchEvent(ev, m.Timer.PomodoroCfg.NotifyDesktop, m.Timer.PomodoroCfg.NotifyTerminalBell, m.Timer.PomodoroCfg.CommandHook)
+
+	case timer.EventShortBreakStart, timer.EventLongBreakStart:
+		if ev.StationID == "__pause__" || ev.StationID == "pause" {
+			_ = m.Player.Pause()
+			m.PlayingID = ""
+		} else if ev.StationID != "" && ev.StationID != m.PlayingID {
+			m.tuneToStationByID(ev.StationID)
+		}
+		m.StatusMessage = fmt.Sprintf("☕ %s", ev.Message)
+		timer.DispatchEvent(ev, m.Timer.PomodoroCfg.NotifyDesktop, m.Timer.PomodoroCfg.NotifyTerminalBell, m.Timer.PomodoroCfg.CommandHook)
+
+	case timer.EventFocusComplete, timer.EventShortBreakComplete, timer.EventLongBreakComplete:
+		m.StatusMessage = fmt.Sprintf("⚡ %s", ev.Message)
+		timer.DispatchEvent(ev, m.Timer.PomodoroCfg.NotifyDesktop, m.Timer.PomodoroCfg.NotifyTerminalBell, m.Timer.PomodoroCfg.CommandHook)
+	}
+}
+
+func (m *Model) tuneToStationByID(stationID string) {
+	for _, st := range m.Store.GetAllStations() {
+		if st.ID == stationID || strings.EqualFold(st.Name, stationID) {
+			_ = m.Player.Play(st)
+			m.PlayingID = st.ID
+			return
+		}
+	}
+}
+
+func (m Model) handleTimerModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	if m.TimerModalScreen == 1 {
+		// Custom sleep minute input
+		switch msg.String() {
+		case "esc":
+			m.TimerModalScreen = 0
+		case "enter":
+			mins, err := strconv.Atoi(strings.TrimSpace(m.TimerCustomSleepInput))
+			if err == nil && mins > 0 {
+				ev := m.Timer.StartSleep(
+					time.Duration(mins)*time.Minute,
+					time.Duration(m.Config.SleepFadeSeconds)*time.Second,
+					m.Config.EventNotifyDesktop,
+					m.Config.EventTerminalBell,
+					m.Config.EventCommandHook,
+					m.Player.Volume(),
+				)
+				timer.DispatchEvent(ev, m.Config.EventNotifyDesktop, m.Config.EventTerminalBell, m.Config.EventCommandHook)
+				m.StatusMessage = fmt.Sprintf("⏳ Sleep timer set for %d minutes", mins)
+				m.ShowTimerModal = false
+				m.TimerModalScreen = 0
+			}
+		case "backspace":
+			if len(m.TimerCustomSleepInput) > 0 {
+				m.TimerCustomSleepInput = m.TimerCustomSleepInput[:len(m.TimerCustomSleepInput)-1]
+			}
+		default:
+			if len(msg.String()) == 1 && msg.String() >= "0" && msg.String() <= "9" {
+				m.TimerCustomSleepInput += msg.String()
+			}
+		}
+		return m, nil
+	}
+
+	if m.TimerModalScreen == 2 {
+		// Pomodoro & Events Config Editor
+		switch msg.String() {
+		case "esc":
+			m.TimerModalScreen = 0
+		case "tab", "down":
+			m.TimerPomodoroFocusIdx = (m.TimerPomodoroFocusIdx + 1) % len(m.TimerPomodoroInputs)
+		case "shift+tab", "up":
+			m.TimerPomodoroFocusIdx = (m.TimerPomodoroFocusIdx - 1 + len(m.TimerPomodoroInputs)) % len(m.TimerPomodoroInputs)
+		case "d":
+			m.TimerPomodoroNotifyDesktop = !m.TimerPomodoroNotifyDesktop
+		case "b":
+			m.TimerPomodoroNotifyBell = !m.TimerPomodoroNotifyBell
+		case "f":
+			if m.Player.CurrentStation() != nil {
+				m.TimerPomodoroInputs[4] = m.Player.CurrentStation().ID
+			}
+		case "k", "K":
+			if msg.String() == "K" || m.TimerPomodoroFocusIdx > 3 {
+				if m.Player.CurrentStation() != nil {
+					m.TimerPomodoroInputs[5] = m.Player.CurrentStation().ID
+				}
+			}
+		case "enter":
+			fMin, _ := strconv.Atoi(strings.TrimSpace(m.TimerPomodoroInputs[0]))
+			if fMin <= 0 {
+				fMin = 25
+			}
+			sMin, _ := strconv.Atoi(strings.TrimSpace(m.TimerPomodoroInputs[1]))
+			if sMin <= 0 {
+				sMin = 5
+			}
+			lMin, _ := strconv.Atoi(strings.TrimSpace(m.TimerPomodoroInputs[2]))
+			if lMin <= 0 {
+				lMin = 15
+			}
+			cycles, _ := strconv.Atoi(strings.TrimSpace(m.TimerPomodoroInputs[3]))
+			if cycles <= 0 {
+				cycles = 4
+			}
+
+			focusStation := strings.TrimSpace(m.TimerPomodoroInputs[4])
+			breakStation := strings.TrimSpace(m.TimerPomodoroInputs[5])
+			shellHook := strings.TrimSpace(m.TimerPomodoroInputs[6])
+
+			m.Config.PomodoroFocusMin = fMin
+			m.Config.PomodoroShortBreak = sMin
+			m.Config.PomodoroLongBreak = lMin
+			m.Config.PomodoroCycles = cycles
+			m.Config.PomodoroFocusStation = focusStation
+			m.Config.PomodoroBreakStation = breakStation
+			m.Config.EventCommandHook = shellHook
+			m.Config.EventNotifyDesktop = m.TimerPomodoroNotifyDesktop
+			m.Config.EventTerminalBell = m.TimerPomodoroNotifyBell
+			_ = util.SaveConfig(m.Config)
+
+			m.Timer.PomodoroCfg = timer.PomodoroConfig{
+				FocusDuration:         time.Duration(fMin) * time.Minute,
+				ShortBreakDuration:    time.Duration(sMin) * time.Minute,
+				LongBreakDuration:     time.Duration(lMin) * time.Minute,
+				CyclesBeforeLongBreak: cycles,
+				FocusStationID:        focusStation,
+				BreakStationID:        breakStation,
+				AutoStartBreaks:       true,
+				AutoStartFocus:        true,
+				NotifyDesktop:         m.TimerPomodoroNotifyDesktop,
+				NotifyTerminalBell:    m.TimerPomodoroNotifyBell,
+				CommandHook:           shellHook,
+			}
+
+			ev := m.Timer.StartPomodoro(m.Timer.PomodoroCfg)
+			m.handleTimerEvent(ev)
+			m.ShowTimerModal = false
+			m.TimerModalScreen = 0
+			m.StatusMessage = fmt.Sprintf("🍅 Pomodoro Focus started (%d min sprint)", fMin)
+
+		case "backspace":
+			val := m.TimerPomodoroInputs[m.TimerPomodoroFocusIdx]
+			if len(val) > 0 {
+				m.TimerPomodoroInputs[m.TimerPomodoroFocusIdx] = val[:len(val)-1]
+			}
+		default:
+			if len(msg.String()) == 1 {
+				m.TimerPomodoroInputs[m.TimerPomodoroFocusIdx] += msg.String()
+			}
+		}
+		return m, nil
+	}
+
+	// Screen 0: Main menu or Active Dashboard
+	if m.Timer.IsActive() {
+		switch msg.String() {
+		case "esc", "q":
+			m.ShowTimerModal = false
+		case "space", "p":
+			ev := m.Timer.TogglePause()
+			m.StatusMessage = ev.Message
+		case "s":
+			events := m.Timer.SkipPhase()
+			for _, ev := range events {
+				m.handleTimerEvent(ev)
+			}
+		case "r":
+			m.Timer.ResetCurrentInterval()
+			m.StatusMessage = "Reset current timer interval"
+		case "+", "=":
+			m.Timer.AddMinutes(5)
+			m.StatusMessage = fmt.Sprintf("Added +5m (%s remaining)", m.Timer.FormattedTime())
+		case "-", "_":
+			m.Timer.AddMinutes(-5)
+			m.StatusMessage = fmt.Sprintf("Subtracted 5m (%s remaining)", m.Timer.FormattedTime())
+		case "c":
+			ev := m.Timer.Stop()
+			m.StatusMessage = ev.Message
+			m.ShowTimerModal = false
+		case "e":
+			m.TimerModalScreen = 2
+			m.TimerPomodoroFocusIdx = 0
+		}
+		return m, nil
+	}
+
+	// Inactive menu selection
+	switch msg.String() {
+	case "esc", "q":
+		m.ShowTimerModal = false
+	case "j", "down":
+		m.TimerMenuCursor = (m.TimerMenuCursor + 1) % 8
+	case "k", "up":
+		m.TimerMenuCursor = (m.TimerMenuCursor - 1 + 8) % 8
+	case "1":
+		m.startPomodoroFromMenu()
+	case "2":
+		m.startSleepFromMenu(15)
+	case "3":
+		m.startSleepFromMenu(30)
+	case "4":
+		m.startSleepFromMenu(45)
+	case "5":
+		m.startSleepFromMenu(60)
+	case "6":
+		m.startSleepFromMenu(90)
+	case "7":
+		m.TimerModalScreen = 1
+		m.TimerCustomSleepInput = "45"
+	case "8":
+		m.TimerModalScreen = 2
+		m.TimerPomodoroFocusIdx = 0
+	case "enter", "space":
+		switch m.TimerMenuCursor {
+		case 0:
+			m.startPomodoroFromMenu()
+		case 1:
+			m.startSleepFromMenu(15)
+		case 2:
+			m.startSleepFromMenu(30)
+		case 3:
+			m.startSleepFromMenu(45)
+		case 4:
+			m.startSleepFromMenu(60)
+		case 5:
+			m.startSleepFromMenu(90)
+		case 6:
+			m.TimerModalScreen = 1
+			m.TimerCustomSleepInput = "45"
+		case 7:
+			m.TimerModalScreen = 2
+			m.TimerPomodoroFocusIdx = 0
+		}
+	}
+
+	return m, nil
+}
+
+func (m *Model) startPomodoroFromMenu() {
+	ev := m.Timer.StartPomodoro(m.Timer.PomodoroCfg)
+	m.handleTimerEvent(ev)
+	m.ShowTimerModal = false
+	m.StatusMessage = fmt.Sprintf("🍅 Pomodoro Focus Mode started (%d min sprint)", int(m.Timer.PomodoroCfg.FocusDuration.Minutes()))
+}
+
+func (m *Model) startSleepFromMenu(mins int) {
+	ev := m.Timer.StartSleep(
+		time.Duration(mins)*time.Minute,
+		time.Duration(m.Config.SleepFadeSeconds)*time.Second,
+		m.Config.EventNotifyDesktop,
+		m.Config.EventTerminalBell,
+		m.Config.EventCommandHook,
+		m.Player.Volume(),
+	)
+	timer.DispatchEvent(ev, m.Config.EventNotifyDesktop, m.Config.EventTerminalBell, m.Config.EventCommandHook)
+	m.ShowTimerModal = false
+	m.StatusMessage = fmt.Sprintf("⏳ Sleep timer set for %d minutes", mins)
 }
 
 func (m Model) handleAddModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {

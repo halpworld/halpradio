@@ -42,6 +42,7 @@ halpradio/
     ├── player/player.go   # Player interface, Manager struct, multi-backend exec, native Oto audio, ICY stream listener
     ├── radio/            # Store (bundled/local/favorites), Station struct, RadioBrowser HTTP client
     ├── theme/theme.go    # Theme struct & color palettes (tokyonight, catppuccin, synthwave, nord, gruvbox, dracula)
+    ├── timer/            # Pomodoro focus interval engine, sleep timer with volume fade, OS event dispatcher
     ├── ui/               # Model, Update loop, View orchestrator, keymaps
     │   └── components/   # Pure UI sub-renderers (header, stationlist, playerbar, statusbar, visualizer, modals, whichkey)
     └── util/             # OS config directory (~/.config/halpradio/) and system clipboard helpers

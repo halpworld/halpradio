@@ -8,6 +8,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/player"
 	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/theme"
+	"github.com/halpworld/halpradio/pkg/timer"
 	"github.com/halpworld/halpradio/pkg/ui/components"
 	"github.com/halpworld/halpradio/pkg/util"
 )
@@ -38,6 +39,7 @@ type Model struct {
 	KeyMap     KeyMap
 	Theme      theme.Theme
 	Visualizer *components.Visualizer
+	Timer      *timer.Timer
 
 	ActiveTab     int // 0: Catalog, 1: Activities, 2: Genres, 3: Favorites, 4: RadioBrowser, 5: Custom, 6: History
 	ActiveFocus   FocusArea
@@ -63,6 +65,17 @@ type Model struct {
 	ShowThemePicker bool
 	ShowPRExport    bool
 	ShowAddModal    bool
+	ShowTimerModal  bool
+
+	TimerModalScreen           int // 0: Main Menu/Dashboard, 1: Custom Sleep, 2: Pomodoro Config
+	TimerMenuCursor            int
+	TimerCustomSleepInput      string
+	TimerPomodoroInputs        []string
+	TimerPomodoroFocusIdx      int
+	TimerPomodoroNotifyDesktop bool
+	TimerPomodoroNotifyBell    bool
+	TimerFadeOriginalVol       int
+	LastTickTime               time.Time
 
 	AddInputs        []string
 	AddFocusIdx      int
@@ -79,22 +92,51 @@ func NewModel(
 	th := theme.GetTheme(cfg.Theme)
 	viz := components.NewVisualizer(cfg.VisualizerMode)
 
+	pomoCfg := timer.PomodoroConfig{
+		FocusDuration:         time.Duration(cfg.PomodoroFocusMin) * time.Minute,
+		ShortBreakDuration:    time.Duration(cfg.PomodoroShortBreak) * time.Minute,
+		LongBreakDuration:     time.Duration(cfg.PomodoroLongBreak) * time.Minute,
+		CyclesBeforeLongBreak: cfg.PomodoroCycles,
+		FocusStationID:        cfg.PomodoroFocusStation,
+		BreakStationID:        cfg.PomodoroBreakStation,
+		AutoStartBreaks:       true,
+		AutoStartFocus:        true,
+		NotifyDesktop:         cfg.EventNotifyDesktop,
+		NotifyTerminalBell:    cfg.EventTerminalBell,
+		CommandHook:           cfg.EventCommandHook,
+	}
+	sleepCfg := timer.SleepConfig{
+		Duration:           30 * time.Minute,
+		FadeDuration:       time.Duration(cfg.SleepFadeSeconds) * time.Second,
+		NotifyDesktop:      cfg.EventNotifyDesktop,
+		NotifyTerminalBell: cfg.EventTerminalBell,
+		CommandHook:        cfg.EventCommandHook,
+	}
+	tm := timer.NewTimer()
+	tm.PomodoroCfg = pomoCfg
+	tm.SleepCfg = sleepCfg
+
 	m := Model{
-		Store:            store,
-		Player:           pm,
-		Config:           cfg,
-		RBClient:         radio.NewRadioBrowserClient(),
-		KeyMap:           DefaultKeyMap(),
-		Theme:            th,
-		Visualizer:       viz,
-		ActiveTab:        0,
-		ActiveFocus:      FocusMainList,
-		Activities:       radio.DefaultActivities,
-		SelectedActivity: "",
-		ActivityIndex:    0,
-		Genres:           store.GetCategories(),
-		AddInputs:        make([]string, 5),
-		HistoryIndex:     0,
+		Store:                      store,
+		Player:                     pm,
+		Config:                     cfg,
+		RBClient:                   radio.NewRadioBrowserClient(),
+		KeyMap:                     DefaultKeyMap(),
+		Theme:                      th,
+		Visualizer:                 viz,
+		Timer:                      tm,
+		ActiveTab:                  0,
+		ActiveFocus:                FocusMainList,
+		Activities:                 radio.DefaultActivities,
+		SelectedActivity:           "",
+		ActivityIndex:              0,
+		Genres:                     store.GetCategories(),
+		AddInputs:                  make([]string, 5),
+		HistoryIndex:               0,
+		TimerPomodoroInputs:        make([]string, 7),
+		TimerPomodoroNotifyDesktop: cfg.EventNotifyDesktop,
+		TimerPomodoroNotifyBell:    cfg.EventTerminalBell,
+		LastTickTime:               time.Now(),
 	}
 
 	m.RefreshStations()
@@ -164,6 +206,11 @@ func (m *Model) RefreshStations() {
 }
 
 func (m Model) WindowTitle() string {
+	timerPrefix := ""
+	if m.Timer != nil && m.Timer.IsActive() {
+		timerPrefix = m.Timer.WindowTitleBadge()
+	}
+
 	tabNames := []string{"Catalog", "Activities", "Genres", "Favorites", "RadioBrowser", "Custom", "History"}
 	tabName := "Catalog"
 	if m.ActiveTab >= 0 && m.ActiveTab < len(tabNames) {
@@ -174,18 +221,18 @@ func (m Model) WindowTitle() string {
 	if st != nil && m.Player.Status() == player.StatusPlaying {
 		track := m.Player.CurrentTrack()
 		if track != "" {
-			return fmt.Sprintf("▶ %s - %s | halpradio", track, st.Name)
+			return fmt.Sprintf("%s▶ %s - %s | halpradio", timerPrefix, track, st.Name)
 		}
-		return fmt.Sprintf("▶ %s | halpradio", st.Name)
+		return fmt.Sprintf("%s▶ %s | halpradio", timerPrefix, st.Name)
 	}
 	if st != nil && m.Player.Status() == player.StatusConnecting {
-		return fmt.Sprintf("⟳ Connecting: %s | halpradio", st.Name)
+		return fmt.Sprintf("%s⟳ Connecting: %s | halpradio", timerPrefix, st.Name)
 	}
 	if st != nil && m.Player.Status() == player.StatusPaused {
-		return fmt.Sprintf("⏸ %s | halpradio", st.Name)
+		return fmt.Sprintf("%s⏸ %s | halpradio", timerPrefix, st.Name)
 	}
 
-	return fmt.Sprintf("halpradio - %d: %s", m.ActiveTab+1, tabName)
+	return fmt.Sprintf("%shalpradio - %d: %s", timerPrefix, m.ActiveTab+1, tabName)
 }
 
 func (m Model) Init() tea.Cmd {

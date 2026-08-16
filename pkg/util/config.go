@@ -3,25 +3,47 @@ package util
 import (
 	"os"
 	"path/filepath"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	Volume         int    `yaml:"volume"`
-	PlayerBackend  string `yaml:"player_backend"`
-	Theme          string `yaml:"theme"`
-	VisualizerMode string `yaml:"visualizer_mode"`
-	LastStationID  string `yaml:"last_station_id"`
-	SearchProvider string `yaml:"search_provider,omitempty"`
+	Volume               int    `yaml:"volume"`
+	PlayerBackend        string `yaml:"player_backend"`
+	Theme                string `yaml:"theme"`
+	VisualizerMode       string `yaml:"visualizer_mode"`
+	LastStationID        string `yaml:"last_station_id"`
+	SearchProvider       string `yaml:"search_provider,omitempty"`
+	PomodoroFocusMin     int    `yaml:"pomodoro_focus_min,omitempty"`
+	PomodoroShortBreak   int    `yaml:"pomodoro_short_break_min,omitempty"`
+	PomodoroLongBreak    int    `yaml:"pomodoro_long_break_min,omitempty"`
+	PomodoroCycles       int    `yaml:"pomodoro_cycles,omitempty"`
+	PomodoroFocusStation string `yaml:"pomodoro_focus_station,omitempty"`
+	PomodoroBreakStation string `yaml:"pomodoro_break_station,omitempty"`
+	SleepFadeSeconds     int    `yaml:"sleep_fade_seconds,omitempty"`
+	EventNotifyDesktop   bool   `yaml:"event_notify_desktop"`
+	EventTerminalBell    bool   `yaml:"event_terminal_bell"`
+	EventCommandHook     string `yaml:"event_command_hook,omitempty"`
 }
 
 func DefaultConfig() Config {
 	return Config{
-		Volume:         80,
-		PlayerBackend:  "auto",
-		Theme:          "tokyonight",
-		VisualizerMode: "dj-cat",
-		LastStationID:  "",
-		SearchProvider: "spotify",
+		Volume:               80,
+		PlayerBackend:        "auto",
+		Theme:                "tokyonight",
+		VisualizerMode:       "dj-cat",
+		LastStationID:        "",
+		SearchProvider:       "spotify",
+		PomodoroFocusMin:     25,
+		PomodoroShortBreak:   5,
+		PomodoroLongBreak:    15,
+		PomodoroCycles:       4,
+		PomodoroFocusStation: "",
+		PomodoroBreakStation: "",
+		SleepFadeSeconds:     10,
+		EventNotifyDesktop:   true,
+		EventTerminalBell:    true,
+		EventCommandHook:     "",
 	}
 }
 
@@ -58,4 +80,55 @@ func GetSavedTracksFile() string {
 
 func GetConfigFile() string {
 	return filepath.Join(GetConfigDir(), "config.yaml")
+}
+
+// LoadConfig reads config.yaml if present, or returns DefaultConfig.
+func LoadConfig() (Config, error) {
+	cfg := DefaultConfig()
+	filePath := GetConfigFile()
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return cfg, err
+	}
+
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return DefaultConfig(), err
+	}
+
+	// Apply default fallbacks for unset numeric fields
+	if cfg.Volume <= 0 {
+		cfg.Volume = 80
+	}
+	if cfg.PomodoroFocusMin <= 0 {
+		cfg.PomodoroFocusMin = 25
+	}
+	if cfg.PomodoroShortBreak <= 0 {
+		cfg.PomodoroShortBreak = 5
+	}
+	if cfg.PomodoroLongBreak <= 0 {
+		cfg.PomodoroLongBreak = 15
+	}
+	if cfg.PomodoroCycles <= 0 {
+		cfg.PomodoroCycles = 4
+	}
+	if cfg.SleepFadeSeconds < 0 {
+		cfg.SleepFadeSeconds = 10
+	}
+
+	return cfg, nil
+}
+
+// SaveConfig persists the current configuration to config.yaml.
+func SaveConfig(cfg Config) error {
+	if err := EnsureConfigDir(); err != nil {
+		return err
+	}
+
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(GetConfigFile(), data, 0644)
 }

@@ -30,8 +30,29 @@ func (m Model) View() string {
 		return components.RenderAddStationModal(m.AddInputs, m.AddFocusIdx, m.AddErrMsg, width, height, m.Theme)
 	}
 
+	if m.ShowTimerModal {
+		return components.RenderTimerModal(
+			m.Timer,
+			m.TimerModalScreen,
+			m.TimerMenuCursor,
+			m.TimerPomodoroInputs,
+			m.TimerPomodoroFocusIdx,
+			m.TimerCustomSleepInput,
+			m.TimerPomodoroNotifyDesktop,
+			m.TimerPomodoroNotifyBell,
+			width,
+			height,
+			m.Theme,
+		)
+	}
+
 	headerView := components.RenderHeader(width, m.ActiveTab, m.Player.Status(), m.Player.ActiveBackend(), m.Theme)
 	headerHeight := lipgloss.Height(headerView)
+
+	timerBadge := ""
+	if m.Timer != nil && m.Timer.IsActive() {
+		timerBadge = m.Timer.BadgeText()
+	}
 
 	playerBarView := components.RenderPlayerBar(
 		m.Player.CurrentStation(),
@@ -40,6 +61,7 @@ func (m Model) View() string {
 		m.Player.Volume(),
 		m.Player.IsMuted(),
 		m.Visualizer,
+		timerBadge,
 		width,
 		m.Theme,
 	)

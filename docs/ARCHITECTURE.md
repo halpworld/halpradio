@@ -55,6 +55,7 @@ halpradio/
     ├── player/           # Multi-backend audio playback engine & ICY stream reader
     ├── radio/            # Station catalog store, YAML parser, & RadioBrowser client
     ├── theme/            # Theme definitions & color palette registry
+    ├── timer/            # Pomodoro focus engine, sleep timer with volume fade, and OS event dispatcher
     ├── ui/               # Main Bubble Tea Model, Update, View, and Keymap logic
     │   └── components/   # Modular UI sub-views (Header, StationList, PlayerBar, Visualizer, Modals)
     └── util/             # OS configuration directory resolution & clipboard utilities
@@ -68,6 +69,7 @@ halpradio/
 | [`pkg/player`](../pkg/player/player.go) | `Player`, `Manager`, `TrackInfo` | Detects audio CLI backends (`mpv`, `vlc`, `ffplay`, etc.) or falls back to native Go audio. Runs ICY metadata streaming goroutine. |
 | [`pkg/radio`](../pkg/radio/store.go) | `Store`, `Station`, `RadioBrowserClient` | Manages bundled, local, and favorite stations. Interfaces with the external RadioBrowser HTTP API. |
 | [`pkg/theme`](../pkg/theme/theme.go) | `Theme`, `GetTheme()` | Defines 6 color palettes (Tokyo Night, Catppuccin, Synthwave, Nord, Gruvbox, Dracula). |
+| [`pkg/timer`](../pkg/timer/timer.go) | `Timer`, `Event`, `DispatchEvent()` | Powers Pomodoro focus interval state machine, sleep timer countdown with volume fade-out, and cross-platform desktop notifications. |
 | [`pkg/ui`](../pkg/ui/model.go) | `Model`, `KeyMap`, `Update()` | Coordinates global navigation state, search filtering, modal popups, and keybindings. |
 | [`pkg/ui/components`](../pkg/ui/components/) | `Header`, `StationList`, `PlayerBar`, `Visualizer` | Render pure, reusable Lipgloss UI components. |
 | [`pkg/util`](../pkg/util/config.go) | `GetConfigDir()`, `CopyToClipboard()` | Provides platform-agnostic file paths for `~/.config/halpradio/` and clipboard integration. |
