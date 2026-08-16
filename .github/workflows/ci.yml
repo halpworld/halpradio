@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   test:
@@ -20,6 +21,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -47,13 +50,71 @@ jobs:
       - name: Run unit tests with race detector and coverage
         run: go test -v -race -coverprofile=coverage.out ./...
 
-      - name: Publish test coverage report to step summary
+      - name: Compute coverage delta & publish motivational report
         if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "### 🧪 Test Coverage Report" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          go tool cover -func=coverage.out >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          PR_COV=$(go tool cover -func=coverage.out | grep "total:" | grep -Eo "[0-9]+\.[0-9]+" || echo "0.0")
+          BASE_COV=""
+
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ -n "${{ github.base_ref }}" ]; then
+            echo "Fetching base branch origin/${{ github.base_ref }}..."
+            git fetch origin ${{ github.base_ref }} --depth=1 || true
+            git worktree add -f /tmp/base_tree origin/${{ github.base_ref }} || true
+            if [ -d "/tmp/base_tree" ]; then
+              BASE_COV=$(cd /tmp/base_tree && go test -coverprofile=base_cov.out ./... > /dev/null 2>&1 && go tool cover -func=base_cov.out | grep "total:" | grep -Eo "[0-9]+\.[0-9]+" || echo "")
+              git worktree remove --force /tmp/base_tree || true
+            fi
+          fi
+
+          if [ -n "$PR_COV" ] && [ -n "$BASE_COV" ]; then
+            DIFF=$(awk -v pr="$PR_COV" -v base="$BASE_COV" 'BEGIN { printf "%.1f", pr - base }')
+            IS_INC=$(awk -v diff="$DIFF" 'BEGIN { print (diff > 0) ? 1 : 0 }')
+            IS_DEC=$(awk -v diff="$DIFF" 'BEGIN { print (diff < 0) ? 1 : 0 }')
+
+            if [ "$IS_INC" -eq 1 ]; then
+              DELTA_DISPLAY="📈 **+${DIFF}%** (from \`${BASE_COV}%\` to \`${PR_COV}%\`)"
+              MOTIVATION="🏆 **Awesome work!** Test coverage increased by **+${DIFF}%**! Your tests make \`halpradio\` rock solid for everyone. Keep up the great standards! 🚀"
+            elif [ "$IS_DEC" -eq 1 ]; then
+              DELTA_DISPLAY="📉 **${DIFF}%** (from \`${BASE_COV}%\` to \`${PR_COV}%\`)"
+              MOTIVATION="💡 **Keep pushing!** Test coverage decreased by **${DIFF}%**. Adding unit tests for newly added functions will keep the codebase reliable and clean! 💪"
+            else
+              DELTA_DISPLAY="⚖️ **0.0%** (steady at \`${PR_COV}%\`)"
+              MOTIVATION="✨ **Steady as she goes!** Test coverage remained constant at **${PR_COV}%**. Feel free to add edge-case tests if applicable! 🎯"
+            fi
+          else
+            DELTA_DISPLAY="\`${PR_COV}%\`"
+            MOTIVATION="🎉 Test suite passed with **${PR_COV}%** total statement coverage!"
+          fi
+
+          cat <<EOF > /tmp/coverage_report.md
+## 🧪 Test Coverage & Motivation Report
+
+| Metric | Value |
+| :--- | :--- |
+| **Base Branch (\`${{ github.base_ref || 'main' }}\`)** | \`${BASE_COV:-N/A}%\` |
+| **Pull Request (\`${{ github.head_ref || 'branch' }}\`)** | \`${PR_COV}%\` |
+| **Coverage Delta** | $DELTA_DISPLAY |
+
+> $MOTIVATION
+
+<details>
+<summary>📋 Detailed Package Coverage Breakdown</summary>
+
+\`\`\`
+$(go tool cover -func=coverage.out)
+\`\`\`
+
+</details>
+EOF
+
+          cat /tmp/coverage_report.md >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ -n "${{ github.event.pull_request.number }}" ]; then
+            gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/coverage_report.md || true
+          fi
 
   cross-compile:
     name: Cross Compile Check

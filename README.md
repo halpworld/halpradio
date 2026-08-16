@@ -10,6 +10,7 @@
 *Built with Go & Bubble Tea, featuring a LazyVim-inspired keyboard-driven interface.*
 
 [![CI](https://github.com/halpworld/halpradio/actions/workflows/ci.yml/badge.svg)](https://github.com/halpworld/halpradio/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/Coverage-72%25-brightgreen?style=flat-square&logo=go)](https://github.com/halpworld/halpradio/actions/workflows/ci.yml)
 [![GitHub Release](https://img.shields.io/github/v/release/halpworld/halpradio?style=flat-square&logo=github&color=7aa2f7)](https://github.com/halpworld/halpradio/releases)
 [![Homebrew Tap](https://img.shields.io/badge/Homebrew-halpworld%2Ftap-orange?style=flat-square&logo=homebrew)](https://github.com/halpworld/homebrew-tap)
 [![Go Version](https://img.shields.io/badge/Go-1.21%2B-00ADD8?style=flat-square&logo=go)](https://golang.org)
