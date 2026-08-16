@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/halpworld/halpradio/pkg/desktop"
 	"github.com/halpworld/halpradio/pkg/player"
 	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/theme"
@@ -28,6 +29,19 @@ type RadioBrowserResultMsg struct {
 }
 type FlashMessageMsg string
 
+// Media key and remote control messages
+type MediaPlayPauseMsg struct{}
+type MediaPlayMsg struct{}
+type MediaPauseMsg struct{}
+type MediaStopMsg struct{}
+type MediaNextMsg struct{}
+type MediaPrevMsg struct{}
+type MediaVolUpMsg struct{}
+type MediaVolDownMsg struct{}
+type MediaMuteMsg struct{}
+type MediaRandomMsg struct{}
+type MediaQuitMsg struct{}
+
 type Model struct {
 	Width  int
 	Height int
@@ -40,6 +54,7 @@ type Model struct {
 	Theme      theme.Theme
 	Visualizer *components.Visualizer
 	Timer      *timer.Timer
+	Desktop    *desktop.Manager
 
 	ActiveTab     int // 0: Catalog, 1: Activities, 2: Genres, 3: Favorites, 4: RadioBrowser, 5: Custom, 6: History
 	ActiveFocus   FocusArea
@@ -246,4 +261,98 @@ func tickCmd() tea.Cmd {
 	return tea.Every(150*time.Millisecond, func(t time.Time) tea.Msg {
 		return TickMsg(t)
 	})
+}
+
+// SetDesktop sets the desktop manager on the model.
+func (m *Model) SetDesktop(d *desktop.Manager) {
+	m.Desktop = d
+}
+
+// SyncDesktop pushes current playback state to desktop MPRIS / widgets.
+func (m *Model) SyncDesktop() {
+	if m.Desktop == nil {
+		return
+	}
+	st := m.Player.CurrentStation()
+	stationName := ""
+	genre := ""
+	streamURL := ""
+	if st != nil {
+		stationName = st.Name
+		genre = st.Genre
+		streamURL = st.URL
+	}
+	m.Desktop.UpdatePlayback(
+		string(m.Player.Status()),
+		stationName,
+		genre,
+		m.Player.CurrentTrack(),
+		streamURL,
+		m.Player.Volume(),
+		m.Player.IsMuted(),
+		m.Player.ActiveBackend(),
+	)
+}
+
+// PlayNextStation moves to and plays the next station in the active station list.
+func (m *Model) PlayNextStation() {
+	if len(m.Stations) == 0 {
+		return
+	}
+	m.SelectedIndex = (m.SelectedIndex + 1) % len(m.Stations)
+	st := m.Stations[m.SelectedIndex]
+	_ = m.Player.Play(st)
+	m.PlayingID = st.ID
+	m.StatusMessage = fmt.Sprintf("Playing %s [%s]", st.Name, m.Player.ActiveBackend())
+	m.SyncDesktop()
+	if m.Config.SongNotifications && m.Desktop != nil {
+		m.Desktop.NotifySong(st.Name, st.Name)
+	}
+}
+
+// PlayPrevStation moves to and plays the previous station in the active station list.
+func (m *Model) PlayPrevStation() {
+	if len(m.Stations) == 0 {
+		return
+	}
+	m.SelectedIndex = (m.SelectedIndex - 1 + len(m.Stations)) % len(m.Stations)
+	st := m.Stations[m.SelectedIndex]
+	_ = m.Player.Play(st)
+	m.PlayingID = st.ID
+	m.StatusMessage = fmt.Sprintf("Playing %s [%s]", st.Name, m.Player.ActiveBackend())
+	m.SyncDesktop()
+	if m.Config.SongNotifications && m.Desktop != nil {
+		m.Desktop.NotifySong(st.Name, st.Name)
+	}
+}
+
+// TogglePlayPause toggles between playing and paused or starts playing the selected station.
+func (m *Model) TogglePlayPause() {
+	if m.Player.Status() == player.StatusPlaying {
+		_ = m.Player.Pause()
+		m.PlayingID = ""
+		m.StatusMessage = "Audio playback paused"
+		m.SyncDesktop()
+		return
+	}
+
+	if m.Player.Status() == player.StatusPaused && m.Player.CurrentStation() != nil {
+		_ = m.Player.Resume()
+		st := m.Player.CurrentStation()
+		m.PlayingID = st.ID
+		m.StatusMessage = fmt.Sprintf("Resumed %s", st.Name)
+		m.SyncDesktop()
+		return
+	}
+
+	if len(m.Stations) > 0 && m.SelectedIndex < len(m.Stations) {
+		st := m.Stations[m.SelectedIndex]
+		_ = m.Player.Play(st)
+		m.PlayingID = st.ID
+		m.StatusMessage = fmt.Sprintf("Playing %s [%s]", st.Name, m.Player.ActiveBackend())
+		m.SyncDesktop()
+		if m.Config.SongNotifications && m.Desktop != nil {
+			m.Desktop.NotifySong(st.Name, st.Name)
+		}
+	}
 }

@@ -30,6 +30,11 @@ visualizer_mode: "dj-cat"   # dj-cat, dj-dog, dj-bear, dj-frog, dj-bunny, bars, 
 search_provider: "spotify"  # spotify, youtube, apple, soundcloud, bandcamp, ddg, google
 last_station_id: ""        # Remembers last played station
 
+# Desktop Integration & Media Keys
+song_notifications: true    # Show desktop banner notifications when track changes
+mpris_enabled: true         # Enable Linux MPRIS v2 D-Bus service (playerctl / media widgets)
+ipc_enabled: true           # Enable local IPC socket for CLI & script remote control
+
 # Pomodoro Focus Timer Settings
 pomodoro_focus_min: 25     # Focus session length in minutes
 pomodoro_short_break_min: 5 # Short rest duration in minutes
@@ -49,47 +54,57 @@ event_command_hook: ""      # Path to shell script / command to run on timer tra
 
 ---
 
-## 🔔 System Desktop Events & Shell Hook Integration
+## 🖥️ Desktop Integration, MPRIS & CLI Remote Control
 
-`halpradio` can trigger actions on your computer when timers transition between sprint and break intervals:
+### 1. Linux MPRIS v2 D-Bus Interface
+`halpradio` exposes a complete **MPRIS v2** interface on Linux (`org.mpris.MediaPlayer2.halpradio`) over the session bus.
 
-### 1. Native Desktop Notifications
-- **macOS**: Triggers `osascript` notification with system `Glass` chime.
-- **Linux**: Sends desktop notification via `notify-send`.
-- **Windows**: Displays native Windows 10/11 toast notification via PowerShell.
+This allows out-of-the-box hardware media key control via:
+- `playerctl play-pause`
+- `playerctl next`
+- `playerctl previous`
+- `playerctl stop`
+- `playerctl status` / `playerctl metadata`
+- Integration with GNOME, KDE Plasma, Waybar, Polybar, and desktop media widgets.
 
-### 2. Custom Shell Script Hook (`event_command_hook`)
-Set `event_command_hook: "/path/to/my-hook.sh"` in `config.yaml` or through the in-app modal (`z` ➔ `8`).
+### 2. macOS & Cross-Platform CLI Remote Control (`halpradio remote`)
+Control `halpradio` from anywhere without switching windows:
 
-Whenever a timer phase transitions, `halpradio` executes your script with the following environment variables:
-
-| Environment Variable | Example Value | Description |
-|---|---|---|
-| `HALPRADIO_EVENT` | `focus_start`, `short_break_start`, `long_break_start`, `sleep_complete` | The lifecycle event name |
-| `HALPRADIO_PHASE` | `Focus`, `Short Break`, `Long Break` | Active Pomodoro phase |
-| `HALPRADIO_CYCLE` | `2` | Current sprint cycle index |
-| `HALPRADIO_TOTAL_CYCLES` | `4` | Target cycle count before long break |
-| `HALPRADIO_TITLE` | `Deep Focus Session 🍅` | Event summary title |
-| `HALPRADIO_MESSAGE` | `Sprint #2 of 4 (25m)` | Human-readable event description |
-| `HALPRADIO_STATION_ID` | `lofi-girl` | Active or requested station ID |
-
-#### Example Custom Hook Script (`~/.config/halpradio/hook.sh`):
 ```bash
-#!/usr/bin/env bash
-# Update Slack status or trigger smart home lights based on Pomodoro phase
-case "$HALPRADIO_EVENT" in
-  focus_start)
-    # Enable macOS Do Not Disturb or update status
-    echo "Focus sprint #${HALPRADIO_CYCLE} started!"
-    ;;
-  short_break_start|long_break_start)
-    echo "Break started: Time to stretch!"
-    ;;
-  sleep_complete)
-    echo "Goodnight! Sleep timer finished."
-    ;;
-esac
+# Toggle playback
+halpradio remote play-pause
+
+# Next / Previous station in active list
+halpradio remote next
+halpradio remote prev
+
+# Audio adjustments
+halpradio remote volup
+halpradio remote voldown
+halpradio remote mute
+halpradio remote random
+halpradio remote status
 ```
+
+#### macOS Shortcuts, Raycast & Keybinding Examples:
+- **macOS Shortcuts / Automator**: Create quick actions executing `halpradio remote play-pause` bound to F7/F8/F9.
+- **Raycast / Alfred**: Create script commands for station jumping.
+- **Skhd / Karabiner-Elements**:
+  ```
+  cmd + alt + space : halpradio remote play-pause
+  cmd + alt + right : halpradio remote next
+  cmd + alt + left  : halpradio remote prev
+  ```
+- **tmux Keybinding (`~/.tmux.conf`)**:
+  ```tmux
+  bind-key P run-shell "halpradio remote play-pause"
+  bind-key N run-shell "halpradio remote next"
+  ```
+
+### 3. Song Change Desktop Notifications
+Whenever a stream broadcasts a new track title via ICY metadata, `halpradio` posts a native desktop notification banner (`📻 halpradio — [Station Name]` / `🎶 [Artist] - [Title]`) with automatic deduplication.
+
+Toggle anytime via `-notifications=false` or `song_notifications: false` in `config.yaml`.
 
 ---
 
@@ -105,6 +120,16 @@ halpradio --backend=vlc
 halpradio --theme=synthwave
 halpradio --theme=catppuccin
 
+# Toggle desktop integrations
+halpradio --notifications=false
+halpradio --mpris=false
+halpradio --ipc=false
+
+# CLI Remote Control
+halpradio remote play-pause
+halpradio remote next
+halpradio remote status
+
 # Print version and system diagnostic report
 halpradio --version
 ```
@@ -118,6 +143,8 @@ halpradio --version
 | Keybinding | Action |
 |---|---|
 | `j` / `k` or `↓` / `↑` | Move selection down / up |
+| `n` / `]` | Jump and play **Next station** in list |
+| `N` / `[` | Jump and play **Previous station** in list |
 | `h` / `l` or `←` / `→` | Switch focus between sidebar and main list / Prev & next tab |
 | `1` - `7` | Direct jump to Tab (`1: Catalog`, `2: Activities`, `3: Genres`, `4: Favorites`, `5: RadioBrowser`, `6: Custom`, `7: History`) |
 | `H` | Jump directly to Track History tab |
@@ -129,13 +156,13 @@ halpradio --version
 
 | Keybinding | Action |
 |---|---|
-| `Space` / `Enter` | Toggle Play / Pause selected station (or tune in from history) |
-| `s` | Stop audio stream playback |
+| `Space` / `Enter` (or Media Play/Pause) | Toggle Play / Pause selected station (or tune in from history) |
+| `s` / `x` (or Media Stop) | Stop audio stream playback |
 | `z` / `Z` | Open **Sleep Timer & Pomodoro Focus Mode** modal |
-| `r` | Play a random station |
-| `+` / `=` | Increase volume (+5%) |
-| `-` | Decrease volume (-5%) |
-| `m` | Toggle Mute / Unmute audio |
+| `r` / `R` | Play a random station |
+| `+` / `=` / `>` (or Media VolUp) | Increase volume (+5%) — works across ANSI, ISO, AZERTY, QWERTZ layouts |
+| `-` / `_` / `<` (or Media VolDown) | Decrease volume (-5%) |
+| `m` / `M` / `0` (or Media Mute) | Toggle Mute / Unmute audio |
 | `v` | Cycle audio visualizer mode (`dj-cat`, `dj-dog`, `dj-bear`, `dj-frog`, `dj-bunny`, `bars`, `wave`, `spectrum`, `minimal`) |
 
 ### ⭐ Discovery, Sharing & History

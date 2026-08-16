@@ -40,6 +40,8 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 			sectionStyle.Render("🧭 NAVIGATION"),
 			formatRow("j / ↓", "Move down", 12),
 			formatRow("k / ↑", "Move up", 12),
+			formatRow("n / ]", "Next station", 12),
+			formatRow("N / [", "Prev station", 12),
 			formatRow("h / ←", "Prev tab / Sidebar", 12),
 			formatRow("l / →", "Next tab / Main list", 12),
 			formatRow("H / 7", "Jump to History tab", 12),
@@ -48,11 +50,11 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 			"",
 			sectionStyle.Render("🎵 PLAYBACK & VOLUME"),
 			formatRow("Space/Enter", "Play / Pause stream", 12),
-			formatRow("s", "Stop audio stream", 12),
+			formatRow("s / x", "Stop audio stream", 12),
 			formatRow("z / Z", "Timer / Pomodoro", 12),
-			formatRow("r", "Play random station", 12),
-			formatRow("+ / -", "Volume ±5%", 12),
-			formatRow("m", "Toggle mute", 12),
+			formatRow("r / R", "Play random station", 12),
+			formatRow("+ / - / =", "Volume ±5%", 12),
+			formatRow("m / 0", "Toggle mute", 12),
 		}
 
 		col2 := []string{
@@ -84,13 +86,15 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 		// 1-column compact layout for narrow/small terminals
 		rows := []string{
 			formatRow("j / k (↑/↓)", "Move selection", 14),
+			formatRow("n / N (]/[)", "Next / Prev station", 14),
 			formatRow("h / l / H", "Switch tab / History", 14),
 			formatRow("Space/Enter", "Play / Pause stream", 14),
+			formatRow("s / x", "Stop audio stream", 14),
 			formatRow("z / Z", "Timer / Pomodoro", 14),
 			formatRow("y / o", "Yank / Open search", 14),
-			formatRow("s / r", "Stop / Star / Random", 14),
+			formatRow("r / f", "Random / Favorite", 14),
 			formatRow("+ / - / m", "Volume ±5% / Mute", 14),
-			formatRow("f / a / e", "Fav / Add / Edit", 14),
+			formatRow("a / e / d", "Add / Edit / Del", 14),
 			formatRow("p / c", "Export PR / Clear", 14),
 			formatRow("/ / w / v", "Search / Mode / Viz", 14),
 			formatRow("t / ? / q", "Theme / Help / Quit", 14),
@@ -117,11 +121,11 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 
 	var bodyElements []string
 	bodyElements = append(bodyElements, lipgloss.NewStyle().Width(boxWidth-4).Align(lipgloss.Center).Render(titleStyle.Render("⌨  HALPRADIO SHORTCUTS")))
-	if height >= 24 {
+	if height >= 28 {
 		bodyElements = append(bodyElements, "")
 	}
 	bodyElements = append(bodyElements, content)
-	if height >= 24 {
+	if height >= 28 {
 		bodyElements = append(bodyElements, "")
 	}
 	bodyElements = append(bodyElements, lipgloss.NewStyle().Width(boxWidth-4).Align(lipgloss.Center).Render(githubTip))
@@ -130,7 +134,7 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 	}
 
 	padY := 1
-	if height < 26 {
+	if height < 28 {
 		padY = 0
 	}
 
