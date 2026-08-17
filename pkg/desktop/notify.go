@@ -162,8 +162,8 @@ func dispatchOSNotification(runner CommandRunner, targetOS, title, message strin
 
 	switch targetOS {
 	case "darwin":
-		// macOS AppleScript notification
-		script := fmt.Sprintf(`display notification %q with title %q sound name "Glass"`, message, title)
+		// macOS AppleScript notification (silent banner without alert sound)
+		script := fmt.Sprintf(`display notification %q with title %q`, message, title)
 		_ = runner(ctx, "osascript", "-e", script)
 
 	case "linux":
