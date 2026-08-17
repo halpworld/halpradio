@@ -129,7 +129,7 @@ Press `z` or `Z` anywhere in **halpradio** to open the **Timer & Pomodoro Focus 
 - **Graceful Volume Fade-Out**: Smoothly scales audio volume down to 0% during the final 10 seconds before stopping playback, keeping your initial volume preference intact for next morning.
 
 ### 🔔 System Desktop Events & OS Integration
-- **Cross-Platform Desktop Notifications**: Native notifications on macOS (`osascript` with Glass chime), Linux (`notify-send`), and Windows (PowerShell toast notifications).
+- **Cross-Platform Desktop Notifications**: Silent native banner notifications on macOS (`osascript`), Linux (`notify-send`), and Windows (PowerShell toast notifications).
 - **Terminal Bell (`\a`)**: Optional audio bell cue on interval transitions.
 - **Custom Shell Event Hook**: Execute your own shell script on timer transitions with rich environment variables (`HALPRADIO_EVENT`, `HALPRADIO_PHASE`, `HALPRADIO_CYCLE`, `HALPRADIO_STATION_NAME`), perfect for triggering macOS Focus Mode, smart desk lights, Waybar/Polybar, or Slack status!
 

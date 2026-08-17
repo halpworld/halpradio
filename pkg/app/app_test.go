@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
@@ -97,6 +98,9 @@ func TestRunRemoteHelp(t *testing.T) {
 
 func TestSetupAppRemoteSubcommand(t *testing.T) {
 	var buf bytes.Buffer
+	// Ensure socket is not present
+	_ = os.Remove(desktop.GetDefaultSocketPath())
+
 	// Test when socket is not present
 	_, isDone, err := SetupApp([]string{"remote", "status"}, nil, &buf)
 	if !isDone {

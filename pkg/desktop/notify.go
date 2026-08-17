@@ -162,19 +162,19 @@ func dispatchOSNotification(runner CommandRunner, targetOS, title, message strin
 
 	switch targetOS {
 	case "darwin":
-		// macOS AppleScript notification
-		script := fmt.Sprintf(`display notification %q with title %q sound name "Glass"`, message, title)
+		// macOS AppleScript notification (silent banner without alert sound)
+		script := fmt.Sprintf(`display notification %q with title %q`, message, title)
 		_ = runner(ctx, "osascript", "-e", script)
 
 	case "linux":
-		// Linux notification via notify-send
-		_ = runner(ctx, "notify-send", "-a", "halpradio", "-u", "normal", title, message)
+		// Linux notification via notify-send (silent hint suppresses sound on notification daemons)
+		_ = runner(ctx, "notify-send", "-a", "halpradio", "-u", "normal", "-h", "boolean:suppress-sound:true", title, message)
 
 	case "windows":
-		// Windows PowerShell Toast Notification
+		// Windows PowerShell Toast Notification (silent audio attribute suppresses chime)
 		cleanTitle := strings.ReplaceAll(title, "'", "''")
 		cleanMsg := strings.ReplaceAll(message, "'", "''")
-		psScript := fmt.Sprintf(`[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null; $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02); $textNodes = $template.GetElementsByTagName('text'); $textNodes.Item(0).AppendChild($template.CreateTextNode('%s')) > $null; $textNodes.Item(1).AppendChild($template.CreateTextNode('%s')) > $null; $toast = [Windows.UI.Notifications.ToastNotification]::new($template); [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('halpradio').Show($toast);`, cleanTitle, cleanMsg)
+		psScript := fmt.Sprintf(`[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null; $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02); $textNodes = $template.GetElementsByTagName('text'); $textNodes.Item(0).AppendChild($template.CreateTextNode('%s')) > $null; $textNodes.Item(1).AppendChild($template.CreateTextNode('%s')) > $null; $audio = $template.CreateElement('audio'); $audio.SetAttribute('silent', 'true'); $template.DocumentElement.AppendChild($audio) > $null; $toast = [Windows.UI.Notifications.ToastNotification]::new($template); [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('halpradio').Show($toast);`, cleanTitle, cleanMsg)
 		_ = runner(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psScript)
 	}
 }
