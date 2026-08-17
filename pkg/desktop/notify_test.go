@@ -241,6 +241,73 @@ func TestDispatchOSNotification_Darwin_SilentWithoutSound(t *testing.T) {
 	}
 }
 
+func TestDispatchOSNotification_Linux_SilentWithHint(t *testing.T) {
+	var calledName string
+	var calledArgs []string
+
+	mockRunner := func(ctx context.Context, name string, args ...string) error {
+		calledName = name
+		calledArgs = args
+		return nil
+	}
+
+	dispatchOSNotification(mockRunner, "linux", "📻 halpradio — Nightwave", "🎶 Macintosh Plus")
+
+	if calledName != "notify-send" {
+		t.Fatalf("expected notify-send, got %s", calledName)
+	}
+
+	expectedArgs := []string{
+		"-a", "halpradio",
+		"-u", "normal",
+		"-h", "boolean:suppress-sound:true",
+		"📻 halpradio — Nightwave",
+		"🎶 Macintosh Plus",
+	}
+
+	if len(calledArgs) != len(expectedArgs) {
+		t.Fatalf("expected %d args, got %d (%v)", len(expectedArgs), len(calledArgs), calledArgs)
+	}
+
+	for i, exp := range expectedArgs {
+		if calledArgs[i] != exp {
+			t.Errorf("arg[%d] = %q, want %q", i, calledArgs[i], exp)
+		}
+	}
+}
+
+func TestDispatchOSNotification_Windows_SilentWithAudioTag(t *testing.T) {
+	var calledName string
+	var calledArgs []string
+
+	mockRunner := func(ctx context.Context, name string, args ...string) error {
+		calledName = name
+		calledArgs = args
+		return nil
+	}
+
+	dispatchOSNotification(mockRunner, "windows", "📻 halpradio — SomaFM", "🎶 Groove Salad")
+
+	if calledName != "powershell" {
+		t.Fatalf("expected powershell, got %s", calledName)
+	}
+
+	if len(calledArgs) < 4 || calledArgs[0] != "-NoProfile" || calledArgs[1] != "-NonInteractive" || calledArgs[2] != "-Command" {
+		t.Fatalf("unexpected powershell args: %v", calledArgs)
+	}
+
+	psScript := calledArgs[3]
+	if !strings.Contains(psScript, "SetAttribute('silent', 'true')") {
+		t.Errorf("windows powershell script must contain silent audio attribute, got: %s", psScript)
+	}
+	if !strings.Contains(psScript, "CreateElement('audio')") {
+		t.Errorf("windows powershell script must create audio element, got: %s", psScript)
+	}
+	if !strings.Contains(psScript, "DocumentElement.AppendChild($audio)") {
+		t.Errorf("windows powershell script must append audio node, got: %s", psScript)
+	}
+}
+
 func TestDispatchOSNotification_Platforms(t *testing.T) {
 	platforms := []struct {
 		os          string
@@ -263,7 +330,7 @@ func TestDispatchOSNotification_Platforms(t *testing.T) {
 			os:          "linux",
 			wantCommand: "notify-send",
 			checkArgs: func(t *testing.T, args []string) {
-				expected := []string{"-a", "halpradio", "-u", "normal", "Title", "Message"}
+				expected := []string{"-a", "halpradio", "-u", "normal", "-h", "boolean:suppress-sound:true", "Title", "Message"}
 				if len(args) != len(expected) {
 					t.Errorf("linux expected %v, got %v", expected, args)
 					return
@@ -281,6 +348,9 @@ func TestDispatchOSNotification_Platforms(t *testing.T) {
 			checkArgs: func(t *testing.T, args []string) {
 				if len(args) < 4 || args[0] != "-NoProfile" || args[1] != "-NonInteractive" || args[2] != "-Command" {
 					t.Errorf("windows expected powershell flags, got %v", args)
+				}
+				if !strings.Contains(args[3], "SetAttribute('silent', 'true')") {
+					t.Errorf("windows expected silent audio attribute, got %s", args[3])
 				}
 				if !strings.Contains(args[3], "CreateToastNotifier('halpradio')") {
 					t.Errorf("windows expected toast notifier creation script, got %s", args[3])
@@ -358,6 +428,78 @@ func TestDesktopNotifierDarwinEndToEnd(t *testing.T) {
 	}
 	if !strings.Contains(script, "Nightwave Plaza") {
 		t.Errorf("expected station name in script, got %s", script)
+	}
+}
+
+func TestDesktopNotifierLinuxEndToEnd(t *testing.T) {
+	var mu sync.Mutex
+	var calledCommand string
+	var calledArgs []string
+
+	mockRunner := func(ctx context.Context, name string, args ...string) error {
+		mu.Lock()
+		calledCommand = name
+		calledArgs = args
+		mu.Unlock()
+		return nil
+	}
+
+	n := NewNotifier(true)
+	n.runner = mockRunner
+	n.goos = "linux"
+
+	n.NotifySong("Lofi Girl", "Kupla - Kingdom in Blue")
+	time.Sleep(50 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if calledCommand != "notify-send" {
+		t.Errorf("expected notify-send, got %s", calledCommand)
+	}
+	foundSilentHint := false
+	for _, arg := range calledArgs {
+		if arg == "boolean:suppress-sound:true" {
+			foundSilentHint = true
+			break
+		}
+	}
+	if !foundSilentHint {
+		t.Errorf("expected boolean:suppress-sound:true in args, got %v", calledArgs)
+	}
+}
+
+func TestDesktopNotifierWindowsEndToEnd(t *testing.T) {
+	var mu sync.Mutex
+	var calledCommand string
+	var calledArgs []string
+
+	mockRunner := func(ctx context.Context, name string, args ...string) error {
+		mu.Lock()
+		calledCommand = name
+		calledArgs = args
+		mu.Unlock()
+		return nil
+	}
+
+	n := NewNotifier(true)
+	n.runner = mockRunner
+	n.goos = "windows"
+
+	n.NotifySong("Ibiza Global Radio", "Deep House Live")
+	time.Sleep(50 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if calledCommand != "powershell" {
+		t.Errorf("expected powershell, got %s", calledCommand)
+	}
+	if len(calledArgs) < 4 {
+		t.Fatalf("expected powershell args, got %v", calledArgs)
+	}
+	if !strings.Contains(calledArgs[3], "SetAttribute('silent', 'true')") {
+		t.Errorf("expected silent audio attribute in windows command, got %s", calledArgs[3])
 	}
 }
 
