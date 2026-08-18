@@ -82,14 +82,14 @@ func (s Station) MatchesActivity(activityID string) bool {
 
 	switch actID {
 	case "programming":
-		keywords := []string{"ambient", "electronic", "synthwave", "vaporwave", "lofi", "hacker", "beats", "chillout", "drone", "indie", "fluxfm"}
+		keywords := []string{"ambient", "electronic", "synthwave", "vaporwave", "lofi", "hacker", "beats", "chillout", "drone", "indie", "fluxfm", "darksynth", "cyberpunk", "industrial", "ebm", "idm", "chiptune", "demoscene", "darkwave"}
 		for _, kw := range keywords {
 			if strings.Contains(combined, kw) {
 				return true
 			}
 		}
 	case "cleaning":
-		keywords := []string{"rock", "metal", "funk", "80s", "pop", "new wave", "synth", "upbeat", "retro", "heavy"}
+		keywords := []string{"rock", "metal", "funk", "80s", "pop", "new wave", "synth", "upbeat", "retro", "heavy", "industrial", "ebm", "d&b", "drum & bass"}
 		for _, kw := range keywords {
 			if strings.Contains(combined, kw) {
 				return true
@@ -103,7 +103,7 @@ func (s Station) MatchesActivity(activityID string) bool {
 			}
 		}
 	case "thinking":
-		keywords := []string{"ambient", "drone", "classical", "jazz", "lofi", "chillout", "minimal", "downtempo"}
+		keywords := []string{"ambient", "drone", "classical", "jazz", "lofi", "chillout", "minimal", "downtempo", "idm", "glitch", "scanner", "chiptune"}
 		for _, kw := range keywords {
 			if strings.Contains(combined, kw) {
 				return true
