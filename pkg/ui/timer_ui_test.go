@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -196,6 +197,11 @@ func TestCustomSleepTimerInputFlow(t *testing.T) {
 }
 
 func TestPomodoroAutoStationSwitching(t *testing.T) {
+	cleanupNotif := timer.SetNotificationRunnerForTesting(func(title, msg string) {})
+	defer cleanupNotif()
+	cleanupBell := timer.SetBellWriterForTesting(io.Discard)
+	defer cleanupBell()
+
 	m := createTestModel()
 
 	// Configure focus station and break station

@@ -6,7 +6,46 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 )
+
+// URLOpener is a function signature for launching URLs in a browser.
+type URLOpener func(rawURL string) error
+
+var (
+	urlOpenerMu sync.RWMutex
+	urlOpener   URLOpener = defaultURLOpener
+)
+
+func defaultURLOpener(rawURL string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", rawURL)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", rawURL)
+	default:
+		// Linux, FreeBSD, OpenBSD, Solaris
+		cmd = exec.Command("xdg-open", rawURL)
+	}
+
+	return cmd.Start()
+}
+
+// SetURLOpenerForTesting allows overriding the browser opener function in unit and integration tests.
+// It returns a cleanup function to restore the previous opener when the test finishes.
+func SetURLOpenerForTesting(opener URLOpener) func() {
+	urlOpenerMu.Lock()
+	prev := urlOpener
+	urlOpener = opener
+	urlOpenerMu.Unlock()
+
+	return func() {
+		urlOpenerMu.Lock()
+		urlOpener = prev
+		urlOpenerMu.Unlock()
+	}
+}
 
 // IsValidHTTPURL checks that a URL is a valid http or https URL with non-empty host.
 func IsValidHTTPURL(rawURL string) bool {
@@ -42,23 +81,19 @@ func BuildSearchURL(provider string, query string) string {
 	}
 }
 
-// OpenURL opens the given HTTP/HTTPS URL in the system's default web browser.
+// OpenURL opens the given HTTP/HTTPS URL using the configured URL opener (defaulting to system browser).
 // It verifies the URL format to protect against command-injection vulnerabilities.
 func OpenURL(rawURL string) error {
 	if !IsValidHTTPURL(rawURL) {
 		return fmt.Errorf("invalid URL (only http and https supported): %s", rawURL)
 	}
 
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", rawURL)
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", rawURL)
-	default:
-		// Linux, FreeBSD, OpenBSD, Solaris
-		cmd = exec.Command("xdg-open", rawURL)
-	}
+	urlOpenerMu.RLock()
+	opener := urlOpener
+	urlOpenerMu.RUnlock()
 
-	return cmd.Start()
+	if opener == nil {
+		opener = defaultURLOpener
+	}
+	return opener(rawURL)
 }

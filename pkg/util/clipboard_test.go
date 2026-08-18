@@ -5,7 +5,18 @@ import (
 )
 
 func TestCopyToClipboard(t *testing.T) {
-	// Call CopyToClipboard (may fail or succeed depending on CI / display environment)
-	// We ensure it executes and does not panic.
-	_ = CopyToClipboard("test clipboard content")
+	var capturedText string
+	cleanup := SetClipboardWriterForTesting(func(text string) error {
+		capturedText = text
+		return nil
+	})
+	defer cleanup()
+
+	err := CopyToClipboard("test clipboard content")
+	if err != nil {
+		t.Fatalf("CopyToClipboard failed: %v", err)
+	}
+	if capturedText != "test clipboard content" {
+		t.Errorf("Expected 'test clipboard content', got %q", capturedText)
+	}
 }

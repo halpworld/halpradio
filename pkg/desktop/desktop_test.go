@@ -1,6 +1,7 @@
 package desktop
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,11 +17,18 @@ func TestDesktopManagerLifecycle(t *testing.T) {
 	sockPath := filepath.Join(tempDir, "desktop.sock")
 
 	var lastAction MediaAction
+	var notifyCalls []string
+	mockRunner := func(ctx context.Context, name string, args ...string) error {
+		notifyCalls = append(notifyCalls, name)
+		return nil
+	}
+
 	cfg := DesktopConfig{
 		NotificationsEnabled: true,
 		MPRISEnabled:         false, // Disabled in unit test unless Linux D-Bus is present
 		IPCEnabled:           true,
 		SocketPath:           sockPath,
+		Runner:               mockRunner,
 	}
 
 	mgr := NewManager(cfg, func(a MediaAction) {

@@ -69,3 +69,21 @@ func TestOpenURLRejectsInvalidURL(t *testing.T) {
 		t.Errorf("Expected error when opening CLI argument as URL")
 	}
 }
+
+func TestOpenURLWithMock(t *testing.T) {
+	var openedURL string
+	cleanup := SetURLOpenerForTesting(func(rawURL string) error {
+		openedURL = rawURL
+		return nil
+	})
+	defer cleanup()
+
+	target := "https://open.spotify.com/search/Solar+Fields"
+	err := OpenURL(target)
+	if err != nil {
+		t.Fatalf("OpenURL failed: %v", err)
+	}
+	if openedURL != target {
+		t.Errorf("Expected opener called with %q, got %q", target, openedURL)
+	}
+}

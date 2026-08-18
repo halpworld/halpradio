@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -49,7 +50,7 @@ stations:
 	_ = store.Load(yamlCatalog)
 
 	cfg := util.DefaultConfig()
-	pm := player.NewManager("auto", 80, nil)
+	pm := player.NewMockPlayer(80, nil)
 
 	return NewModel(store, pm, cfg)
 }
@@ -183,10 +184,14 @@ func TestStationNavigationHelpersDirect(t *testing.T) {
 	m := createTestModel()
 	m.SyncDesktop() // Should be safe with nil Desktop
 
+	mockRunner := func(ctx context.Context, name string, args ...string) error {
+		return nil
+	}
 	desktopMgr := desktop.NewManager(desktop.DesktopConfig{
 		NotificationsEnabled: true,
 		MPRISEnabled:         false,
 		IPCEnabled:           false,
+		Runner:               mockRunner,
 	}, nil)
 	defer desktopMgr.Close()
 	m.SetDesktop(desktopMgr)
@@ -208,7 +213,7 @@ func TestStationNavigationHelpersDirect(t *testing.T) {
 	m.TogglePlayPause()
 
 	// Empty list safety
-	emptyModel := NewModel(radio.NewStore(), player.NewManager("auto", 80, nil), util.DefaultConfig())
+	emptyModel := NewModel(radio.NewStore(), player.NewMockPlayer(80, nil), util.DefaultConfig())
 	emptyModel.Stations = nil
 	emptyModel.PlayNextStation()
 	emptyModel.PlayPrevStation()

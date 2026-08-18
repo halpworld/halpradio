@@ -45,6 +45,29 @@ func NewNotifier(enabled bool) *DesktopNotifier {
 	}
 }
 
+// SetRunner sets the command runner for desktop notifications (useful for tests and custom runners).
+func (n *DesktopNotifier) SetRunner(r CommandRunner) {
+	if n == nil {
+		return
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if r == nil {
+		r = defaultCommandRunner
+	}
+	n.runner = r
+}
+
+// GetRunner returns the active command runner.
+func (n *DesktopNotifier) GetRunner() CommandRunner {
+	if n == nil {
+		return nil
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.runner
+}
+
 // SetEnabled enables or disables notifications.
 func (n *DesktopNotifier) SetEnabled(enabled bool) {
 	if n == nil {

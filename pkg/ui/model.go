@@ -68,7 +68,7 @@ type Model struct {
 	Height int
 
 	Store      *radio.Store
-	Player     *player.Manager
+	Player     player.Player
 	Config     util.Config
 	RBClient   *radio.RadioBrowserClient
 	KeyMap     KeyMap
@@ -131,7 +131,7 @@ type Model struct {
 
 func NewModel(
 	store *radio.Store,
-	pm *player.Manager,
+	pm player.Player,
 	cfg util.Config,
 ) Model {
 	th := theme.GetTheme(cfg.Theme)

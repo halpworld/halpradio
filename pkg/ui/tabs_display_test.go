@@ -31,7 +31,7 @@ stations:
 	store := radio.NewStore()
 	_ = store.Load(yamlCatalog)
 	cfg := util.DefaultConfig()
-	pm := player.NewManager("auto", 80, nil)
+	pm := player.NewMockPlayer(80, nil)
 
 	testSizes := []struct {
 		w, h int
@@ -105,7 +105,7 @@ stations:
 	store := radio.NewStore()
 	_ = store.Load(yamlCatalog)
 	cfg := util.DefaultConfig()
-	pm := player.NewManager("auto", 80, nil)
+	pm := player.NewMockPlayer(80, nil)
 
 	testSizes := []struct {
 		w, h int

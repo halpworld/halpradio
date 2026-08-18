@@ -11,6 +11,7 @@ type DesktopConfig struct {
 	MPRISEnabled         bool
 	IPCEnabled           bool
 	SocketPath           string
+	Runner               CommandRunner // Optional custom command runner for notifications (e.g. mock runner for tests)
 }
 
 // Manager coordinates OS notifications, MPRIS D-Bus interface, and local IPC.
@@ -36,9 +37,14 @@ type Manager struct {
 
 // NewManager creates and starts the desktop integration services according to config.
 func NewManager(cfg DesktopConfig, onAction func(MediaAction)) *Manager {
+	notifier := NewNotifier(cfg.NotificationsEnabled)
+	if cfg.Runner != nil {
+		notifier.SetRunner(cfg.Runner)
+	}
+
 	m := &Manager{
 		cfg:      cfg,
-		notifier: NewNotifier(cfg.NotificationsEnabled),
+		notifier: notifier,
 		onAction: onAction,
 		volume:   80,
 		status:   "STOPPED",
@@ -184,6 +190,14 @@ func (m *Manager) SetNotificationsEnabled(enabled bool) {
 		return
 	}
 	m.notifier.SetEnabled(enabled)
+}
+
+// SetNotifierRunner sets the command runner for the notifier.
+func (m *Manager) SetNotifierRunner(r CommandRunner) {
+	if m == nil || m.notifier == nil {
+		return
+	}
+	m.notifier.SetRunner(r)
 }
 
 // Close gracefully shuts down all desktop subsystems.

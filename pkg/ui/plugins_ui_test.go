@@ -12,7 +12,7 @@ import (
 
 func TestPluginUIFlow(t *testing.T) {
 	store := radio.NewStore()
-	pm := player.NewManager("auto", 80, nil)
+	pm := player.NewMockPlayer(80, nil)
 	cfg := util.DefaultConfig()
 
 	m := NewModel(store, pm, cfg)

@@ -3,12 +3,66 @@ package timer
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
+
+var (
+	notifyMu           sync.RWMutex
+	bellWriter         io.Writer                      = os.Stdout
+	notificationRunner func(title, message string)    = defaultDesktopNotification
+	hookRunner         func(hookCmd string, ev Event) = defaultCommandHookRunner
+)
+
+// SetBellWriterForTesting allows redirecting the terminal bell output in unit tests.
+// It returns a cleanup function to restore the previous writer.
+func SetBellWriterForTesting(w io.Writer) func() {
+	notifyMu.Lock()
+	prev := bellWriter
+	bellWriter = w
+	notifyMu.Unlock()
+
+	return func() {
+		notifyMu.Lock()
+		bellWriter = prev
+		notifyMu.Unlock()
+	}
+}
+
+// SetNotificationRunnerForTesting allows mocking desktop notifications in tests.
+// It returns a cleanup function to restore the default notification runner.
+func SetNotificationRunnerForTesting(r func(title, message string)) func() {
+	notifyMu.Lock()
+	prev := notificationRunner
+	notificationRunner = r
+	notifyMu.Unlock()
+
+	return func() {
+		notifyMu.Lock()
+		notificationRunner = prev
+		notifyMu.Unlock()
+	}
+}
+
+// SetHookRunnerForTesting allows mocking shell command hooks in tests.
+// It returns a cleanup function to restore the default hook runner.
+func SetHookRunnerForTesting(r func(hookCmd string, ev Event)) func() {
+	notifyMu.Lock()
+	prev := hookRunner
+	hookRunner = r
+	notifyMu.Unlock()
+
+	return func() {
+		notifyMu.Lock()
+		hookRunner = prev
+		notifyMu.Unlock()
+	}
+}
 
 // DispatchEvent triggers terminal bell, desktop notifications, and command hooks.
 func DispatchEvent(ev Event, notifyDesktop, notifyBell bool, hookScript string) {
@@ -17,20 +71,38 @@ func DispatchEvent(ev Event, notifyDesktop, notifyBell bool, hookScript string) 
 	}
 
 	if notifyDesktop && ev.Title != "" {
-		go sendDesktopNotification(ev.Title, ev.Message)
+		notifyMu.RLock()
+		runner := notificationRunner
+		notifyMu.RUnlock()
+
+		if runner != nil {
+			go runner(ev.Title, ev.Message)
+		}
 	}
 
 	if strings.TrimSpace(hookScript) != "" && ev.Type != EventNone && ev.Type != EventSleepFadeStart {
-		go runCommandHook(hookScript, ev)
+		notifyMu.RLock()
+		runner := hookRunner
+		notifyMu.RUnlock()
+
+		if runner != nil {
+			go runner(hookScript, ev)
+		}
 	}
 }
 
-// RingTerminalBell prints the ASCII bell character \a to standard output.
+// RingTerminalBell prints the ASCII bell character \a to the configured output writer.
 func RingTerminalBell() {
-	_, _ = os.Stdout.WriteString("\a")
+	notifyMu.RLock()
+	w := bellWriter
+	notifyMu.RUnlock()
+
+	if w != nil {
+		_, _ = io.WriteString(w, "\a")
+	}
 }
 
-func sendDesktopNotification(title, message string) {
+func defaultDesktopNotification(title, message string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 
@@ -56,7 +128,7 @@ func sendDesktopNotification(title, message string) {
 	}
 }
 
-func runCommandHook(hookCmd string, ev Event) {
+func defaultCommandHookRunner(hookCmd string, ev Event) {
 	hookCmd = strings.TrimSpace(hookCmd)
 	if hookCmd == "" {
 		return
@@ -84,4 +156,14 @@ func runCommandHook(hookCmd string, ev Event) {
 	)
 
 	_ = cmd.Run()
+}
+
+func runCommandHook(hookCmd string, ev Event) {
+	notifyMu.RLock()
+	runner := hookRunner
+	notifyMu.RUnlock()
+
+	if runner != nil {
+		runner(hookCmd, ev)
+	}
 }

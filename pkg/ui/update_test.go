@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -9,6 +11,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/desktop"
 	"github.com/halpworld/halpradio/pkg/player"
 	"github.com/halpworld/halpradio/pkg/radio"
+	"github.com/halpworld/halpradio/pkg/util"
 )
 
 func TestUpdateMessages(t *testing.T) {
@@ -154,6 +157,11 @@ func TestUpdateKeyboardNavigationAndShortcuts(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	cleanupClip := util.SetClipboardWriterForTesting(func(text string) error {
+		return nil
+	})
+	defer cleanupClip()
 
 	m := createTestModel()
 
@@ -323,10 +331,20 @@ func TestDesktopSongNotificationIntegration(t *testing.T) {
 	m := createTestModel()
 	m.Config.SongNotifications = true
 
+	var mu sync.Mutex
+	var notifiedArgs []string
+	mockRunner := func(ctx context.Context, name string, args ...string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		notifiedArgs = args
+		return nil
+	}
+
 	desktopMgr := desktop.NewManager(desktop.DesktopConfig{
 		NotificationsEnabled: true,
 		MPRISEnabled:         false,
 		IPCEnabled:           false,
+		Runner:               mockRunner,
 	}, nil)
 	defer desktopMgr.Close()
 
@@ -334,6 +352,7 @@ func TestDesktopSongNotificationIntegration(t *testing.T) {
 	st := radio.Station{ID: "lofi-girl", Name: "Lofi Girl", URL: "http://stream.lofigirl.com"}
 	_ = m.Player.Play(st)
 	m.PlayingID = "lofi-girl"
+	m.SyncDesktop()
 
 	// Send track updated message
 	mModel, _ := m.Update(TrackUpdatedMsg{
@@ -347,6 +366,13 @@ func TestDesktopSongNotificationIntegration(t *testing.T) {
 	if info.Track != "Kupla - Kingdom in Blue" {
 		t.Errorf("Expected desktop playback track 'Kupla - Kingdom in Blue', got %q", info.Track)
 	}
+
+	time.Sleep(50 * time.Millisecond)
+	mu.Lock()
+	if len(notifiedArgs) == 0 {
+		t.Errorf("Expected desktop notification runner to be invoked")
+	}
+	mu.Unlock()
 }
 
 func TestModelLifecycleAndInit(t *testing.T) {

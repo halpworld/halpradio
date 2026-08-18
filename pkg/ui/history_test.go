@@ -2,10 +2,13 @@ package ui
 
 import (
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/halpworld/halpradio/pkg/player"
+	"github.com/halpworld/halpradio/pkg/util"
 )
 
 func TestHistoryTabSwitching(t *testing.T) {
@@ -125,12 +128,22 @@ func TestHistoryNavigationAndYank(t *testing.T) {
 		t.Fatalf("Expected HistoryIndex 1 after 'j', got %d", m.HistoryIndex)
 	}
 
+	var copiedText string
+	cleanup := util.SetClipboardWriterForTesting(func(text string) error {
+		copiedText = text
+		return nil
+	})
+	defer cleanup()
+
 	// Yank track with 'y'
 	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	m = updatedModel.(Model)
 
 	if !strings.Contains(m.StatusMessage, "Copied 'Tycho - A Walk' to clipboard") {
 		t.Errorf("Expected status message to confirm clipboard yank, got %q", m.StatusMessage)
+	}
+	if copiedText != "Tycho - A Walk" {
+		t.Errorf("Expected copied text 'Tycho - A Walk', got %q", copiedText)
 	}
 }
 
@@ -200,11 +213,31 @@ func TestActiveTrackYankAndSearchOnCatalog(t *testing.T) {
 	m.SwitchTab(0)
 	m.SelectedIndex = 2 // "Rock Heavy"
 
+	var copiedText string
+	cleanupClip := util.SetClipboardWriterForTesting(func(text string) error {
+		copiedText = text
+		return nil
+	})
+	defer cleanupClip()
+
+	var mu sync.Mutex
+	var openedURL string
+	cleanupURL := util.SetURLOpenerForTesting(func(rawURL string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		openedURL = rawURL
+		return nil
+	})
+	defer cleanupURL()
+
 	// Press 'y' on catalog item
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	m = updatedModel.(Model)
 	if !strings.Contains(m.StatusMessage, "Copied 'Rock Heavy' to clipboard") {
 		t.Errorf("Expected status message for catalog item copy, got %q", m.StatusMessage)
+	}
+	if copiedText != "Rock Heavy" {
+		t.Errorf("Expected copied track 'Rock Heavy', got %q", copiedText)
 	}
 
 	// Press 'o' on catalog item
@@ -213,4 +246,11 @@ func TestActiveTrackYankAndSearchOnCatalog(t *testing.T) {
 	if !strings.Contains(m.StatusMessage, "Opening search for 'Rock Heavy'") {
 		t.Errorf("Expected status message for search open, got %q", m.StatusMessage)
 	}
+
+	time.Sleep(50 * time.Millisecond)
+	mu.Lock()
+	if openedURL != "https://open.spotify.com/search/Rock+Heavy" {
+		t.Errorf("Expected opened URL 'https://open.spotify.com/search/Rock+Heavy', got %q", openedURL)
+	}
+	mu.Unlock()
 }
