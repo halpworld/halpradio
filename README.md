@@ -346,6 +346,7 @@ Explore hundreds of curated streams across diverse activity moods and global gen
 Explore detailed technical documentation in the [`docs/`](./docs) folder:
 
 - 🏗️ **[Architecture Overview](./docs/ARCHITECTURE.md)**: Elm Architecture (Bubble Tea MVU), package breakdown, event loop, and concurrency model.
+- 🔌 **[Plugin & Extension System Guide](./docs/PLUGINS.md)**: Sandboxed WebAssembly (Wasm) architecture, capability permissions, developer SDK, and publishing to the official registry.
 - 🎵 **[Audio Engine & Stream Player](./docs/AUDIO_PLAYER.md)**: Multi-backend auto-detection (`mpv`, `vlc`, `ffplay`, native Go), process lifecycle, and real-time ICY metadata extraction.
 - 📻 **[Station Catalog & RadioBrowser Integration](./docs/STATION_MANAGEMENT.md)**: Station storage hierarchy (`stations.yaml`, local config, favorites), RadioBrowser API client, and PR export workflow.
 - 🎨 **[Theme System & Audio Visualizers](./docs/THEME_SYSTEM.md)**: Lipgloss styling system, theme palettes, and TUI visualizer algorithms.

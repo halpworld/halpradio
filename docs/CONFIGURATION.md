@@ -16,7 +16,10 @@ All user state and settings are stored in your platform's standard configuration
 ├── config.yaml       # Persistent user preferences, timers & system hooks
 ├── stations.yaml     # Custom user-added radio stations
 ├── favorites.json    # Favorited stations list
-└── saved_tracks.txt  # Bookmarked tracks from history
+├── saved_tracks.txt  # Bookmarked tracks from history
+├── plugins.json      # Plugin enabled states & approved permissions
+├── plugins/          # Installed WebAssembly plugin packages
+└── plugins_data/     # Sandboxed persistent storage per plugin
 ```
 
 ### `config.yaml` Schema:
@@ -34,6 +37,10 @@ last_station_id: ""        # Remembers last played station
 song_notifications: true    # Show desktop banner notifications when track changes
 mpris_enabled: true         # Enable Linux MPRIS v2 D-Bus service (playerctl / media widgets)
 ipc_enabled: true           # Enable local IPC socket for CLI & script remote control
+
+# WebAssembly Plugin & Extension System
+plugins_enabled: true       # Enable/disable Wasm plugin sandbox engine
+plugin_registry_url: "https://raw.githubusercontent.com/halpworld/halpradio-plugins/main/registry.json"
 
 # Pomodoro Focus Timer Settings
 pomodoro_focus_min: 25     # Focus session length in minutes
@@ -130,6 +137,12 @@ halpradio remote play-pause
 halpradio remote next
 halpradio remote status
 
+# Plugin Management CLI
+halpradio plugin list
+halpradio plugin install webhook-broadcaster
+halpradio plugin update --all
+halpradio plugin remove webhook-broadcaster
+
 # Print version and system diagnostic report
 halpradio --version
 ```
@@ -191,6 +204,7 @@ halpradio --version
 
 | Keybinding | Action |
 |---|---|
+| `P` | Open **Plugins & Extensions Manager** (Wasm Sandbox) |
 | `t` | Open **Theme Picker** modal |
 | `?` / `F1` | Toggle **WhichKey Overlay** |
 | `Esc` | Close active modal dialog or clear search filter |

@@ -53,6 +53,7 @@ halpradio/
 └── pkg/
     ├── app/              # CLI flag parsing, configuration loading & app bootstrap
     ├── player/           # Multi-backend audio playback engine & ICY stream reader
+    ├── plugin/           # Wazero Wasm sandboxing engine, capability permissions, host API, registry client
     ├── radio/            # Station catalog store, YAML parser, & RadioBrowser client
     ├── theme/            # Theme definitions & color palette registry
     ├── timer/            # Pomodoro focus engine, sleep timer with volume fade, and OS event dispatcher
@@ -65,13 +66,14 @@ halpradio/
 
 | Package | Key Types / Files | Responsibilities |
 |---|---|---|
-| [`pkg/app`](../pkg/app/app.go) | `Run()` | Parses CLI flags (`--backend`, `--theme`, `--version`), sets up store, instantiates `player.Manager`, initializes `tea.Program`. |
+| [`pkg/app`](../pkg/app/app.go) | `Run()`, `RunPluginCLI()` | Parses CLI flags (`--backend`, `--theme`, `--version`), handles CLI subcommands (`remote`, `plugin`), sets up store, instantiates `player.Manager`, initializes `tea.Program`. |
 | [`pkg/player`](../pkg/player/player.go) | `Player`, `Manager`, `TrackInfo` | Detects audio CLI backends (`mpv`, `vlc`, `ffplay`, etc.) or falls back to native Go audio. Runs ICY metadata streaming goroutine. |
+| [`pkg/plugin`](../pkg/plugin/manager.go) | `Manager`, `Sandbox`, `Manifest`, `RegistryClient` | Executes sandboxed WebAssembly plugins via Wazero with capability checks (`network`, `storage`, `events`). Fetches and verifies official registry packages. |
 | [`pkg/radio`](../pkg/radio/store.go) | `Store`, `Station`, `RadioBrowserClient` | Manages bundled, local, and favorite stations. Interfaces with the external RadioBrowser HTTP API. |
 | [`pkg/theme`](../pkg/theme/theme.go) | `Theme`, `GetTheme()` | Defines 6 color palettes (Tokyo Night, Catppuccin, Synthwave, Nord, Gruvbox, Dracula). |
 | [`pkg/timer`](../pkg/timer/timer.go) | `Timer`, `Event`, `DispatchEvent()` | Powers Pomodoro focus interval state machine, sleep timer countdown with volume fade-out, and cross-platform desktop notifications. |
 | [`pkg/ui`](../pkg/ui/model.go) | `Model`, `KeyMap`, `Update()` | Coordinates global navigation state, search filtering, modal popups, and keybindings. |
-| [`pkg/ui/components`](../pkg/ui/components/) | `Header`, `StationList`, `PlayerBar`, `Visualizer` | Render pure, reusable Lipgloss UI components. |
+| [`pkg/ui/components`](../pkg/ui/components/) | `Header`, `StationList`, `PlayerBar`, `Visualizer`, `Modals` | Render pure, reusable Lipgloss UI components. |
 | [`pkg/util`](../pkg/util/config.go) | `GetConfigDir()`, `CopyToClipboard()` | Provides platform-agnostic file paths for `~/.config/halpradio/` and clipboard integration. |
 
 ---
@@ -84,8 +86,11 @@ halpradio/
 2. **ICY Metadata Extraction**:  
    When a station starts playing, `player.Manager` launches an `http.Client` request with header `Icy-MetaData: 1`. As metadata frames arrive, the thread extracts the `StreamTitle` and dispatches `TrackUpdatedMsg` to the Bubble Tea program thread (`program.Send()`).
 
-3. **Local Persistence**:  
-   Favorites and custom user stations are saved to disk under `~/.config/halpradio/` in JSON/YAML format using non-blocking file operations.
+3. **Asynchronous Plugin Event Bus**:  
+   When tracks or playback states change, `plugin.Manager` dispatches lifecycle payloads to running WebAssembly sandboxes in parallel background goroutines with timeout limits. Slow or misbehaving plugins can never stall the UI or audio loop.
+
+4. **Local Persistence**:  
+   Favorites, custom user stations, and plugin states are saved to disk under `~/.config/halpradio/` in JSON/YAML format using non-blocking file operations.
 
 4. **Terminal Viewport & Tab Compatibility**:  
    To prevent vertical scrolling and title clipping across diverse terminal emulators (Ghostty, WezTerm, Kitty, iTerm2, Alacritty, Tmux, Apple Terminal, Windows Terminal):
