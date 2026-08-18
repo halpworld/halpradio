@@ -49,7 +49,9 @@ func TestUpdateMessages(t *testing.T) {
 		t.Errorf("Expected 1 RB station loaded, got %d", len(m.RBStations))
 	}
 
-	// 5. TrackUpdatedMsg
+	// 5. TrackUpdatedMsg (when playing)
+	_ = m.Player.Play(m.Stations[0])
+	m.PlayingID = "ambient-1"
 	mModel, _ = m.Update(TrackUpdatedMsg{
 		StationID:   "ambient-1",
 		StationName: "Ambient One",
@@ -322,6 +324,9 @@ func TestDesktopSongNotificationIntegration(t *testing.T) {
 	defer desktopMgr.Close()
 
 	m.SetDesktop(desktopMgr)
+	st := radio.Station{ID: "lofi-girl", Name: "Lofi Girl", URL: "http://stream.lofigirl.com"}
+	_ = m.Player.Play(st)
+	m.PlayingID = "lofi-girl"
 
 	// Send track updated message
 	mModel, _ := m.Update(TrackUpdatedMsg{

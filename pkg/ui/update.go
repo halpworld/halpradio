@@ -51,6 +51,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tickCmd()
 
 	case TrackUpdatedMsg:
+		if m.Player.Status() != player.StatusPlaying && m.Player.Status() != player.StatusConnecting {
+			return m, nil
+		}
+		if m.PlayingID == "" || (msg.StationID != "" && m.PlayingID != msg.StationID) {
+			return m, nil
+		}
 		if msg.TrackTitle != "" {
 			m.Store.AddHistory(msg.StationID, msg.StationName, msg.TrackTitle)
 			if m.Config.SongNotifications && m.Desktop != nil {

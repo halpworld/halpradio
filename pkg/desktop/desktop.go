@@ -145,9 +145,15 @@ func (m *Manager) UpdatePlayback(status, stationName, genre, trackTitle, streamU
 	}
 }
 
-// NotifySong dispatches a song notification if enabled.
+// NotifySong dispatches a song notification if enabled and playback is not stopped.
 func (m *Manager) NotifySong(stationName, trackTitle string) {
 	if m == nil || m.notifier == nil {
+		return
+	}
+	m.mu.Lock()
+	status := m.status
+	m.mu.Unlock()
+	if status == "STOPPED" || status == "PAUSED" {
 		return
 	}
 	m.notifier.NotifySong(stationName, trackTitle)

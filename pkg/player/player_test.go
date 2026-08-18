@@ -174,12 +174,13 @@ func TestPlayRejectsMaliciousURL(t *testing.T) {
 
 func TestStartICYListener(t *testing.T) {
 	metaInt := 16
-	metaBlock := make([]byte, 32)
+	metaBlock := make([]byte, 48)
 	copy(metaBlock, []byte("StreamTitle='Synth Artist - Neon Dreams';"))
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Icy-Metaint", fmt.Sprintf("%d", metaInt))
 		w.WriteHeader(http.StatusOK)
+		flusher, _ := w.(http.Flusher)
 
 		audioChunk := make([]byte, metaInt)
 		for i := 0; i < metaInt; i++ {
@@ -188,12 +189,18 @@ func TestStartICYListener(t *testing.T) {
 
 		// Write 1 chunk of audio
 		_, _ = w.Write(audioChunk)
-		// Write metadata length (2 blocks of 16 bytes = 32 bytes)
-		_, _ = w.Write([]byte{2})
+		// Write metadata length (3 blocks of 16 bytes = 48 bytes)
+		_, _ = w.Write([]byte{3})
 		// Write metadata block
 		_, _ = w.Write(metaBlock)
+		if flusher != nil {
+			flusher.Flush()
+		}
 		// Write another audio chunk
 		_, _ = w.Write(audioChunk)
+		if flusher != nil {
+			flusher.Flush()
+		}
 	}))
 	defer ts.Close()
 
@@ -210,6 +217,11 @@ func TestStartICYListener(t *testing.T) {
 		URL:  ts.URL,
 	}
 
+	pm.mu.Lock()
+	pm.status = StatusPlaying
+	pm.currentStation = &st
+	pm.mu.Unlock()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -223,7 +235,243 @@ func TestStartICYListener(t *testing.T) {
 		if pm.CurrentTrack() != "Synth Artist - Neon Dreams" {
 			t.Errorf("CurrentTrack mismatch: got %q", pm.CurrentTrack())
 		}
-	case <-time.After(1 * time.Second):
-		t.Log("Timed out waiting for ICY metadata in test environment")
+	case <-time.After(2 * time.Second):
+		t.Fatal("Timed out waiting for ICY metadata in test environment")
+	}
+}
+
+func TestStopCancelsICYListenerAndClearsTrack(t *testing.T) {
+	metaInt := 16
+	metaBlock1 := make([]byte, 48)
+	copy(metaBlock1, []byte("StreamTitle='Artist 1 - Track 1';"))
+	metaBlock2 := make([]byte, 48)
+	copy(metaBlock2, []byte("StreamTitle='Artist 2 - Track 2';"))
+
+	serverProceed := make(chan struct{})
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Icy-Metaint", fmt.Sprintf("%d", metaInt))
+		w.WriteHeader(http.StatusOK)
+		flusher, _ := w.(http.Flusher)
+
+		audioChunk := make([]byte, metaInt)
+		// Write chunk 1 + metadata 1
+		_, _ = w.Write(audioChunk)
+		_, _ = w.Write([]byte{3})
+		_, _ = w.Write(metaBlock1)
+		if flusher != nil {
+			flusher.Flush()
+		}
+
+		// Wait for signal from test to write second track
+		<-serverProceed
+
+		_, _ = w.Write(audioChunk)
+		_, _ = w.Write([]byte{3})
+		_, _ = w.Write(metaBlock2)
+		_, _ = w.Write(audioChunk)
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}))
+	defer ts.Close()
+	defer close(serverProceed)
+
+	trackCh := make(chan TrackInfo, 10)
+	pm := NewManager("native", 80, func(info TrackInfo) {
+		trackCh <- info
+	})
+
+	st := radio.Station{
+		ID:   "test-stop-station",
+		Name: "Test Stop Station",
+		URL:  ts.URL,
+	}
+
+	pm.mu.Lock()
+	pm.status = StatusPlaying
+	pm.currentStation = &st
+	ctx, cancel := context.WithCancel(context.Background())
+	pm.icyCancel = cancel
+	pm.mu.Unlock()
+
+	go pm.startICYListener(ctx, st)
+
+	// Wait for first track to arrive
+	select {
+	case track := <-trackCh:
+		if track.TrackTitle != "Artist 1 - Track 1" {
+			t.Fatalf("Expected 'Artist 1 - Track 1', got %q", track.TrackTitle)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Timeout waiting for first track")
+	}
+
+	// Stop player
+	if err := pm.Stop(); err != nil {
+		t.Fatalf("Stop error: %v", err)
+	}
+
+	if pm.Status() != StatusStopped {
+		t.Errorf("Expected StatusStopped, got %s", pm.Status())
+	}
+	if pm.CurrentStation() != nil {
+		t.Errorf("Expected CurrentStation to be nil after Stop(), got %+v", pm.CurrentStation())
+	}
+	if pm.CurrentTrack() != "" {
+		t.Errorf("Expected CurrentTrack to be empty after Stop(), got %q", pm.CurrentTrack())
+	}
+
+	// Signal server to send track 2
+	serverProceed <- struct{}{}
+
+	// Ensure no second track is received
+	select {
+	case track := <-trackCh:
+		t.Fatalf("Received unexpected track notification after Stop(): %+v", track)
+	case <-time.After(300 * time.Millisecond):
+		// Expected: no track received
+	}
+}
+
+func TestPauseCancelsICYListener(t *testing.T) {
+	metaInt := 16
+	metaBlock1 := make([]byte, 48)
+	copy(metaBlock1, []byte("StreamTitle='Artist 1 - Track 1';"))
+	metaBlock2 := make([]byte, 48)
+	copy(metaBlock2, []byte("StreamTitle='Artist 2 - Track 2';"))
+
+	serverProceed := make(chan struct{})
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Icy-Metaint", fmt.Sprintf("%d", metaInt))
+		w.WriteHeader(http.StatusOK)
+		flusher, _ := w.(http.Flusher)
+
+		audioChunk := make([]byte, metaInt)
+		// Write chunk 1 + metadata 1
+		_, _ = w.Write(audioChunk)
+		_, _ = w.Write([]byte{3})
+		_, _ = w.Write(metaBlock1)
+		if flusher != nil {
+			flusher.Flush()
+		}
+
+		// Wait for signal from test to write second track
+		<-serverProceed
+
+		_, _ = w.Write(audioChunk)
+		_, _ = w.Write([]byte{3})
+		_, _ = w.Write(metaBlock2)
+		_, _ = w.Write(audioChunk)
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}))
+	defer ts.Close()
+	defer close(serverProceed)
+
+	trackCh := make(chan TrackInfo, 10)
+	pm := NewManager("native", 80, func(info TrackInfo) {
+		trackCh <- info
+	})
+
+	st := radio.Station{
+		ID:   "test-pause-station",
+		Name: "Test Pause Station",
+		URL:  ts.URL,
+	}
+
+	pm.mu.Lock()
+	pm.status = StatusPlaying
+	pm.currentStation = &st
+	ctx, cancel := context.WithCancel(context.Background())
+	pm.icyCancel = cancel
+	pm.mu.Unlock()
+
+	go pm.startICYListener(ctx, st)
+
+	// Wait for first track to arrive
+	select {
+	case track := <-trackCh:
+		if track.TrackTitle != "Artist 1 - Track 1" {
+			t.Fatalf("Expected 'Artist 1 - Track 1', got %q", track.TrackTitle)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Timeout waiting for first track")
+	}
+
+	// Pause player
+	if err := pm.Pause(); err != nil {
+		t.Fatalf("Pause error: %v", err)
+	}
+
+	if pm.Status() != StatusPaused {
+		t.Errorf("Expected StatusPaused, got %s", pm.Status())
+	}
+	// Station should still be remembered for Resume()
+	if pm.CurrentStation() == nil || pm.CurrentStation().ID != "test-pause-station" {
+		t.Errorf("Expected CurrentStation to be preserved on Pause()")
+	}
+
+	// Signal server to send track 2
+	serverProceed <- struct{}{}
+
+	// Ensure no second track is received
+	select {
+	case track := <-trackCh:
+		t.Fatalf("Received unexpected track notification after Pause(): %+v", track)
+	case <-time.After(300 * time.Millisecond):
+		// Expected: no track received
+	}
+}
+
+func TestICYListenerStationMismatchIgnored(t *testing.T) {
+	metaInt := 16
+	metaBlock := make([]byte, 48)
+	copy(metaBlock, []byte("StreamTitle='Artist X - Song Y';"))
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Icy-Metaint", fmt.Sprintf("%d", metaInt))
+		w.WriteHeader(http.StatusOK)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+
+		audioChunk := make([]byte, metaInt)
+		time.Sleep(100 * time.Millisecond)
+		_, _ = w.Write(audioChunk)
+		_, _ = w.Write([]byte{3})
+		_, _ = w.Write(metaBlock)
+		_, _ = w.Write(audioChunk)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+	}))
+	defer ts.Close()
+
+	trackCh := make(chan TrackInfo, 10)
+	pm := NewManager("native", 80, func(info TrackInfo) {
+		trackCh <- info
+	})
+
+	stA := radio.Station{ID: "station-a", Name: "Station A", URL: ts.URL}
+	stB := radio.Station{ID: "station-b", Name: "Station B", URL: "http://example.com/b"}
+
+	pm.mu.Lock()
+	pm.status = StatusPlaying
+	pm.currentStation = &stB // Station changed to B
+	pm.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	go pm.startICYListener(ctx, stA)
+
+	select {
+	case track := <-trackCh:
+		t.Fatalf("Received unexpected track for mismatched station: %+v", track)
+	case <-time.After(300 * time.Millisecond):
+		// Expected: no track dispatched
 	}
 }

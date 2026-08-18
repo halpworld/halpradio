@@ -37,6 +37,9 @@ func TestHistoryTabSwitching(t *testing.T) {
 
 func TestHistoryRecordingOnTrackUpdatedMsg(t *testing.T) {
 	m := createTestModel()
+	st := m.Stations[0] // ambient-1
+	_ = m.Player.Play(st)
+	m.PlayingID = st.ID
 
 	// Dispatch TrackUpdatedMsg
 	msg := TrackUpdatedMsg(player.TrackInfo{
@@ -57,6 +60,51 @@ func TestHistoryRecordingOnTrackUpdatedMsg(t *testing.T) {
 	}
 	if hist[0].Artist != "Tycho" || hist[0].Title != "A Walk" {
 		t.Errorf("Expected parsed artist and title, got %+v", hist[0])
+	}
+}
+
+func TestHistoryAndNotificationsIgnoredWhenStoppedOrMismatched(t *testing.T) {
+	m := createTestModel()
+
+	// 1. When stopped: TrackUpdatedMsg should be ignored
+	msg := TrackUpdatedMsg(player.TrackInfo{
+		StationID:   "ambient-1",
+		StationName: "Ambient One",
+		TrackTitle:  "Tycho - A Walk",
+	})
+	updatedModel, _ := m.Update(msg)
+	m = updatedModel.(Model)
+	if len(m.Store.GetHistory()) != 0 {
+		t.Errorf("Expected 0 history items when stopped, got %d", len(m.Store.GetHistory()))
+	}
+
+	// 2. When playing station 1, but msg arrives for station 2: should be ignored
+	st := m.Stations[0] // ambient-1
+	_ = m.Player.Play(st)
+	m.PlayingID = st.ID
+
+	msgOldStation := TrackUpdatedMsg(player.TrackInfo{
+		StationID:   "ambient-2",
+		StationName: "Ambient Two",
+		TrackTitle:  "Different Artist - Old Song",
+	})
+	updatedModel, _ = m.Update(msgOldStation)
+	m = updatedModel.(Model)
+	if len(m.Store.GetHistory()) != 0 {
+		t.Errorf("Expected 0 history items for mismatched station, got %d", len(m.Store.GetHistory()))
+	}
+
+	// 3. When paused: TrackUpdatedMsg should be ignored
+	_ = m.Player.Pause()
+	msgPaused := TrackUpdatedMsg(player.TrackInfo{
+		StationID:   "ambient-1",
+		StationName: "Ambient One",
+		TrackTitle:  "Paused Artist - Ignored Song",
+	})
+	updatedModel, _ = m.Update(msgPaused)
+	m = updatedModel.(Model)
+	if len(m.Store.GetHistory()) != 0 {
+		t.Errorf("Expected 0 history items when paused, got %d", len(m.Store.GetHistory()))
 	}
 }
 

@@ -71,6 +71,7 @@ type Manager struct {
 	cmd        *exec.Cmd
 	cancelFn   context.CancelFunc
 	icyCancel  context.CancelFunc
+	icyStream  io.Closer
 	onTrackUpd func(TrackInfo)
 
 	otoCtx        any
@@ -206,6 +207,10 @@ func (m *Manager) Stop() error {
 		m.icyCancel()
 		m.icyCancel = nil
 	}
+	if m.icyStream != nil {
+		_ = m.icyStream.Close()
+		m.icyStream = nil
+	}
 	if m.cmd != nil && m.cmd.Process != nil {
 		_ = m.cmd.Process.Kill()
 		m.cmd = nil
@@ -219,6 +224,7 @@ func (m *Manager) Stop() error {
 		m.nativeStream = nil
 	}
 	m.status = StatusStopped
+	m.currentStation = nil
 	m.currentTrack = ""
 	m.mu.Unlock()
 	return nil
@@ -227,7 +233,19 @@ func (m *Manager) Stop() error {
 func (m *Manager) Pause() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.status == StatusPlaying {
+	if m.status == StatusPlaying || m.status == StatusConnecting {
+		if m.cancelFn != nil {
+			m.cancelFn()
+			m.cancelFn = nil
+		}
+		if m.icyCancel != nil {
+			m.icyCancel()
+			m.icyCancel = nil
+		}
+		if m.icyStream != nil {
+			_ = m.icyStream.Close()
+			m.icyStream = nil
+		}
 		if m.nativePlayer != nil {
 			m.nativePlayer.Pause()
 		}
@@ -243,15 +261,17 @@ func (m *Manager) Resume() error {
 	m.mu.Lock()
 	st := m.currentStation
 	np := m.nativePlayer
-	m.mu.Unlock()
-
-	if np != nil {
+	if np != nil && st != nil {
 		np.Play()
-		m.mu.Lock()
 		m.status = StatusPlaying
+		icyCtx, icyCancel := context.WithCancel(context.Background())
+		m.icyCancel = icyCancel
+		currentSt := *st
 		m.mu.Unlock()
+		go m.startICYListener(icyCtx, currentSt)
 		return nil
 	}
+	m.mu.Unlock()
 
 	if st != nil {
 		return m.Play(*st)
@@ -423,7 +443,24 @@ func (m *Manager) startICYListener(ctx context.Context, st radio.Station) {
 	if err != nil {
 		return
 	}
-	defer resp.Body.Close()
+
+	m.mu.Lock()
+	if ctx.Err() != nil || (m.status != StatusPlaying && m.status != StatusConnecting) || m.currentStation == nil || m.currentStation.ID != st.ID {
+		m.mu.Unlock()
+		_ = resp.Body.Close()
+		return
+	}
+	m.icyStream = resp.Body
+	m.mu.Unlock()
+
+	defer func() {
+		m.mu.Lock()
+		if m.icyStream == resp.Body {
+			m.icyStream = nil
+		}
+		m.mu.Unlock()
+		_ = resp.Body.Close()
+	}()
 
 	icyMetaInt := resp.Header.Get("Icy-Metaint")
 	if icyMetaInt == "" {
@@ -445,9 +482,22 @@ func (m *Manager) startICYListener(ctx context.Context, st radio.Station) {
 		default:
 		}
 
+		m.mu.Lock()
+		if m.status != StatusPlaying && m.status != StatusConnecting || m.currentStation == nil || m.currentStation.ID != st.ID {
+			m.mu.Unlock()
+			return
+		}
+		m.mu.Unlock()
+
 		_, err := ioReadFull(reader, buffer)
 		if err != nil {
 			return
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		default:
 		}
 
 		lenByte, err := reader.ReadByte()
@@ -463,6 +513,12 @@ func (m *Manager) startICYListener(ctx context.Context, st radio.Station) {
 				return
 			}
 
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
 			str := string(metaBuf)
 			if idx := strings.Index(str, "StreamTitle='"); idx != -1 {
 				str = str[idx+len("StreamTitle='"):]
@@ -470,11 +526,16 @@ func (m *Manager) startICYListener(ctx context.Context, st radio.Station) {
 					title := sanitizeTrackTitle(str[:endIdx])
 					if title != "" {
 						m.mu.Lock()
+						if ctx.Err() != nil || (m.status != StatusPlaying && m.status != StatusConnecting) || m.currentStation == nil || m.currentStation.ID != st.ID {
+							m.mu.Unlock()
+							return
+						}
 						m.currentTrack = title
+						cb := m.onTrackUpd
 						m.mu.Unlock()
 
-						if m.onTrackUpd != nil {
-							m.onTrackUpd(TrackInfo{
+						if cb != nil {
+							cb(TrackInfo{
 								StationID:   st.ID,
 								StationName: st.Name,
 								TrackTitle:  title,
