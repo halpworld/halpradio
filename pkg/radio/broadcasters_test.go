@@ -6,73 +6,73 @@ import (
 
 func TestLookupVerifiedBroadcaster(t *testing.T) {
 	tests := []struct {
-		url          string
-		name         string
-		country      string
-		wantOK       bool
+		url           string
+		name          string
+		country       string
+		wantOK        bool
 		wantBroadcast string
-		wantFreq     string
-		wantCity     string
+		wantFreq      string
+		wantCity      string
 	}{
 		{
-			url:          "http://icecast.rte.ie/radio1",
-			name:         "RTÉ Radio 1",
-			country:      "IE",
-			wantOK:       true,
+			url:           "http://icecast.rte.ie/radio1",
+			name:          "RTÉ Radio 1",
+			country:       "IE",
+			wantOK:        true,
 			wantBroadcast: "FM/DAB",
-			wantFreq:     "88.5 FM",
-			wantCity:     "Dublin",
+			wantFreq:      "88.5 FM",
+			wantCity:      "Dublin",
 		},
 		{
-			url:          "https://liveaudio.rte.ie/hls-radio/radio1/chunklist.m3u8",
-			name:         "RTE 1",
-			country:      "IE",
-			wantOK:       true,
+			url:           "https://liveaudio.rte.ie/hls-radio/radio1/chunklist.m3u8",
+			name:          "RTE 1",
+			country:       "IE",
+			wantOK:        true,
 			wantBroadcast: "FM/DAB",
-			wantFreq:     "88.5 FM",
-			wantCity:     "Dublin",
+			wantFreq:      "88.5 FM",
+			wantCity:      "Dublin",
 		},
 		{
-			url:          "http://icecast.rte.ie/2fm",
-			name:         "RTÉ 2FM",
-			country:      "IE",
-			wantOK:       true,
+			url:           "http://icecast.rte.ie/2fm",
+			name:          "RTÉ 2FM",
+			country:       "IE",
+			wantOK:        true,
 			wantBroadcast: "FM/DAB",
-			wantFreq:     "90.7 FM",
-			wantCity:     "Dublin",
+			wantFreq:      "90.7 FM",
+			wantCity:      "Dublin",
 		},
 		{
-			url:          "http://icecast.rte.ie/gold",
-			name:         "RTÉ Gold",
-			country:      "IE",
-			wantOK:       true,
+			url:           "http://icecast.rte.ie/gold",
+			name:          "RTÉ Gold",
+			country:       "IE",
+			wantOK:        true,
 			wantBroadcast: "DAB",
-			wantFreq:     "DAB+",
-			wantCity:     "Dublin",
+			wantFreq:      "DAB+",
+			wantCity:      "Dublin",
 		},
 		{
-			url:          "https://stream.audioxi.com/FM104",
-			name:         "FM104",
-			country:      "IE",
-			wantOK:       true,
+			url:           "https://stream.audioxi.com/FM104",
+			name:          "FM104",
+			country:       "IE",
+			wantOK:        true,
 			wantBroadcast: "FM",
-			wantFreq:     "104.4 FM",
-			wantCity:     "Dublin",
+			wantFreq:      "104.4 FM",
+			wantCity:      "Dublin",
 		},
 		{
-			url:          "http://bbcmedia.ic.llnwd.net/stream/bbcmedia_radio1_mf_p",
-			name:         "BBC Radio 1",
-			country:      "GB",
-			wantOK:       true,
+			url:           "http://bbcmedia.ic.llnwd.net/stream/bbcmedia_radio1_mf_p",
+			name:          "BBC Radio 1",
+			country:       "GB",
+			wantOK:        true,
 			wantBroadcast: "FM/DAB",
-			wantFreq:     "97-99 FM",
-			wantCity:     "London",
+			wantFreq:      "97-99 FM",
+			wantCity:      "London",
 		},
 		{
-			url:          "https://ice1.somafm.com/groovesalad-128-mp3",
-			name:         "SomaFM: Groove Salad",
-			country:      "US",
-			wantOK:       false,
+			url:     "https://ice1.somafm.com/groovesalad-128-mp3",
+			name:    "SomaFM: Groove Salad",
+			country: "US",
+			wantOK:  false,
 		},
 	}
 
