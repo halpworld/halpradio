@@ -42,6 +42,11 @@ ipc_enabled: true           # Enable local IPC socket for CLI & script remote co
 plugins_enabled: true       # Enable/disable Wasm plugin sandbox engine
 plugin_registry_url: "https://raw.githubusercontent.com/halpworld/halpradio-plugins/main/registry.json"
 
+# Station Catalog Auto-Update & Caching
+catalog_auto_update: true   # Lightweight background sync for newly added curated stations
+catalog_cache_ttl_hours: 24 # Minimum hours between remote checks (zero load within TTL)
+catalog_update_url: "https://raw.githubusercontent.com/halpworld/halpradio/main/stations.yaml"
+
 # Pomodoro Focus Timer Settings
 pomodoro_focus_min: 25     # Focus session length in minutes
 pomodoro_short_break_min: 5 # Short rest duration in minutes

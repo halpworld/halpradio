@@ -268,6 +268,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case CatalogUpdatedMsg:
+		if msg.Updated {
+			m.Store.ReloadBundledFromCache()
+			m.Genres = m.Store.GetCategories()
+			m.RefreshStations()
+			m.StatusMessage = fmt.Sprintf("Station catalog updated (%d stations)", msg.StationsCount)
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		if m.ShowWhichKey {
 			if key.Matches(msg, m.KeyMap.Clear) || key.Matches(msg, m.KeyMap.Help) || key.Matches(msg, m.KeyMap.Quit) {

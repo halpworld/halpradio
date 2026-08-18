@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -41,6 +42,12 @@ type PluginFlashMsg string
 type PluginNotificationMsg struct {
 	Title   string
 	Message string
+}
+
+type CatalogUpdatedMsg struct {
+	Updated       bool
+	StationsCount int
+	Err           error
 }
 
 // Media key and remote control messages
@@ -274,10 +281,29 @@ func (m Model) WindowTitle() string {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		tickCmd(),
 		tea.SetWindowTitle(m.WindowTitle()),
-	)
+	}
+	if m.Config.CatalogAutoUpdate {
+		cmds = append(cmds, checkCatalogUpdateCmd(m.Config))
+	}
+	return tea.Batch(cmds...)
+}
+
+func checkCatalogUpdateCmd(cfg util.Config) tea.Cmd {
+	return func() tea.Msg {
+		updater := radio.NewCatalogUpdater(cfg.CatalogUpdateURL, cfg.CatalogCacheTTLHours)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		updated, count, err := updater.CheckAndUpdate(ctx, false)
+		return CatalogUpdatedMsg{
+			Updated:       updated,
+			StationsCount: count,
+			Err:           err,
+		}
+	}
 }
 
 func tickCmd() tea.Cmd {

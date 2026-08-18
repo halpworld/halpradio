@@ -140,3 +140,17 @@ func TestRunRemoteWithActiveIPC(t *testing.T) {
 		t.Errorf("expected output to contain station name, got %s", buf.String())
 	}
 }
+
+func TestSetupAppUpdateCatalogSubcommand(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	var buf bytes.Buffer
+	_, isDone, err := SetupApp([]string{"update-stations"}, nil, &buf)
+	if !isDone {
+		t.Errorf("expected isDone to be true for update-stations subcommand")
+	}
+	// Even if network fails or succeeds, isDone must be true
+	_ = err
+}

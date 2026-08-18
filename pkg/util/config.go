@@ -29,6 +29,9 @@ type Config struct {
 	IPCEnabled           bool   `yaml:"ipc_enabled"`
 	PluginsEnabled       bool   `yaml:"plugins_enabled"`
 	PluginRegistryURL    string `yaml:"plugin_registry_url,omitempty"`
+	CatalogAutoUpdate    bool   `yaml:"catalog_auto_update"`
+	CatalogUpdateURL     string `yaml:"catalog_update_url,omitempty"`
+	CatalogCacheTTLHours int    `yaml:"catalog_cache_ttl_hours,omitempty"`
 }
 
 func DefaultConfig() Config {
@@ -54,6 +57,9 @@ func DefaultConfig() Config {
 		IPCEnabled:           true,
 		PluginsEnabled:       true,
 		PluginRegistryURL:    "https://raw.githubusercontent.com/halpworld/halpradio-plugins/main/registry.json",
+		CatalogAutoUpdate:    true,
+		CatalogUpdateURL:     "https://raw.githubusercontent.com/halpworld/halpradio/main/stations.yaml",
+		CatalogCacheTTLHours: 24,
 	}
 }
 
@@ -78,6 +84,14 @@ func EnsureConfigDir() error {
 
 func GetLocalStationsFile() string {
 	return filepath.Join(GetConfigDir(), "stations.yaml")
+}
+
+func GetCatalogCacheFile() string {
+	return filepath.Join(GetConfigDir(), "catalog_cache.yaml")
+}
+
+func GetCatalogMetadataFile() string {
+	return filepath.Join(GetConfigDir(), "catalog_metadata.json")
 }
 
 func GetFavoritesFile() string {

@@ -50,6 +50,12 @@ func TestConfigDefaults(t *testing.T) {
 	if !cfg.IPCEnabled {
 		t.Errorf("Expected IPCEnabled true by default")
 	}
+	if !cfg.CatalogAutoUpdate {
+		t.Errorf("Expected CatalogAutoUpdate true by default")
+	}
+	if cfg.CatalogCacheTTLHours != 24 {
+		t.Errorf("Expected CatalogCacheTTLHours 24, got %d", cfg.CatalogCacheTTLHours)
+	}
 }
 
 func TestConfigPathsAndLifecycle(t *testing.T) {
@@ -73,6 +79,16 @@ func TestConfigPathsAndLifecycle(t *testing.T) {
 	stationsFile := GetLocalStationsFile()
 	if !strings.HasSuffix(stationsFile, "stations.yaml") {
 		t.Errorf("Expected stations.yaml suffix, got %s", stationsFile)
+	}
+
+	cacheFile := GetCatalogCacheFile()
+	if !strings.HasSuffix(cacheFile, "catalog_cache.yaml") {
+		t.Errorf("Expected catalog_cache.yaml suffix, got %s", cacheFile)
+	}
+
+	metadataFile := GetCatalogMetadataFile()
+	if !strings.HasSuffix(metadataFile, "catalog_metadata.json") {
+		t.Errorf("Expected catalog_metadata.json suffix, got %s", metadataFile)
 	}
 
 	favFile := GetFavoritesFile()

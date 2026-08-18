@@ -49,6 +49,13 @@ func TestUpdateMessages(t *testing.T) {
 		t.Errorf("Expected 1 RB station loaded, got %d", len(m.RBStations))
 	}
 
+	// 4b. CatalogUpdatedMsg
+	mModel, _ = m.Update(CatalogUpdatedMsg{Updated: true, StationsCount: 42})
+	m = mModel.(Model)
+	if m.StatusMessage != "Station catalog updated (42 stations)" {
+		t.Errorf("Expected catalog update message, got: %s", m.StatusMessage)
+	}
+
 	// 5. TrackUpdatedMsg (when playing)
 	_ = m.Player.Play(m.Stations[0])
 	m.PlayingID = "ambient-1"

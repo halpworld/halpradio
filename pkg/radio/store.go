@@ -35,6 +35,9 @@ func NewStore() *Store {
 
 // Load reads bundled stations from embedded catalog, local user stations from config dir, and user favorites.
 func (s *Store) Load(embeddedYAML []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	_ = util.EnsureConfigDir()
 
 	if len(embeddedYAML) > 0 {
@@ -77,8 +80,32 @@ func (s *Store) Load(embeddedYAML []byte) error {
 		}
 	}
 
-	s.SyncFavorites()
+	s.syncFavoritesLocked()
 	return nil
+}
+
+// ReloadBundledFromCache reloads the bundled catalog from the cached file and resyncs favorites.
+func (s *Store) ReloadBundledFromCache() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	cacheFile := util.GetCatalogCacheFile()
+	cacheData, err := os.ReadFile(cacheFile)
+	if err != nil || len(cacheData) == 0 {
+		return false
+	}
+
+	var catalog StationCatalog
+	if err := yaml.Unmarshal(cacheData, &catalog); err != nil || len(catalog.Stations) == 0 {
+		return false
+	}
+
+	for i := range catalog.Stations {
+		catalog.Stations[i].Source = "bundled"
+	}
+	s.Bundled = catalog.Stations
+	s.syncFavoritesLocked()
+	return true
 }
 
 // LoadSomaFM fetches live, official channels from SomaFM API and updates the Store.
@@ -88,12 +115,14 @@ func (s *Store) LoadSomaFM() error {
 	if err != nil {
 		return err
 	}
+	s.mu.Lock()
 	s.SomaFM = channels
-	s.SyncFavorites()
+	s.syncFavoritesLocked()
+	s.mu.Unlock()
 	return nil
 }
 
-func (s *Store) SyncFavorites() {
+func (s *Store) syncFavoritesLocked() {
 	for i := range s.Bundled {
 		s.Bundled[i].IsFavorite = s.Favorites[s.Bundled[i].ID]
 	}
@@ -103,6 +132,12 @@ func (s *Store) SyncFavorites() {
 	for i := range s.SomaFM {
 		s.SomaFM[i].IsFavorite = s.Favorites[s.SomaFM[i].ID]
 	}
+}
+
+func (s *Store) SyncFavorites() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.syncFavoritesLocked()
 }
 
 func (s *Store) SaveFavorites() error {

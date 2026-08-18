@@ -18,7 +18,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/util"
 )
 
-var Version = "0.0.6"
+var Version = "0.0.7"
 
 type AppInstance struct {
 	Program   *tea.Program
@@ -245,6 +245,23 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 		_, err := RunPluginCLI(args[1:], out)
 		return nil, true, err
 	}
+	if len(args) > 0 && (args[0] == "update-stations" || args[0] == "update-catalog") {
+		cfg, _ := util.LoadConfig()
+		updater := radio.NewCatalogUpdater(cfg.CatalogUpdateURL, cfg.CatalogCacheTTLHours)
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+		updated, count, err := updater.CheckAndUpdate(ctx, true)
+		if err != nil {
+			fmt.Fprintf(out, "Catalog update failed: %v\n", err)
+			return nil, true, err
+		}
+		if updated {
+			fmt.Fprintf(out, "✓ Successfully updated station catalog (%d stations cached to %s)\n", count, util.GetCatalogCacheFile())
+		} else {
+			fmt.Fprintf(out, "✓ Station catalog is already up to date (%d stations)\n", count)
+		}
+		return nil, true, nil
+	}
 
 	fs := flag.NewFlagSet("halpradio", flag.ContinueOnError)
 	fs.SetOutput(out)
@@ -252,6 +269,7 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 	backendFlag := fs.String("backend", "auto", "Audio player backend: auto, native, mpv, vlc, ffplay, mplayer, mpg123")
 	themeFlag := fs.String("theme", "", "Color theme: tokyonight, catppuccin, synthwave, nord, gruvbox, dracula")
 	versionFlag := fs.Bool("version", false, "Show halpradio version")
+	updateCatalogFlag := fs.Bool("update-catalog", false, "Update stations catalog from remote repository")
 	notificationsFlag := fs.Bool("notifications", true, "Enable desktop notifications on song change")
 	mprisFlag := fs.Bool("mpris", true, "Enable Linux MPRIS v2 D-Bus remote interface")
 	ipcFlag := fs.Bool("ipc", true, "Enable local IPC socket for CLI remote control")
@@ -268,6 +286,23 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 	cfg, err := util.LoadConfig()
 	if err != nil {
 		cfg = util.DefaultConfig()
+	}
+
+	if *updateCatalogFlag {
+		updater := radio.NewCatalogUpdater(cfg.CatalogUpdateURL, cfg.CatalogCacheTTLHours)
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+		updated, count, err := updater.CheckAndUpdate(ctx, true)
+		if err != nil {
+			fmt.Fprintf(out, "Catalog update failed: %v\n", err)
+			return nil, true, err
+		}
+		if updated {
+			fmt.Fprintf(out, "✓ Successfully updated station catalog (%d stations cached to %s)\n", count, util.GetCatalogCacheFile())
+		} else {
+			fmt.Fprintf(out, "✓ Station catalog is already up to date (%d stations)\n", count)
+		}
+		return nil, true, nil
 	}
 	if *backendFlag != "" && *backendFlag != "auto" {
 		cfg.PlayerBackend = *backendFlag
@@ -289,6 +324,7 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 	if err := store.Load(embeddedCatalog); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning loading station store: %v\n", err)
 	}
+	_ = store.ReloadBundledFromCache()
 
 	var program *tea.Program
 

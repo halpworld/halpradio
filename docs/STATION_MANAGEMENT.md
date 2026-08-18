@@ -37,10 +37,14 @@ flowchart LR
     RadioStore --> APITab
 ```
 
-### 1. Bundled Stations (`stations.yaml`)
-- Included directly in the `halpradio` binary release via Go embed (`//go:embed stations.yaml`).
-- Serves as the default out-of-the-box catalog.
-- If a modified `stations.yaml` file exists in the working directory, `halpradio` reads that file to support rapid local testing.
+### 1. Bundled & Cached Catalog (`stations.yaml` & `catalog_cache.yaml`)
+- **Embedded Release Baseline**: Included directly in the binary release via Go embed (`//go:embed stations.yaml`).
+- **Dynamic Remote Sync (Aggressive Caching & Lightweight Check)**:
+  - On launch, `halpradio` checks for updated catalog releases in the background.
+  - **Zero Server Load**: Checks are throttled to once per 24 hours (`catalog_cache_ttl_hours: 24`). Within TTL, **zero network requests** are sent.
+  - **Lightweight 304 Conditional Checks**: When checking, conditional HTTP headers (`If-None-Match` with ETag and `If-Modified-Since`) are sent. If the remote catalog has not changed, the server returns `304 Not Modified` with 0 body bytes.
+  - **Strict Validation**: Downloaded YAML is strictly verified before caching to `~/.config/halpradio/catalog_cache.yaml`.
+  - **CLI Update**: Run `halpradio update-stations` or `halpradio -update-catalog` to manually trigger an update.
 
 ### 2. Local Custom Stations (`~/.config/halpradio/stations.yaml`)
 - Created or edited interactively using the **Add Station** dialog (`a` key binding).
