@@ -40,6 +40,24 @@ func TestManifestValidation(t *testing.T) {
 	if err := invVer.Validate(); err == nil {
 		t.Errorf("expected validation error for empty Version")
 	}
+
+	// Path traversal in WasmFile
+	invalidWasmFiles := []string{
+		"../plugin.wasm",
+		"/etc/passwd",
+		"../../../../secret.wasm",
+		"subdir/plugin.wasm",
+		"plugin.wasm.exe",
+		"plugin.exe",
+		"plugin.wasm/../test.wasm",
+	}
+	for _, wf := range invalidWasmFiles {
+		invWasm := valid
+		invWasm.WasmFile = wf
+		if err := invWasm.Validate(); err == nil {
+			t.Errorf("expected validation error for path traversal wasm_file %q", wf)
+		}
+	}
 }
 
 func TestNetworkPermissions(t *testing.T) {
@@ -63,6 +81,9 @@ func TestNetworkPermissions(t *testing.T) {
 		{"http://192.168.1.50:8123/api/states", true},
 		{"http://192.168.2.50:8123/api/states", false},
 		{"https://evil.com/leak", false},
+		{"file:///etc/passwd", false},
+		{"gopher://127.0.0.1:70", false},
+		{"http://user:pass@discord.com", false},
 	}
 
 	for _, tt := range tests {
@@ -72,10 +93,25 @@ func TestNetworkPermissions(t *testing.T) {
 		}
 	}
 
-	// Wildcard allow-all
+	// Wildcard allows public internet but blocks private/loopback/cloud metadata SSRF
 	wildcard := PermissionsConfig{Network: []string{"*"}}
-	if !wildcard.CanAccessNetwork("https://anything.com") {
-		t.Errorf("expected wildcard network permission to allow any URL")
+	if !wildcard.CanAccessNetwork("https://api.github.com/repos") {
+		t.Errorf("expected wildcard network permission to allow public URL")
+	}
+	if wildcard.CanAccessNetwork("http://127.0.0.1:8080/admin") {
+		t.Errorf("wildcard network MUST NOT allow loopback 127.0.0.1 SSRF")
+	}
+	if wildcard.CanAccessNetwork("http://localhost:8080") {
+		t.Errorf("wildcard network MUST NOT allow localhost SSRF")
+	}
+	if wildcard.CanAccessNetwork("http://169.254.169.254/latest/meta-data") {
+		t.Errorf("wildcard network MUST NOT allow cloud metadata SSRF")
+	}
+	if wildcard.CanAccessNetwork("http://10.0.0.1/router") {
+		t.Errorf("wildcard network MUST NOT allow private 10.0.0.0/8 SSRF")
+	}
+	if wildcard.CanAccessNetwork("http://192.168.1.1/admin") {
+		t.Errorf("wildcard network MUST NOT allow private 192.168.0.0/16 SSRF")
 	}
 
 	// Empty default deny

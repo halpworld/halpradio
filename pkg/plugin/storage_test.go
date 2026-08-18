@@ -55,3 +55,38 @@ func TestStorageOperations(t *testing.T) {
 		t.Errorf("Dir() = %q; want %q", s.Dir(), expectedDir)
 	}
 }
+
+func TestStorageSecurityValidation(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "halpradio-storage-sec-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Disallow directory traversal in plugin ID
+	if _, err := NewStorage(tempDir, "../escape"); err == nil {
+		t.Errorf("expected error for path traversal plugin ID")
+	}
+
+	s, err := NewStorage(tempDir, "sec-plugin")
+	if err != nil {
+		t.Fatalf("NewStorage failed: %v", err)
+	}
+
+	// Disallow control characters in keys
+	invalidKeys := []string{"", "bad\x00key", "bad\nkey", "bad\rkey", "bad\x1bkey"}
+	for _, k := range invalidKeys {
+		if err := s.Set(k, "val"); err == nil {
+			t.Errorf("expected error setting invalid key %q", k)
+		}
+		if _, ok := s.Get(k); ok {
+			t.Errorf("expected Get to fail for invalid key %q", k)
+		}
+	}
+
+	// Disallow values exceeding MaxValueLength
+	hugeVal := make([]byte, MaxValueLength+10)
+	if err := s.Set("huge", string(hugeVal)); err == nil {
+		t.Errorf("expected error for value exceeding MaxValueLength")
+	}
+}

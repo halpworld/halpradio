@@ -71,12 +71,26 @@ func (c *RegistryClient) FetchRegistry(ctx context.Context) (*RegistryIndex, err
 
 // DownloadAndInstall downloads the plugin .wasm and writes the manifest to the destination directory.
 func (c *RegistryClient) DownloadAndInstall(ctx context.Context, plugin RegistryPlugin, pluginsBaseDir string) error {
+	// 1. Validate Plugin ID against directory traversal
+	if plugin.ID == "" || !validIDRegex.MatchString(plugin.ID) {
+		return fmt.Errorf("invalid plugin ID %q", plugin.ID)
+	}
+
+	// 2. Enforce cryptographic integrity checksum requirement
+	checksum := strings.TrimSpace(strings.ToLower(plugin.Checksum))
+	if checksum == "" {
+		return fmt.Errorf("security policy violation: plugin %q has no SHA-256 checksum in registry", plugin.ID)
+	}
+	if len(checksum) != 64 {
+		return fmt.Errorf("invalid SHA-256 checksum format for plugin %q (expected 64 hex chars)", plugin.ID)
+	}
+
 	pluginDir := filepath.Join(pluginsBaseDir, plugin.ID)
 	if err := os.MkdirAll(pluginDir, 0700); err != nil {
 		return fmt.Errorf("failed to create plugin directory: %w", err)
 	}
 
-	// Resolve download URL if relative
+	// Resolve and validate download URL
 	downloadURL := plugin.DownloadURL
 	if !strings.HasPrefix(downloadURL, "http://") && !strings.HasPrefix(downloadURL, "https://") {
 		base, err := url.Parse(c.registryURL)
@@ -88,7 +102,12 @@ func (c *RegistryClient) DownloadAndInstall(ctx context.Context, plugin Registry
 		}
 	}
 
-	// Download wasm binary
+	parsedURL, err := url.Parse(downloadURL)
+	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+		return fmt.Errorf("invalid or untrusted download URL scheme %q", downloadURL)
+	}
+
+	// Download wasm binary with bounded reader (max 20 MB)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to construct wasm download request: %w", err)
@@ -105,16 +124,15 @@ func (c *RegistryClient) DownloadAndInstall(ctx context.Context, plugin Registry
 		return fmt.Errorf("wasm download returned HTTP %d", resp.StatusCode)
 	}
 
-	wasmBytes, err := io.ReadAll(resp.Body)
+	const maxWasmDownloadBytes = 20 * 1024 * 1024 // 20 MB limit
+	wasmBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxWasmDownloadBytes))
 	if err != nil {
 		return fmt.Errorf("failed to read wasm binary: %w", err)
 	}
 
 	// Cryptographic integrity verification: SHA-256
-	if plugin.Checksum != "" {
-		if err := VerifyChecksum(wasmBytes, plugin.Checksum); err != nil {
-			return fmt.Errorf("plugin %s failed security checksum verification: %w", plugin.ID, err)
-		}
+	if err := VerifyChecksum(wasmBytes, checksum); err != nil {
+		return fmt.Errorf("plugin %s failed security checksum verification: %w", plugin.ID, err)
 	}
 
 	// Write plugin.wasm
@@ -133,6 +151,10 @@ func (c *RegistryClient) DownloadAndInstall(ctx context.Context, plugin Registry
 		Homepage:    plugin.Homepage,
 		WasmFile:    "plugin.wasm",
 		Permissions: plugin.Permissions,
+	}
+
+	if err := manifest.Validate(); err != nil {
+		return fmt.Errorf("manifest validation failed: %w", err)
 	}
 
 	manifestBytes, err := yaml.Marshal(manifest)
@@ -162,6 +184,7 @@ func (c *RegistryClient) fallbackRegistry() *RegistryIndex {
 				Description: "Broadcast now-playing tracks and playback changes to Discord, Slack, or Home Assistant webhooks.",
 				Homepage:    "https://github.com/halpworld/halpradio-plugins/tree/main/plugins/webhook-broadcaster",
 				DownloadURL: "https://raw.githubusercontent.com/halpworld/halpradio-plugins/main/plugins/webhook-broadcaster/plugin.wasm",
+				Checksum:    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 				Permissions: PermissionsConfig{
 					Network: []string{"*"},
 					Storage: []string{"local"},
@@ -177,6 +200,7 @@ func (c *RegistryClient) fallbackRegistry() *RegistryIndex {
 				Description: "Track play history, station listening hours, top artists, and record listening stats.",
 				Homepage:    "https://github.com/halpworld/halpradio-plugins/tree/main/plugins/scrobble-logger",
 				DownloadURL: "https://raw.githubusercontent.com/halpworld/halpradio-plugins/main/plugins/scrobble-logger/plugin.wasm",
+				Checksum:    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 				Permissions: PermissionsConfig{
 					Storage: []string{"local"},
 					Events:  []string{"on_track_change", "on_playback_change"},

@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -18,19 +20,85 @@ import (
 
 // Sandbox manages the Wazero runtime and execution of an isolated Wasm plugin.
 type Sandbox struct {
-	mu          sync.Mutex
-	manifest    Manifest
-	state       PluginState
-	storage     *Storage
-	runtime     wazero.Runtime
-	compiledMod wazero.CompiledModule
-	modInstance api.Module
-	ctx         context.Context
-	cancel      context.CancelFunc
-	onNotify    func(title, msg string)
-	onFlash     func(msg string)
-	logHandler  func(level int, msg string)
-	httpClient  *http.Client
+	mu           sync.Mutex
+	manifest     Manifest
+	state        PluginState
+	storage      *Storage
+	runtime      wazero.Runtime
+	compiledMod  wazero.CompiledModule
+	modInstance  api.Module
+	ctx          context.Context
+	cancel       context.CancelFunc
+	onNotify     func(title, msg string)
+	onFlash      func(msg string)
+	logHandler   func(level int, msg string)
+	httpClient   *http.Client
+	notifyMu     sync.Mutex
+	notifyCount  int
+	notifyWindow int64
+}
+
+// sanitizeString removes ASCII control characters and enforces a maximum byte length.
+func sanitizeString(s string, maxLen int) string {
+	s = strings.TrimSpace(s)
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r >= 0x20 && r != 0x7f {
+			b.WriteRune(r)
+		}
+	}
+	res := b.String()
+	if len(res) > maxLen {
+		res = res[:maxLen]
+	}
+	return res
+}
+
+func newSandboxedHTTPTransport(manifest Manifest) *http.Transport {
+	dialer := &net.Dialer{
+		Timeout:   4 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+
+	return &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid network address %q: %w", addr, err)
+			}
+
+			// DNS Resolution with IP validation
+			ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve host %q: %w", host, err)
+			}
+			if len(ips) == 0 {
+				return nil, fmt.Errorf("no IP addresses resolved for %q", host)
+			}
+
+			var chosenIP net.IP
+			for _, ip := range ips {
+				if manifest.Permissions.IsIPAllowed(ip) {
+					chosenIP = ip
+					break
+				}
+			}
+
+			if chosenIP == nil {
+				return nil, fmt.Errorf("network access to resolved IP for %q denied by sandbox security policy", host)
+			}
+
+			targetAddr := net.JoinHostPort(chosenIP.String(), port)
+			return dialer.DialContext(ctx, network, targetAddr)
+		},
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          10,
+		IdleConnTimeout:       30 * time.Second,
+		TLSHandshakeTimeout:   4 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
 }
 
 // NewSandbox instantiates a Wasm sandbox for the given plugin.
@@ -46,8 +114,8 @@ func NewSandbox(
 ) (*Sandbox, error) {
 	sCtx, cancel := context.WithCancel(ctx)
 
-	// Wazero runtime configuration with pure-Go compiler engine
-	rCfg := wazero.NewRuntimeConfig()
+	// Wazero runtime configuration with 32 MB linear memory limit per sandbox
+	rCfg := wazero.NewRuntimeConfig().WithMemoryLimitPages(512)
 	r := wazero.NewRuntimeWithConfig(sCtx, rCfg)
 
 	// Instantiate WASI preview 1
@@ -64,7 +132,17 @@ func NewSandbox(
 		onFlash:    onFlash,
 		logHandler: logHandler,
 		httpClient: &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout:   5 * time.Second,
+			Transport: newSandboxedHTTPTransport(manifest),
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if len(via) >= 5 {
+					return errors.New("stopped after 5 redirects")
+				}
+				if !manifest.Permissions.CanAccessNetwork(req.URL.String()) {
+					return fmt.Errorf("redirect to %s denied by plugin network policy", req.URL.String())
+				}
+				return nil
+			},
 		},
 	}
 
@@ -102,28 +180,54 @@ func (s *Sandbox) registerHostFunctions(ctx context.Context, r wazero.Runtime) e
 			if length == 0 {
 				return
 			}
+			if length > 4096 {
+				length = 4096
+			}
 			data, ok := mod.Memory().Read(ptr, length)
 			if !ok {
 				return
 			}
-			s.log(int(level), string(data))
+			s.log(int(level), sanitizeString(string(data), 4096))
 		}).
 		Export("log")
 
 	// Host function: ui_notify(title_ptr, title_len, msg_ptr, msg_len)
 	builder.NewFunctionBuilder().
 		WithFunc(func(ctx context.Context, mod api.Module, titlePtr uint32, titleLen uint32, msgPtr uint32, msgLen uint32) {
+			if titleLen > 256 {
+				titleLen = 256
+			}
+			if msgLen > 1024 {
+				msgLen = 1024
+			}
 			var title, message string
 			if titleLen > 0 {
 				if tBytes, ok := mod.Memory().Read(titlePtr, titleLen); ok {
-					title = string(tBytes)
+					title = sanitizeString(string(tBytes), 256)
 				}
 			}
 			if msgLen > 0 {
 				if mBytes, ok := mod.Memory().Read(msgPtr, msgLen); ok {
-					message = string(mBytes)
+					message = sanitizeString(string(mBytes), 1024)
 				}
 			}
+
+			// Rate limiting (max 5 notifications per 10-second window)
+			s.notifyMu.Lock()
+			nowWindow := time.Now().Unix() / 10
+			if s.notifyWindow != nowWindow {
+				s.notifyWindow = nowWindow
+				s.notifyCount = 0
+			}
+			s.notifyCount++
+			allowNotify := s.notifyCount <= 5
+			s.notifyMu.Unlock()
+
+			if !allowNotify {
+				s.log(2, "ui_notify rate limit exceeded (max 5 per 10s)")
+				return
+			}
+
 			if s.onNotify != nil && (title != "" || message != "") {
 				s.onNotify(title, message)
 			}
@@ -136,9 +240,12 @@ func (s *Sandbox) registerHostFunctions(ctx context.Context, r wazero.Runtime) e
 			if msgLen == 0 {
 				return
 			}
+			if msgLen > 512 {
+				msgLen = 512
+			}
 			if mBytes, ok := mod.Memory().Read(msgPtr, msgLen); ok {
 				if s.onFlash != nil {
-					s.onFlash(string(mBytes))
+					s.onFlash(sanitizeString(string(mBytes), 512))
 				}
 			}
 		}).
@@ -149,6 +256,9 @@ func (s *Sandbox) registerHostFunctions(ctx context.Context, r wazero.Runtime) e
 		WithFunc(func(ctx context.Context, mod api.Module, keyPtr uint32, keyLen uint32, outPtr uint32, maxLen uint32) uint32 {
 			if !s.state.PermissionsApproved || !s.manifest.Permissions.HasStorage() || s.storage == nil {
 				s.log(2, "storage_get denied: storage permission not approved")
+				return 0
+			}
+			if keyLen == 0 || keyLen > MaxKeyLength {
 				return 0
 			}
 			keyBytes, ok := mod.Memory().Read(keyPtr, keyLen)
@@ -163,8 +273,10 @@ func (s *Sandbox) registerHostFunctions(ctx context.Context, r wazero.Runtime) e
 			if uint32(len(valBytes)) > maxLen {
 				valBytes = valBytes[:maxLen]
 			}
-			if !mod.Memory().Write(outPtr, valBytes) {
-				return 0
+			if len(valBytes) > 0 {
+				if !mod.Memory().Write(outPtr, valBytes) {
+					return 0
+				}
 			}
 			return uint32(len(valBytes))
 		}).
@@ -175,6 +287,9 @@ func (s *Sandbox) registerHostFunctions(ctx context.Context, r wazero.Runtime) e
 		WithFunc(func(ctx context.Context, mod api.Module, keyPtr uint32, keyLen uint32, valPtr uint32, valLen uint32) uint32 {
 			if !s.state.PermissionsApproved || !s.manifest.Permissions.HasStorage() || s.storage == nil {
 				s.log(2, "storage_set denied: storage permission not approved")
+				return 1
+			}
+			if keyLen == 0 || keyLen > MaxKeyLength || valLen > MaxValueLength {
 				return 1
 			}
 			keyBytes, ok := mod.Memory().Read(keyPtr, keyLen)
@@ -196,7 +311,7 @@ func (s *Sandbox) registerHostFunctions(ctx context.Context, r wazero.Runtime) e
 	// Host function: http_fetch(url_ptr, url_len, method_ptr, method_len, body_ptr, body_len, out_ptr, max_len) -> bytes written
 	builder.NewFunctionBuilder().
 		WithFunc(func(ctx context.Context, mod api.Module, urlPtr uint32, urlLen uint32, methodPtr uint32, methodLen uint32, bodyPtr uint32, bodyLen uint32, outPtr uint32, maxLen uint32) uint32 {
-			if urlLen == 0 {
+			if urlLen == 0 || urlLen > 2048 {
 				return 0
 			}
 			urlBytes, ok := mod.Memory().Read(urlPtr, urlLen)
@@ -212,15 +327,33 @@ func (s *Sandbox) registerHostFunctions(ctx context.Context, r wazero.Runtime) e
 
 			method := "GET"
 			if methodLen > 0 {
+				if methodLen > 16 {
+					return 0
+				}
 				if mBytes, ok := mod.Memory().Read(methodPtr, methodLen); ok {
 					method = strings.ToUpper(strings.TrimSpace(string(mBytes)))
 				}
+			}
+
+			// Validate allowed methods
+			switch method {
+			case "GET", "POST", "PUT", "DELETE", "HEAD", "PATCH":
+			default:
+				s.log(2, fmt.Sprintf("http_fetch denied: method %q not allowed", method))
+				return 0
+			}
+
+			if bodyLen > 1024*1024 { // Max 1 MB request body
+				s.log(2, "http_fetch denied: request body exceeds 1MB limit")
+				return 0
 			}
 
 			var reqBody io.Reader
 			if bodyLen > 0 {
 				if bBytes, ok := mod.Memory().Read(bodyPtr, bodyLen); ok {
 					reqBody = bytes.NewReader(bBytes)
+				} else {
+					return 0
 				}
 			}
 
@@ -240,6 +373,10 @@ func (s *Sandbox) registerHostFunctions(ctx context.Context, r wazero.Runtime) e
 				return 0
 			}
 			defer resp.Body.Close()
+
+			if maxLen > 5*1024*1024 {
+				maxLen = 5 * 1024 * 1024 // Max 5 MB response
+			}
 
 			respData, err := io.ReadAll(io.LimitReader(resp.Body, int64(maxLen)))
 			if err != nil {
@@ -269,8 +406,16 @@ func (s *Sandbox) Start(initCfg map[string]string) error {
 		return nil // Already running
 	}
 
-	cfg := wazero.NewModuleConfig().WithName(s.manifest.ID)
-	mod, err := s.runtime.InstantiateModule(s.ctx, s.compiledMod, cfg)
+	cfg := wazero.NewModuleConfig().
+		WithName(s.manifest.ID).
+		WithStdin(bytes.NewReader(nil)).
+		WithStdout(io.Discard).
+		WithStderr(io.Discard)
+
+	initCtx, initCancel := context.WithTimeout(s.ctx, 3*time.Second)
+	defer initCancel()
+
+	mod, err := s.runtime.InstantiateModule(initCtx, s.compiledMod, cfg)
 	if err != nil {
 		return fmt.Errorf("failed to instantiate module %s: %w", s.manifest.ID, err)
 	}
@@ -318,7 +463,7 @@ func (s *Sandbox) UpdateState(state PluginState) {
 	s.state = state
 }
 
-// InvokeHook calls an exported guest hook function with payload JSON safely.
+// InvokeHook calls an exported guest hook function with payload JSON safely within timeout.
 func (s *Sandbox) InvokeHook(hookName string, payload []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -356,8 +501,6 @@ func (s *Sandbox) invokeHookLocked(hookName string, payload []byte) error {
 			}
 		}
 	} else if length > 0 {
-		// If no allocator is exported, check if guest has linear memory with enough capacity
-		// Write to beginning or static buffer if available
 		mem := s.modInstance.Memory()
 		if mem != nil && mem.Size() >= length {
 			_ = mem.Write(0, payload)

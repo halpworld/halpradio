@@ -16,6 +16,54 @@ import (
 
 var validIDRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9-_]{1,63}$`)
 
+var privateCIDRs []*net.IPNet
+
+func init() {
+	cidrs := []string{
+		"127.0.0.0/8",     // IPv4 loopback
+		"::1/128",         // IPv6 loopback
+		"0.0.0.0/8",       // Current network / source
+		"::/128",          // Unspecified
+		"10.0.0.0/8",      // RFC1918 private
+		"172.16.0.0/12",   // RFC1918 private
+		"192.168.0.0/16",  // RFC1918 private
+		"169.254.0.0/16",  // IPv4 Link-local / Cloud metadata (AWS/GCP/Azure)
+		"fe80::/10",       // IPv6 Link-local
+		"fc00::/7",        // IPv6 Unique local
+		"100.64.0.0/10",   // CGNAT
+		"198.18.0.0/15",   // Benchmark testing
+		"192.0.0.0/24",    // IETF protocol assignments
+		"192.0.2.0/24",    // TEST-NET-1
+		"198.51.100.0/24", // TEST-NET-2
+		"203.0.113.0/24",  // TEST-NET-3
+		"224.0.0.0/4",     // IPv4 Multicast
+		"240.0.0.0/4",     // Reserved
+		"ff00::/8",        // IPv6 Multicast
+	}
+	for _, c := range cidrs {
+		_, ipNet, err := net.ParseCIDR(c)
+		if err == nil {
+			privateCIDRs = append(privateCIDRs, ipNet)
+		}
+	}
+}
+
+// IsPrivateOrLoopbackIP checks whether an IP address belongs to loopback, private, link-local, or cloud metadata ranges.
+func IsPrivateOrLoopbackIP(ip net.IP) bool {
+	if ip == nil {
+		return true
+	}
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+		return true
+	}
+	for _, block := range privateCIDRs {
+		if block.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 // PermissionsConfig defines granular host capabilities requested by a plugin.
 type PermissionsConfig struct {
 	Network []string `yaml:"network,omitempty" json:"network,omitempty"` // Whitelisted domains, CIDRs, or "*"
@@ -46,6 +94,50 @@ func (p PermissionsConfig) HasEvent(eventName string) bool {
 	return false
 }
 
+// IsIPAllowed checks whether a resolved IP address is permitted under network capabilities.
+func (p PermissionsConfig) IsIPAllowed(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+
+	isPrivate := IsPrivateOrLoopbackIP(ip)
+
+	// Check explicit CIDR and exact IP rules
+	for _, rule := range p.Network {
+		rule = strings.TrimSpace(rule)
+		if rule == "" {
+			continue
+		}
+
+		if strings.Contains(rule, "/") {
+			_, ipNet, err := net.ParseCIDR(rule)
+			if err == nil && ipNet.Contains(ip) {
+				return true
+			}
+		} else if ruleIP := net.ParseIP(rule); ruleIP != nil && ruleIP.Equal(ip) {
+			return true
+		}
+	}
+
+	// Private, loopback, link-local, and cloud metadata IPs require an explicit IP or CIDR rule.
+	if isPrivate {
+		return false
+	}
+
+	// Public internet IPs are allowed if wildcard "*" is present or if domain rules are configured.
+	for _, rule := range p.Network {
+		rule = strings.TrimSpace(rule)
+		if rule == "*" {
+			return true
+		}
+		if !strings.Contains(rule, "/") && net.ParseIP(rule) == nil && rule != "" {
+			return true
+		}
+	}
+
+	return false
+}
+
 // CanAccessNetwork checks if a target URL/host is allowed under network permissions.
 func (p PermissionsConfig) CanAccessNetwork(rawURL string) bool {
 	if len(p.Network) == 0 {
@@ -56,36 +148,95 @@ func (p PermissionsConfig) CanAccessNetwork(rawURL string) bool {
 	if err != nil {
 		return false
 	}
+
+	// Strictly allow only http and https protocols (no file://, gopher://, ftp://, unix://, etc.)
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return false
+	}
+
+	// Reject user info in URL (e.g. http://user:pass@host)
+	if u.User != nil {
+		return false
+	}
+
 	host := u.Hostname()
 	if host == "" {
-		host = rawURL
+		return false
 	}
 
 	targetIP := net.ParseIP(host)
 
-	for _, rule := range p.Network {
-		rule = strings.TrimSpace(rule)
-		if rule == "*" {
-			return true
-		}
+	// If host is an IP literal
+	if targetIP != nil {
+		isPrivate := IsPrivateOrLoopbackIP(targetIP)
 
-		// Check CIDR / IP match
-		if strings.Contains(rule, "/") {
-			_, ipNet, err := net.ParseCIDR(rule)
-			if err == nil && targetIP != nil && ipNet.Contains(targetIP) {
+		for _, rule := range p.Network {
+			rule = strings.TrimSpace(rule)
+			if rule == "" {
+				continue
+			}
+
+			// Check CIDR match
+			if strings.Contains(rule, "/") {
+				_, ipNet, err := net.ParseCIDR(rule)
+				if err == nil && ipNet.Contains(targetIP) {
+					return true
+				}
+			} else if ruleIP := net.ParseIP(rule); ruleIP != nil && ruleIP.Equal(targetIP) {
 				return true
 			}
-		} else if targetIP != nil && rule == host {
+		}
+
+		// Private/loopback IPs are ONLY allowed if explicitly matched above.
+		if isPrivate {
+			return false
+		}
+
+		// Public IP literal: allowed if wildcard "*" is present.
+		for _, rule := range p.Network {
+			if strings.TrimSpace(rule) == "*" {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	// Host is a domain name
+	hostLower := strings.ToLower(host)
+
+	// Disallow localhost or local mDNS domains under wildcard unless explicitly granted
+	isLocalHost := hostLower == "localhost" ||
+		strings.HasSuffix(hostLower, ".localhost") ||
+		strings.HasSuffix(hostLower, ".local") ||
+		strings.HasSuffix(hostLower, ".internal")
+
+	for _, rule := range p.Network {
+		rule = strings.TrimSpace(rule)
+		if rule == "" {
+			continue
+		}
+
+		if rule == "*" {
+			if !isLocalHost {
+				return true
+			}
+			continue
+		}
+
+		// Check explicit localhost rule
+		if isLocalHost && strings.EqualFold(hostLower, strings.ToLower(rule)) {
 			return true
 		}
 
 		// Check exact host or wildcard domain match (*.discord.com or discord.com)
 		if strings.HasPrefix(rule, "*.") {
-			suffix := strings.TrimPrefix(rule, "*.")
-			if host == suffix || strings.HasSuffix(host, "."+suffix) {
+			suffix := strings.ToLower(strings.TrimPrefix(rule, "*."))
+			if hostLower == suffix || strings.HasSuffix(hostLower, "."+suffix) {
 				return true
 			}
-		} else if strings.EqualFold(host, rule) {
+		} else if strings.EqualFold(hostLower, strings.ToLower(rule)) {
 			return true
 		}
 	}
@@ -105,7 +256,7 @@ type Manifest struct {
 	Permissions PermissionsConfig `yaml:"permissions" json:"permissions"`
 }
 
-// Validate verifies that the manifest contains required valid fields.
+// Validate verifies that the manifest contains required valid fields and safe paths.
 func (m *Manifest) Validate() error {
 	if m.ID == "" {
 		return errors.New("plugin manifest ID is required")
@@ -116,11 +267,26 @@ func (m *Manifest) Validate() error {
 	if strings.TrimSpace(m.Name) == "" {
 		return errors.New("plugin name is required")
 	}
+	if len(m.Name) > 100 {
+		return fmt.Errorf("plugin name too long (%d chars, max 100)", len(m.Name))
+	}
 	if strings.TrimSpace(m.Version) == "" {
 		return errors.New("plugin version is required")
 	}
+	if len(m.Version) > 32 {
+		return fmt.Errorf("plugin version too long (%d chars, max 32)", len(m.Version))
+	}
 	if m.WasmFile == "" {
 		m.WasmFile = "plugin.wasm"
+	} else {
+		clean := filepath.Clean(m.WasmFile)
+		if filepath.IsAbs(m.WasmFile) ||
+			strings.Contains(m.WasmFile, "..") ||
+			strings.ContainsAny(m.WasmFile, "/\\") ||
+			clean != m.WasmFile ||
+			!strings.HasSuffix(strings.ToLower(m.WasmFile), ".wasm") {
+			return fmt.Errorf("invalid wasm_file %q: must be a relative filename with .wasm extension without path traversal", m.WasmFile)
+		}
 	}
 	return nil
 }

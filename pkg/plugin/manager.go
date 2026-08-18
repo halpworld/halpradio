@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -116,7 +117,17 @@ func (m *Manager) Init() error {
 			continue
 		}
 
+		if err := manifest.Validate(); err != nil {
+			m.log(3, fmt.Sprintf("Plugin manifest validation failed for %s: %v", pluginID, err))
+			continue
+		}
+
 		wasmPath := filepath.Join(pluginDirPath, manifest.WasmFile)
+		rel, err := filepath.Rel(pluginDirPath, wasmPath)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			m.log(3, fmt.Sprintf("Plugin %s has invalid wasm path: %s", pluginID, wasmPath))
+			continue
+		}
 		_, wasmErr := os.Stat(wasmPath)
 
 		state, hasState := savedStates[manifest.ID]
@@ -337,8 +348,15 @@ func (m *Manager) InstallFromRegistry(ctx context.Context, reg PluginOrRegistry)
 	if err != nil {
 		return fmt.Errorf("failed loading installed manifest: %w", err)
 	}
+	if err := manifest.Validate(); err != nil {
+		return fmt.Errorf("installed plugin manifest validation failed: %w", err)
+	}
 
 	wasmPath := filepath.Join(pluginDirPath, manifest.WasmFile)
+	rel, err := filepath.Rel(pluginDirPath, wasmPath)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return fmt.Errorf("invalid wasm path in plugin %s", regPlugin.ID)
+	}
 
 	entry := &pluginEntry{
 		manifest: *manifest,

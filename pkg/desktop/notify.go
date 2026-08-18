@@ -152,29 +152,56 @@ func (n *DesktopNotifier) Notify(title, message string) {
 	go dispatchOSNotification(runner, targetOS, title, message)
 }
 
+// sanitizeNotificationString strips ASCII control characters and truncates length.
+func sanitizeNotificationString(s string, maxLen int) string {
+	s = strings.TrimSpace(s)
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		// Keep printable characters, spaces, and standard unicode
+		if r >= 0x20 && r != 0x7f {
+			b.WriteRune(r)
+		}
+	}
+	res := b.String()
+	if len(res) > maxLen {
+		res = res[:maxLen]
+	}
+	return res
+}
+
 func dispatchOSNotification(runner CommandRunner, targetOS, title, message string) {
 	if runner == nil {
 		runner = defaultCommandRunner
 	}
+
+	// Strict sanitization to prevent terminal and command injection
+	title = sanitizeNotificationString(title, 256)
+	message = sanitizeNotificationString(message, 1024)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 
 	switch targetOS {
 	case "darwin":
-		// macOS AppleScript notification (silent banner without alert sound)
-		script := fmt.Sprintf(`display notification %q with title %q`, message, title)
-		_ = runner(ctx, "osascript", "-e", script)
+		// macOS AppleScript notification via argv passing (immune to script/command injection)
+		_ = runner(
+			ctx,
+			"osascript",
+			"-e", "on run argv",
+			"-e", "display notification (item 2 of argv) with title (item 1 of argv)",
+			"-e", "end run",
+			title,
+			message,
+		)
 
 	case "linux":
 		// Linux notification via notify-send (silent hint suppresses sound on notification daemons)
 		_ = runner(ctx, "notify-send", "-a", "halpradio", "-u", "normal", "-h", "boolean:suppress-sound:true", title, message)
 
 	case "windows":
-		// Windows PowerShell Toast Notification (silent audio attribute suppresses chime)
-		cleanTitle := strings.ReplaceAll(title, "'", "''")
-		cleanMsg := strings.ReplaceAll(message, "'", "''")
-		psScript := fmt.Sprintf(`[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null; $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02); $textNodes = $template.GetElementsByTagName('text'); $textNodes.Item(0).AppendChild($template.CreateTextNode('%s')) > $null; $textNodes.Item(1).AppendChild($template.CreateTextNode('%s')) > $null; $audio = $template.CreateElement('audio'); $audio.SetAttribute('silent', 'true'); $template.DocumentElement.AppendChild($audio) > $null; $toast = [Windows.UI.Notifications.ToastNotification]::new($template); [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('halpradio').Show($toast);`, cleanTitle, cleanMsg)
-		_ = runner(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psScript)
+		// Windows PowerShell Toast Notification passing parameters as isolated arguments without string interpolation
+		psScript := `[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null; $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02); $textNodes = $template.GetElementsByTagName('text'); $textNodes.Item(0).AppendChild($template.CreateTextNode($args[0])) > $null; $textNodes.Item(1).AppendChild($template.CreateTextNode($args[1])) > $null; $audio = $template.CreateElement('audio'); $audio.SetAttribute('silent', 'true'); $template.DocumentElement.AppendChild($audio) > $null; $toast = [Windows.UI.Notifications.ToastNotification]::new($template); [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('halpradio').Show($toast);`
+		_ = runner(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psScript, title, message)
 	}
 }

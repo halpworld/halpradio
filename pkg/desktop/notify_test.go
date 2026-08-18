@@ -179,28 +179,32 @@ func TestDispatchOSNotification_Darwin_SilentWithoutSound(t *testing.T) {
 		title       string
 		message     string
 		wantCommand string
-		wantScript  string
+		wantTitle   string
+		wantMessage string
 	}{
 		{
 			name:        "standard song change",
 			title:       "📻 halpradio — SomaFM Secret Agent",
 			message:     "🎶 James Bond Theme",
 			wantCommand: "osascript",
-			wantScript:  `display notification "🎶 James Bond Theme" with title "📻 halpradio — SomaFM Secret Agent"`,
+			wantTitle:   "📻 halpradio — SomaFM Secret Agent",
+			wantMessage: "🎶 James Bond Theme",
 		},
 		{
 			name:        "song with quotes and special characters",
 			title:       `📻 halpradio — "Rock" 101`,
 			message:     `🎶 Guns N' Roses - "Welcome to the Jungle"`,
 			wantCommand: "osascript",
-			wantScript:  `display notification "🎶 Guns N' Roses - \"Welcome to the Jungle\"" with title "📻 halpradio — \"Rock\" 101"`,
+			wantTitle:   `📻 halpradio — "Rock" 101`,
+			wantMessage: `🎶 Guns N' Roses - "Welcome to the Jungle"`,
 		},
 		{
 			name:        "generic alert",
 			title:       "halpradio",
 			message:     "Playback paused",
 			wantCommand: "osascript",
-			wantScript:  `display notification "Playback paused" with title "halpradio"`,
+			wantTitle:   "halpradio",
+			wantMessage: "Playback paused",
 		},
 	}
 
@@ -221,21 +225,19 @@ func TestDispatchOSNotification_Darwin_SilentWithoutSound(t *testing.T) {
 				t.Errorf("expected command %q, got %q", tt.wantCommand, calledName)
 			}
 
-			if len(calledArgs) != 2 || calledArgs[0] != "-e" {
-				t.Fatalf("expected args [-e, script], got %v", calledArgs)
+			// Expected: [-e "on run argv" -e "display notification (item 2 of argv) with title (item 1 of argv)" -e "end run" <title> <message>]
+			if len(calledArgs) != 8 {
+				t.Fatalf("expected 8 args for darwin safe invocation, got %d (%v)", len(calledArgs), calledArgs)
 			}
 
-			actualScript := calledArgs[1]
-			if actualScript != tt.wantScript {
-				t.Errorf("script mismatch:\n  got:  %s\n  want: %s", actualScript, tt.wantScript)
+			if calledArgs[0] != "-e" || calledArgs[1] != "on run argv" {
+				t.Errorf("expected on run argv header, got %v", calledArgs[:2])
 			}
-
-			// Explicitly assert that no sound parameter or chime sound is present
-			if strings.Contains(actualScript, "sound name") {
-				t.Errorf("macOS notification script must NOT contain 'sound name', got: %s", actualScript)
+			if calledArgs[6] != tt.wantTitle {
+				t.Errorf("title arg mismatch: got %q, want %q", calledArgs[6], tt.wantTitle)
 			}
-			if strings.Contains(strings.ToLower(actualScript), "glass") {
-				t.Errorf("macOS notification script must NOT contain 'Glass' chime, got: %s", actualScript)
+			if calledArgs[7] != tt.wantMessage {
+				t.Errorf("message arg mismatch: got %q, want %q", calledArgs[7], tt.wantMessage)
 			}
 		})
 	}
@@ -318,11 +320,8 @@ func TestDispatchOSNotification_Platforms(t *testing.T) {
 			os:          "darwin",
 			wantCommand: "osascript",
 			checkArgs: func(t *testing.T, args []string) {
-				if len(args) != 2 || args[0] != "-e" {
-					t.Errorf("darwin expected [-e <script>], got %v", args)
-				}
-				if strings.Contains(args[1], "sound name") {
-					t.Errorf("darwin script should not have sound name, got %s", args[1])
+				if len(args) != 8 || args[0] != "-e" || args[1] != "on run argv" {
+					t.Errorf("darwin expected safe argv invocation, got %v", args)
 				}
 			},
 		},
@@ -346,8 +345,8 @@ func TestDispatchOSNotification_Platforms(t *testing.T) {
 			os:          "windows",
 			wantCommand: "powershell",
 			checkArgs: func(t *testing.T, args []string) {
-				if len(args) < 4 || args[0] != "-NoProfile" || args[1] != "-NonInteractive" || args[2] != "-Command" {
-					t.Errorf("windows expected powershell flags, got %v", args)
+				if len(args) < 6 || args[0] != "-NoProfile" || args[1] != "-NonInteractive" || args[2] != "-Command" {
+					t.Errorf("windows expected powershell flags and args, got %v", args)
 				}
 				if !strings.Contains(args[3], "SetAttribute('silent', 'true')") {
 					t.Errorf("windows expected silent audio attribute, got %s", args[3])
@@ -415,19 +414,12 @@ func TestDesktopNotifierDarwinEndToEnd(t *testing.T) {
 	if calledCommand != "osascript" {
 		t.Errorf("expected osascript, got %s", calledCommand)
 	}
-	if len(calledArgs) != 2 || calledArgs[0] != "-e" {
-		t.Fatalf("expected [-e, script], got %v", calledArgs)
+	if len(calledArgs) != 8 || calledArgs[0] != "-e" {
+		t.Fatalf("expected 8 args for darwin safe invocation, got %v", calledArgs)
 	}
 
-	script := calledArgs[1]
-	if !strings.HasPrefix(script, `display notification`) {
-		t.Errorf("expected script to start with display notification, got %s", script)
-	}
-	if strings.Contains(script, "sound name") {
-		t.Errorf("expected silent notification without sound name, got %s", script)
-	}
-	if !strings.Contains(script, "Nightwave Plaza") {
-		t.Errorf("expected station name in script, got %s", script)
+	if !strings.Contains(calledArgs[6], "Nightwave Plaza") {
+		t.Errorf("expected station name in title arg, got %s", calledArgs[6])
 	}
 }
 
@@ -495,8 +487,8 @@ func TestDesktopNotifierWindowsEndToEnd(t *testing.T) {
 	if calledCommand != "powershell" {
 		t.Errorf("expected powershell, got %s", calledCommand)
 	}
-	if len(calledArgs) < 4 {
-		t.Fatalf("expected powershell args, got %v", calledArgs)
+	if len(calledArgs) < 6 {
+		t.Fatalf("expected at least 6 powershell args, got %v", calledArgs)
 	}
 	if !strings.Contains(calledArgs[3], "SetAttribute('silent', 'true')") {
 		t.Errorf("expected silent audio attribute in windows command, got %s", calledArgs[3])
@@ -524,15 +516,14 @@ func TestDesktopNotifierGenericNotifyDarwin(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	if len(calledArgs) != 2 {
-		t.Fatalf("expected 2 args, got %v", calledArgs)
+	if len(calledArgs) != 8 {
+		t.Fatalf("expected 8 args, got %v", calledArgs)
 	}
-	if strings.Contains(calledArgs[1], "sound name") {
-		t.Errorf("expected no sound name, got %s", calledArgs[1])
+	if calledArgs[6] != "Focus Time" {
+		t.Errorf("expected title 'Focus Time', got %q", calledArgs[6])
 	}
-	expectedScript := `display notification "Session ended" with title "Focus Time"`
-	if calledArgs[1] != expectedScript {
-		t.Errorf("expected %q, got %q", expectedScript, calledArgs[1])
+	if calledArgs[7] != "Session ended" {
+		t.Errorf("expected message 'Session ended', got %q", calledArgs[7])
 	}
 }
 
