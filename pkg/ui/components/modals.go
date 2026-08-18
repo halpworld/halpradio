@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/halpworld/halpradio/pkg/plugin"
 	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/theme"
 	"github.com/halpworld/halpradio/pkg/timer"
@@ -493,6 +494,268 @@ func RenderTimerModal(
 	modalBox := lipgloss.NewStyle().
 		Border(lipgloss.DoubleBorder()).
 		BorderForeground(th.Primary).
+		Padding(padY, 2).
+		Width(boxWidth).
+		Render(content)
+
+	return PlaceOverlay(modalBox, width, height)
+}
+
+func RenderPluginManagerModal(
+	installed []plugin.PluginInfo,
+	registry []plugin.RegistryPlugin,
+	activeTab int, // 0: Installed, 1: Registry
+	cursor int,
+	statusMsg string,
+	width int,
+	height int,
+	th theme.Theme,
+) string {
+	boxWidth := 74
+	if width < 78 {
+		boxWidth = width - 4
+	}
+	if boxWidth < 42 {
+		boxWidth = 42
+	}
+
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(th.Primary).
+		Align(lipgloss.Center)
+
+	// Tab header
+	tab1Style := lipgloss.NewStyle().Padding(0, 1)
+	tab2Style := lipgloss.NewStyle().Padding(0, 1)
+
+	if activeTab == 0 {
+		tab1Style = tab1Style.Background(th.Primary).Foreground(th.BadgeText).Bold(true)
+		tab2Style = tab2Style.Foreground(th.Foreground)
+	} else {
+		tab1Style = tab1Style.Foreground(th.Foreground)
+		tab2Style = tab2Style.Background(th.Primary).Foreground(th.BadgeText).Bold(true)
+	}
+
+	tabBar := lipgloss.JoinHorizontal(
+		lipgloss.Center,
+		tab1Style.Render(fmt.Sprintf("[1] 📦 Installed (%d)", len(installed))),
+		"  ",
+		tab2Style.Render(fmt.Sprintf("[2] 🌐 Registry (%d)", len(registry))),
+	)
+
+	var listRows []string
+	var selectedDetails string
+
+	if activeTab == 0 {
+		if len(installed) == 0 {
+			listRows = append(listRows, lipgloss.NewStyle().Foreground(th.Muted).Italic(true).Render("  No plugins installed yet. Switch to [2] Registry to explore!"))
+		} else {
+			for i, p := range installed {
+				isSelected := (i == cursor)
+				curStr := "  "
+				if isSelected {
+					curStr = "❯ "
+				}
+
+				var statusBadge string
+				if !p.State.PermissionsApproved {
+					statusBadge = lipgloss.NewStyle().Foreground(th.Secondary).Bold(true).Render("[! Perms Needed]")
+				} else if p.State.Enabled {
+					statusBadge = lipgloss.NewStyle().Foreground(th.Playing).Bold(true).Render("[✓ Enabled]")
+				} else {
+					statusBadge = lipgloss.NewStyle().Foreground(th.Muted).Render("[○ Disabled]")
+				}
+
+				row := fmt.Sprintf("%s%-24s %s  v%s", curStr, truncate(p.Manifest.Name, 24), statusBadge, p.Manifest.Version)
+				if isSelected {
+					row = lipgloss.NewStyle().Background(th.Border).Foreground(th.Highlight).Bold(true).Render(row)
+					// Build details
+					var permDetails []string
+					if len(p.Manifest.Permissions.Network) > 0 {
+						permDetails = append(permDetails, fmt.Sprintf("🌐 Network: %s", strings.Join(p.Manifest.Permissions.Network, ", ")))
+					} else {
+						permDetails = append(permDetails, "🌐 Network: Denied (Sandboxed)")
+					}
+					if p.Manifest.Permissions.HasStorage() {
+						permDetails = append(permDetails, "💾 Storage: ~/.config/halpradio/plugins_data/"+p.Manifest.ID+"/")
+					}
+					if len(p.Manifest.Permissions.Events) > 0 {
+						permDetails = append(permDetails, fmt.Sprintf("⚡ Events: %s", strings.Join(p.Manifest.Permissions.Events, ", ")))
+					}
+
+					selectedDetails = lipgloss.JoinVertical(
+						lipgloss.Left,
+						lipgloss.NewStyle().Bold(true).Foreground(th.Secondary).Render("Description: ")+lipgloss.NewStyle().Foreground(th.Foreground).Render(p.Manifest.Description),
+						lipgloss.NewStyle().Foreground(th.Muted).Render("Author: "+p.Manifest.Author+" | ID: "+p.Manifest.ID),
+						strings.Join(permDetails, " | "),
+					)
+				} else {
+					row = lipgloss.NewStyle().Foreground(th.Foreground).Render(row)
+				}
+				listRows = append(listRows, row)
+			}
+		}
+	} else {
+		if len(registry) == 0 {
+			listRows = append(listRows, lipgloss.NewStyle().Foreground(th.Muted).Italic(true).Render("  Loading plugins from official registry..."))
+		} else {
+			for i, reg := range registry {
+				isSelected := (i == cursor)
+				curStr := "  "
+				if isSelected {
+					curStr = "❯ "
+				}
+
+				isInstalled := false
+				for _, inst := range installed {
+					if inst.Manifest.ID == reg.ID {
+						isInstalled = true
+						break
+					}
+				}
+
+				badge := lipgloss.NewStyle().Foreground(th.Highlight).Render("[Available]")
+				if isInstalled {
+					badge = lipgloss.NewStyle().Foreground(th.Playing).Bold(true).Render("[Installed]")
+				}
+
+				row := fmt.Sprintf("%s%-24s %s  v%s  by %s", curStr, truncate(reg.Name, 24), badge, reg.Version, reg.Author)
+				if isSelected {
+					row = lipgloss.NewStyle().Background(th.Border).Foreground(th.Highlight).Bold(true).Render(row)
+					var permDetails []string
+					if len(reg.Permissions.Network) > 0 {
+						permDetails = append(permDetails, fmt.Sprintf("🌐 Network: %s", strings.Join(reg.Permissions.Network, ", ")))
+					}
+					if reg.Permissions.HasStorage() {
+						permDetails = append(permDetails, "💾 Storage: Local Sandbox")
+					}
+					if len(reg.Permissions.Events) > 0 {
+						permDetails = append(permDetails, fmt.Sprintf("⚡ Events: %s", strings.Join(reg.Permissions.Events, ", ")))
+					}
+
+					selectedDetails = lipgloss.JoinVertical(
+						lipgloss.Left,
+						lipgloss.NewStyle().Bold(true).Foreground(th.Secondary).Render("Description: ")+lipgloss.NewStyle().Foreground(th.Foreground).Render(reg.Description),
+						strings.Join(permDetails, " | "),
+						lipgloss.NewStyle().Foreground(th.Muted).Render("Homepage: "+reg.Homepage),
+					)
+				} else {
+					row = lipgloss.NewStyle().Foreground(th.Foreground).Render(row)
+				}
+				listRows = append(listRows, row)
+			}
+		}
+	}
+
+	maxListRows := 6
+	if len(listRows) > maxListRows {
+		start := cursor - maxListRows/2
+		if start < 0 {
+			start = 0
+		}
+		if start+maxListRows > len(listRows) {
+			start = len(listRows) - maxListRows
+		}
+		listRows = listRows[start : start+maxListRows]
+	}
+
+	helpText := "[Tab/1/2] Switch Tab  [Space] Toggle  [i] Install  [u] Update  [d] Remove  [p] Perms  [Esc] Close"
+	if boxWidth < 68 {
+		helpText = "[Tab] Tab  [Space] Toggle  [i] Install  [p] Perms  [Esc] Close"
+	}
+
+	var elements []string
+	elements = append(elements, titleStyle.Render("🔌 PLUGIN & EXTENSION MANAGER"))
+	elements = append(elements, "")
+	elements = append(elements, tabBar)
+	elements = append(elements, "")
+	elements = append(elements, strings.Join(listRows, "\n"))
+	elements = append(elements, "")
+	if selectedDetails != "" {
+		detailsBox := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(th.Border).
+			Padding(0, 1).
+			Width(boxWidth - 8).
+			Render(selectedDetails)
+		elements = append(elements, detailsBox)
+		elements = append(elements, "")
+	}
+	if statusMsg != "" {
+		elements = append(elements, lipgloss.NewStyle().Foreground(th.Playing).Bold(true).Render(statusMsg))
+	}
+	elements = append(elements, lipgloss.NewStyle().Foreground(th.Muted).Render(helpText))
+
+	padY := 1
+	if height < 26 {
+		padY = 0
+	}
+
+	modalBox := lipgloss.NewStyle().
+		Border(lipgloss.DoubleBorder()).
+		BorderForeground(th.Primary).
+		Padding(padY, 2).
+		Width(boxWidth).
+		Render(lipgloss.JoinVertical(lipgloss.Left, elements...))
+
+	return PlaceOverlay(modalBox, width, height)
+}
+
+func RenderPermissionApprovalModal(p plugin.PluginInfo, width int, height int, th theme.Theme) string {
+	boxWidth := 66
+	if width < 70 {
+		boxWidth = width - 4
+	}
+
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(th.Secondary).
+		Align(lipgloss.Center)
+
+	var reqItems []string
+	if len(p.Manifest.Permissions.Network) > 0 {
+		reqItems = append(reqItems, lipgloss.NewStyle().Foreground(th.Highlight).Render("🌐 Network Access: ")+lipgloss.NewStyle().Foreground(th.Foreground).Render(strings.Join(p.Manifest.Permissions.Network, ", ")))
+	} else {
+		reqItems = append(reqItems, lipgloss.NewStyle().Foreground(th.Muted).Render("🌐 Network Access: None (Isolated)"))
+	}
+
+	if p.Manifest.Permissions.HasStorage() {
+		reqItems = append(reqItems, lipgloss.NewStyle().Foreground(th.Highlight).Render("💾 Sandboxed Storage: ")+lipgloss.NewStyle().Foreground(th.Foreground).Render("~/.config/halpradio/plugins_data/"+p.Manifest.ID+"/"))
+	}
+
+	if len(p.Manifest.Permissions.Events) > 0 {
+		reqItems = append(reqItems, lipgloss.NewStyle().Foreground(th.Highlight).Render("⚡ Lifecycle Events: ")+lipgloss.NewStyle().Foreground(th.Foreground).Render(strings.Join(p.Manifest.Permissions.Events, ", ")))
+	}
+
+	warningNote := lipgloss.NewStyle().
+		Foreground(th.Muted).
+		Italic(true).
+		Render("Plugins run inside an isolated Wazero WebAssembly sandbox.\nPermissions grant capability-based access to the declared endpoints.")
+
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		titleStyle.Render("🛡️  SECURITY PERMISSION APPROVAL"),
+		"",
+		lipgloss.NewStyle().Bold(true).Foreground(th.Primary).Render(fmt.Sprintf("Plugin: %s (v%s)", p.Manifest.Name, p.Manifest.Version)),
+		lipgloss.NewStyle().Foreground(th.Muted).Render(fmt.Sprintf("Author: %s | ID: %s", p.Manifest.Author, p.Manifest.ID)),
+		"",
+		lipgloss.NewStyle().Bold(true).Foreground(th.Foreground).Render("Requested Capabilities:"),
+		strings.Join(reqItems, "\n"),
+		"",
+		warningNote,
+		"",
+		lipgloss.NewStyle().Foreground(th.Playing).Bold(true).Render("[ y / Enter ] Approve Permissions & Enable"),
+		lipgloss.NewStyle().Foreground(th.Favorite).Render("[ n / Esc ] Keep Disabled (Deny)"),
+	)
+
+	padY := 1
+	if height < 24 {
+		padY = 0
+	}
+
+	modalBox := lipgloss.NewStyle().
+		Border(lipgloss.DoubleBorder()).
+		BorderForeground(th.Secondary).
 		Padding(padY, 2).
 		Width(boxWidth).
 		Render(content)

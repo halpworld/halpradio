@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/charmbracelet/lipgloss"
+	"github.com/halpworld/halpradio/pkg/plugin"
 	"github.com/halpworld/halpradio/pkg/ui/components"
 )
 
@@ -40,6 +41,27 @@ func (m Model) View() string {
 			m.TimerCustomSleepInput,
 			m.TimerPomodoroNotifyDesktop,
 			m.TimerPomodoroNotifyBell,
+			width,
+			height,
+			m.Theme,
+		)
+	}
+
+	if m.ShowPermissionApproval {
+		return components.RenderPermissionApprovalModal(m.ApprovalPlugin, width, height, m.Theme)
+	}
+
+	if m.ShowPluginModal {
+		var installed []plugin.PluginInfo
+		if m.PluginMgr != nil {
+			installed = m.PluginMgr.GetPlugins()
+		}
+		return components.RenderPluginManagerModal(
+			installed,
+			m.PluginRegistryList,
+			m.PluginModalTab,
+			m.PluginCursor,
+			m.PluginStatusMsg,
 			width,
 			height,
 			m.Theme,

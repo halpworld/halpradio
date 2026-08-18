@@ -283,9 +283,36 @@ Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Over
 | | `w` / `c` | Jump & filter by Activity Mode / Genre Category |
 | | `a` | Open **Add Custom Station** modal |
 | | `e` / `d` | Edit / Delete local custom station |
-| **UI & Options**| `t` | Theme picker modal (Tokyo Night, Catppuccin, Synthwave, etc.) |
+| **UI & Options**| `P` | Open **Plugins & Extensions Manager** (Wasm Sandbox) |
+| | `t` | Theme picker modal (Tokyo Night, Catppuccin, Synthwave, etc.) |
 | | `?` / `F1` | Toggle WhichKey help overlay |
 | | `q` / `Ctrl+c` | Quit halpradio |
+
+---
+
+## 🔌 Sandboxed WebAssembly Plugins & Official Registry
+
+`halpradio` includes a secure, capability-based **WebAssembly (Wasm) Plugin Engine** powered by [`tetratelabs/wazero`](https://github.com/tetratelabs/wazero) (zero CGo, pure Go) and an official community registry at [`halpworld/halpradio-plugins`](https://github.com/halpworld/halpradio-plugins).
+
+### 🖥️ In-App Plugin Manager (`P` key)
+- Press `P` anywhere in halpradio to browse installed plugins and explore the official online registry.
+- 1-click install, enable/disable toggle, and interactive capability permission review modal (network whitelists, isolated storage).
+
+### ⌨️ CLI Plugin Commands
+```bash
+halpradio plugin list                  # List installed and official registry plugins
+halpradio plugin install <plugin-id>   # Install plugin from official registry with SHA-256 verification
+halpradio plugin enable <plugin-id>    # Enable plugin
+halpradio plugin disable <plugin-id>   # Disable plugin
+halpradio plugin remove <plugin-id>    # Uninstall plugin
+halpradio plugin update --all          # Update plugins to latest version
+```
+
+### 🌟 Official Plugins
+- **[Webhook Broadcaster](https://github.com/halpworld/halpradio-plugins/tree/main/plugins/webhook-broadcaster)**: Broadcasts now-playing tracks to Discord, Slack, or Home Assistant webhooks in real-time.
+- **[Scrobble Logger & Stats](https://github.com/halpworld/halpradio-plugins/tree/main/plugins/scrobble-logger)**: Records station play counts, tracks listening milestones, and persists stats 100% offline.
+
+👉 *Want to build your own plugin? Check out the [Plugin Developer SDK & Starter Template](https://github.com/halpworld/halpradio-plugins)!*
 
 ---
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/halpworld/halpradio/pkg/plugin"
 	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/theme"
 	"github.com/halpworld/halpradio/pkg/timer"
@@ -79,5 +80,54 @@ func TestRenderModals(t *testing.T) {
 	sleepDashModal := RenderTimerModal(sleepTm, 0, 0, configInputs, 0, "", true, true, 80, 24, th)
 	if !strings.Contains(sleepDashModal, "Sleep Countdown") {
 		t.Errorf("Expected sleep countdown in dashboard modal, got: %s", sleepDashModal)
+	}
+
+	// 5. Plugin Manager Modal (Installed & Registry tabs)
+	installedList := []plugin.PluginInfo{
+		{
+			Manifest: plugin.Manifest{
+				ID:          "webhook-broadcaster",
+				Name:        "Webhook Broadcaster",
+				Version:     "1.0.0",
+				Author:      "halpworld",
+				Description: "Broadcasts song updates",
+				Permissions: plugin.PermissionsConfig{
+					Network: []string{"discord.com"},
+					Storage: []string{"local"},
+				},
+			},
+			State: plugin.PluginState{
+				Enabled:             true,
+				PermissionsApproved: true,
+			},
+		},
+	}
+	registryList := []plugin.RegistryPlugin{
+		{
+			ID:          "scrobble-logger",
+			Name:        "Scrobble Logger",
+			Version:     "1.0.0",
+			Author:      "halpworld",
+			Description: "Tracks play stats",
+			Permissions: plugin.PermissionsConfig{
+				Storage: []string{"local"},
+			},
+		},
+	}
+
+	pluginModalInst := RenderPluginManagerModal(installedList, registryList, 0, 0, "", 80, 24, th)
+	if !strings.Contains(pluginModalInst, "PLUGIN & EXTENSION MANAGER") || !strings.Contains(pluginModalInst, "Webhook Broadcaster") {
+		t.Errorf("Expected plugin manager modal installed view, got: %s", pluginModalInst)
+	}
+
+	pluginModalReg := RenderPluginManagerModal(installedList, registryList, 1, 0, "", 80, 24, th)
+	if !strings.Contains(pluginModalReg, "Scrobble Logger") || !strings.Contains(pluginModalReg, "Available") {
+		t.Errorf("Expected plugin manager modal registry view, got: %s", pluginModalReg)
+	}
+
+	// 6. Permission Approval Modal
+	approvalModal := RenderPermissionApprovalModal(installedList[0], 80, 24, th)
+	if !strings.Contains(approvalModal, "SECURITY PERMISSION APPROVAL") || !strings.Contains(approvalModal, "Webhook Broadcaster") || !strings.Contains(approvalModal, "discord.com") {
+		t.Errorf("Expected permission approval modal, got: %s", approvalModal)
 	}
 }

@@ -27,6 +27,8 @@ type Config struct {
 	SongNotifications    bool   `yaml:"song_notifications"`
 	MPRISEnabled         bool   `yaml:"mpris_enabled"`
 	IPCEnabled           bool   `yaml:"ipc_enabled"`
+	PluginsEnabled       bool   `yaml:"plugins_enabled"`
+	PluginRegistryURL    string `yaml:"plugin_registry_url,omitempty"`
 }
 
 func DefaultConfig() Config {
@@ -50,6 +52,8 @@ func DefaultConfig() Config {
 		SongNotifications:    true,
 		MPRISEnabled:         true,
 		IPCEnabled:           true,
+		PluginsEnabled:       true,
+		PluginRegistryURL:    "https://raw.githubusercontent.com/halpworld/halpradio-plugins/main/registry.json",
 	}
 }
 
@@ -86,6 +90,18 @@ func GetSavedTracksFile() string {
 
 func GetConfigFile() string {
 	return filepath.Join(GetConfigDir(), "config.yaml")
+}
+
+func GetPluginsDir() string {
+	return filepath.Join(GetConfigDir(), "plugins")
+}
+
+func GetPluginsDataDir() string {
+	return filepath.Join(GetConfigDir(), "plugins_data")
+}
+
+func GetPluginsConfigFile() string {
+	return filepath.Join(GetConfigDir(), "plugins.json")
 }
 
 // LoadConfig reads config.yaml if present, or returns DefaultConfig.

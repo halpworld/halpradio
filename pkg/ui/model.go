@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/halpworld/halpradio/pkg/desktop"
 	"github.com/halpworld/halpradio/pkg/player"
+	"github.com/halpworld/halpradio/pkg/plugin"
 	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/theme"
 	"github.com/halpworld/halpradio/pkg/timer"
@@ -28,6 +29,19 @@ type RadioBrowserResultMsg struct {
 	Err      error
 }
 type FlashMessageMsg string
+type PluginRegistryLoadedMsg struct {
+	Plugins []plugin.RegistryPlugin
+	Err     error
+}
+type PluginInstalledMsg struct {
+	PluginID string
+	Err      error
+}
+type PluginFlashMsg string
+type PluginNotificationMsg struct {
+	Title   string
+	Message string
+}
 
 // Media key and remote control messages
 type MediaPlayPauseMsg struct{}
@@ -55,6 +69,7 @@ type Model struct {
 	Visualizer *components.Visualizer
 	Timer      *timer.Timer
 	Desktop    *desktop.Manager
+	PluginMgr  *plugin.Manager
 
 	ActiveTab     int // 0: Catalog, 1: Activities, 2: Genres, 3: Favorites, 4: RadioBrowser, 5: Custom, 6: History
 	ActiveFocus   FocusArea
@@ -81,6 +96,14 @@ type Model struct {
 	ShowPRExport    bool
 	ShowAddModal    bool
 	ShowTimerModal  bool
+
+	ShowPluginModal        bool
+	PluginModalTab         int // 0: Installed, 1: Registry
+	PluginCursor           int
+	PluginRegistryList     []plugin.RegistryPlugin
+	PluginStatusMsg        string
+	ShowPermissionApproval bool
+	ApprovalPlugin         plugin.PluginInfo
 
 	TimerModalScreen           int // 0: Main Menu/Dashboard, 1: Custom Sleep, 2: Pomodoro Config
 	TimerMenuCursor            int
@@ -269,10 +292,11 @@ func (m *Model) SetDesktop(d *desktop.Manager) {
 }
 
 // SyncDesktop pushes current playback state to desktop MPRIS / widgets.
+func (m *Model) SetPluginManager(pm *plugin.Manager) {
+	m.PluginMgr = pm
+}
+
 func (m *Model) SyncDesktop() {
-	if m.Desktop == nil {
-		return
-	}
 	st := m.Player.CurrentStation()
 	stationName := ""
 	genre := ""
@@ -282,16 +306,28 @@ func (m *Model) SyncDesktop() {
 		genre = st.Genre
 		streamURL = st.URL
 	}
-	m.Desktop.UpdatePlayback(
-		string(m.Player.Status()),
-		stationName,
-		genre,
-		m.Player.CurrentTrack(),
-		streamURL,
-		m.Player.Volume(),
-		m.Player.IsMuted(),
-		m.Player.ActiveBackend(),
-	)
+
+	if m.Desktop != nil {
+		m.Desktop.UpdatePlayback(
+			string(m.Player.Status()),
+			stationName,
+			genre,
+			m.Player.CurrentTrack(),
+			streamURL,
+			m.Player.Volume(),
+			m.Player.IsMuted(),
+			m.Player.ActiveBackend(),
+		)
+	}
+
+	if m.PluginMgr != nil {
+		m.PluginMgr.DispatchPlaybackChange(plugin.PlaybackChangePayload{
+			Status:  string(m.Player.Status()),
+			Volume:  m.Player.Volume(),
+			Backend: m.Player.ActiveBackend(),
+			Station: stationName,
+		})
+	}
 }
 
 // PlayNextStation moves to and plays the next station in the active station list.

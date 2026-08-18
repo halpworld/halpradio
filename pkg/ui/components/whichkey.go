@@ -65,6 +65,7 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 			formatRow("f", "Toggle Favorite star", 11),
 			formatRow("a / e / d", "Add / Edit / Del station", 11),
 			formatRow("p", "Export PR snippet", 11),
+			formatRow("P", "Plugins & Extensions", 11),
 			formatRow("c", "Clear history / Category", 11),
 			"",
 			sectionStyle.Render("🎨 INTERFACE & SEARCH"),
@@ -95,7 +96,7 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 			formatRow("r / f", "Random / Favorite", 14),
 			formatRow("+ / - / m", "Volume ±5% / Mute", 14),
 			formatRow("a / e / d", "Add / Edit / Del", 14),
-			formatRow("p / c", "Export PR / Clear", 14),
+			formatRow("p / P", "Export PR / Plugins", 14),
 			formatRow("/ / w / v", "Search / Mode / Viz", 14),
 			formatRow("t / ? / q", "Theme / Help / Quit", 14),
 		}

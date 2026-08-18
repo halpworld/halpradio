@@ -42,10 +42,15 @@ type KeyMap struct {
 	OpenSearch key.Binding
 	HistoryTab key.Binding
 	Timer      key.Binding
+	Plugins    key.Binding
 }
 
 func DefaultKeyMap() KeyMap {
 	return KeyMap{
+		Plugins: key.NewBinding(
+			key.WithKeys("P", "ctrl+p"),
+			key.WithHelp("P", "plugins manager"),
+		),
 		Up: key.NewBinding(
 			key.WithKeys("k", "up"),
 			key.WithHelp("k/↑", "up"),

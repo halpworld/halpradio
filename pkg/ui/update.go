@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/halpworld/halpradio/pkg/player"
+	"github.com/halpworld/halpradio/pkg/plugin"
 	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/theme"
 	"github.com/halpworld/halpradio/pkg/timer"
@@ -46,9 +48,57 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for _, ev := range events {
 				m.handleTimerEvent(ev)
 			}
+			if m.PluginMgr != nil {
+				modeStr := "none"
+				if m.Timer.Type == timer.TimerSleep {
+					modeStr = "sleep"
+				} else if m.Timer.Type == timer.TimerPomodoro {
+					modeStr = "pomodoro"
+				}
+				m.PluginMgr.DispatchTimerTick(plugin.TimerTickPayload{
+					Mode:             modeStr,
+					State:            string(m.Timer.State),
+					RemainingSeconds: int(m.Timer.TimeRemaining.Seconds()),
+					TotalSeconds:     int(m.Timer.TotalDuration.Seconds()),
+				})
+			}
 		}
 
 		return m, tickCmd()
+
+	case PluginRegistryLoadedMsg:
+		if msg.Err != nil {
+			m.PluginStatusMsg = fmt.Sprintf("Registry error: %v", msg.Err)
+		} else {
+			m.PluginRegistryList = msg.Plugins
+			m.PluginStatusMsg = ""
+		}
+		return m, nil
+
+	case PluginInstalledMsg:
+		if msg.Err != nil {
+			m.PluginStatusMsg = fmt.Sprintf("Install error: %v", msg.Err)
+		} else {
+			m.PluginStatusMsg = fmt.Sprintf("✓ Plugin %s installed!", msg.PluginID)
+			if m.PluginMgr != nil {
+				if info, ok := m.PluginMgr.GetPlugin(msg.PluginID); ok {
+					m.ApprovalPlugin = info
+					m.ShowPermissionApproval = true
+				}
+			}
+		}
+		return m, nil
+
+	case PluginFlashMsg:
+		m.StatusMessage = string(msg)
+		return m, nil
+
+	case PluginNotificationMsg:
+		if m.Config.SongNotifications && m.Desktop != nil {
+			m.Desktop.NotifySong(msg.Title, msg.Message)
+		}
+		m.StatusMessage = fmt.Sprintf("[%s] %s", msg.Title, msg.Message)
+		return m, nil
 
 	case TrackUpdatedMsg:
 		if m.Player.Status() != player.StatusPlaying && m.Player.Status() != player.StatusConnecting {
@@ -62,6 +112,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.Config.SongNotifications && m.Desktop != nil {
 				m.Desktop.NotifySong(msg.StationName, msg.TrackTitle)
 			}
+		}
+		if m.PluginMgr != nil {
+			artist := ""
+			title := msg.TrackTitle
+			if parts := strings.SplitN(msg.TrackTitle, " - ", 2); len(parts) == 2 {
+				artist = strings.TrimSpace(parts[0])
+				title = strings.TrimSpace(parts[1])
+			}
+			bitrate := 0
+			codec := "MP3"
+			if st := m.Player.CurrentStation(); st != nil {
+				bitrate = st.Bitrate
+				if st.Codec != "" {
+					codec = st.Codec
+				}
+			}
+			m.PluginMgr.DispatchTrackChange(plugin.TrackChangePayload{
+				Station:   msg.StationName,
+				Artist:    artist,
+				Title:     title,
+				Bitrate:   bitrate,
+				Codec:     codec,
+				Timestamp: time.Now().Format(time.RFC3339),
+			})
 		}
 		if m.Desktop != nil {
 			st := m.Player.CurrentStation()
@@ -237,6 +311,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleTimerModalKey(msg)
 		}
 
+		if m.ShowPermissionApproval {
+			return m.handlePermissionApprovalKey(msg)
+		}
+
+		if m.ShowPluginModal {
+			return m.handlePluginModalKey(msg)
+		}
+
 		if m.IsSearching {
 			switch msg.String() {
 			case "esc":
@@ -273,6 +355,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.KeyMap.Timer):
 			m.openTimerModal()
+
+		case key.Matches(msg, m.KeyMap.Plugins):
+			m.ShowPluginModal = true
+			m.PluginCursor = 0
+			m.PluginStatusMsg = ""
+			return m, m.fetchRegistryCmd()
 
 		case msg.String() == "tab":
 			if m.ActiveTab == 1 || m.ActiveTab == 2 {
@@ -1143,5 +1231,167 @@ func (m Model) searchRadioBrowserCmd(query string) tea.Cmd {
 	return func() tea.Msg {
 		stations, err := m.RBClient.Search(query, 40)
 		return RadioBrowserResultMsg{Stations: stations, Err: err}
+	}
+}
+
+func (m Model) handlePermissionApprovalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "enter":
+		if m.PluginMgr != nil && m.ApprovalPlugin.Manifest.ID != "" {
+			_ = m.PluginMgr.ApprovePermissions(m.ApprovalPlugin.Manifest.ID, true)
+			_ = m.PluginMgr.EnablePlugin(m.ApprovalPlugin.Manifest.ID)
+			m.StatusMessage = fmt.Sprintf("✓ Permissions approved for %s", m.ApprovalPlugin.Manifest.Name)
+		}
+		m.ShowPermissionApproval = false
+	case "n", "esc", "q":
+		if m.PluginMgr != nil && m.ApprovalPlugin.Manifest.ID != "" {
+			_ = m.PluginMgr.ApprovePermissions(m.ApprovalPlugin.Manifest.ID, false)
+			_ = m.PluginMgr.DisablePlugin(m.ApprovalPlugin.Manifest.ID)
+			m.StatusMessage = fmt.Sprintf("Plugin %s kept disabled", m.ApprovalPlugin.Manifest.Name)
+		}
+		m.ShowPermissionApproval = false
+	}
+	return m, nil
+}
+
+func (m Model) handlePluginModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	var installed []plugin.PluginInfo
+	if m.PluginMgr != nil {
+		installed = m.PluginMgr.GetPlugins()
+	}
+
+	switch msg.String() {
+	case "esc", "q":
+		m.ShowPluginModal = false
+		m.PluginStatusMsg = ""
+		return m, nil
+
+	case "tab", "1", "2", "h", "l":
+		if msg.String() == "1" {
+			m.PluginModalTab = 0
+		} else if msg.String() == "2" {
+			m.PluginModalTab = 1
+		} else {
+			m.PluginModalTab = 1 - m.PluginModalTab
+		}
+		m.PluginCursor = 0
+		m.PluginStatusMsg = ""
+		if m.PluginModalTab == 1 && len(m.PluginRegistryList) == 0 {
+			return m, m.fetchRegistryCmd()
+		}
+		return m, nil
+
+	case "j", "down":
+		maxLen := len(installed)
+		if m.PluginModalTab == 1 {
+			maxLen = len(m.PluginRegistryList)
+		}
+		if maxLen > 0 && m.PluginCursor < maxLen-1 {
+			m.PluginCursor++
+		}
+		return m, nil
+
+	case "k", "up":
+		if m.PluginCursor > 0 {
+			m.PluginCursor--
+		}
+		return m, nil
+
+	case "space", "enter":
+		if m.PluginModalTab == 0 {
+			// Installed plugins tab: toggle enable/disable or prompt perms
+			if len(installed) > 0 && m.PluginCursor < len(installed) {
+				p := installed[m.PluginCursor]
+				if !p.State.PermissionsApproved {
+					m.ApprovalPlugin = p
+					m.ShowPermissionApproval = true
+					return m, nil
+				}
+				if p.State.Enabled {
+					_ = m.PluginMgr.DisablePlugin(p.Manifest.ID)
+					m.PluginStatusMsg = fmt.Sprintf("Disabled %s", p.Manifest.Name)
+				} else {
+					_ = m.PluginMgr.EnablePlugin(p.Manifest.ID)
+					m.PluginStatusMsg = fmt.Sprintf("Enabled %s", p.Manifest.Name)
+				}
+			}
+		} else {
+			// Registry tab: install plugin
+			if len(m.PluginRegistryList) > 0 && m.PluginCursor < len(m.PluginRegistryList) {
+				reg := m.PluginRegistryList[m.PluginCursor]
+				m.PluginStatusMsg = fmt.Sprintf("⏳ Downloading and installing %s...", reg.Name)
+				return m, m.installPluginCmd(reg)
+			}
+		}
+		return m, nil
+
+	case "i":
+		if m.PluginModalTab == 1 && len(m.PluginRegistryList) > 0 && m.PluginCursor < len(m.PluginRegistryList) {
+			reg := m.PluginRegistryList[m.PluginCursor]
+			m.PluginStatusMsg = fmt.Sprintf("⏳ Installing %s...", reg.Name)
+			return m, m.installPluginCmd(reg)
+		}
+
+	case "p":
+		if m.PluginModalTab == 0 && len(installed) > 0 && m.PluginCursor < len(installed) {
+			p := installed[m.PluginCursor]
+			m.ApprovalPlugin = p
+			m.ShowPermissionApproval = true
+		}
+
+	case "d", "x":
+		if m.PluginModalTab == 0 && len(installed) > 0 && m.PluginCursor < len(installed) {
+			p := installed[m.PluginCursor]
+			_ = m.PluginMgr.UninstallPlugin(p.Manifest.ID)
+			m.PluginStatusMsg = fmt.Sprintf("Uninstalled %s", p.Manifest.Name)
+			if m.PluginCursor > 0 && m.PluginCursor >= len(m.PluginMgr.GetPlugins()) {
+				m.PluginCursor--
+			}
+		}
+
+	case "u":
+		if len(m.PluginRegistryList) == 0 {
+			m.PluginStatusMsg = "⏳ Checking for plugin updates..."
+			return m, m.fetchRegistryCmd()
+		}
+		if m.PluginModalTab == 0 && len(installed) > 0 && m.PluginCursor < len(installed) {
+			p := installed[m.PluginCursor]
+			for _, reg := range m.PluginRegistryList {
+				if reg.ID == p.Manifest.ID {
+					m.PluginStatusMsg = fmt.Sprintf("⏳ Updating %s...", reg.Name)
+					return m, m.installPluginCmd(reg)
+				}
+			}
+			m.PluginStatusMsg = fmt.Sprintf("Plugin %s not found in registry", p.Manifest.Name)
+		}
+	}
+
+	return m, nil
+}
+
+func (m Model) fetchRegistryCmd() tea.Cmd {
+	return func() tea.Msg {
+		if m.PluginMgr == nil {
+			return PluginRegistryLoadedMsg{Plugins: nil, Err: nil}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+		index, err := m.PluginMgr.RegistryClient().FetchRegistry(ctx)
+		if err != nil {
+			return PluginRegistryLoadedMsg{Plugins: nil, Err: err}
+		}
+		return PluginRegistryLoadedMsg{Plugins: index.Plugins, Err: nil}
+	}
+}
+
+func (m Model) installPluginCmd(p plugin.RegistryPlugin) tea.Cmd {
+	return func() tea.Msg {
+		if m.PluginMgr == nil {
+			return PluginInstalledMsg{PluginID: p.ID, Err: fmt.Errorf("plugin manager not initialized")}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		err := m.PluginMgr.InstallFromRegistry(ctx, p)
+		return PluginInstalledMsg{PluginID: p.ID, Err: err}
 	}
 }
