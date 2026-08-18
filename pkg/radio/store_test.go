@@ -360,9 +360,10 @@ func TestStoreLocalStationsAndCategories(t *testing.T) {
 
 func TestStoreFilterCombinations(t *testing.T) {
 	stations := []Station{
-		{ID: "s1", Name: "Focus Beats", Genre: "Lofi / Chill", Country: "JP", Activities: []string{"programming"}},
-		{ID: "s2", Name: "Workout Rock", Genre: "Rock / Metal", Country: "US", Activities: []string{"workout"}},
-		{ID: "s3", Name: "Chill Classical", Genre: "Classical", Country: "DE"},
+		{ID: "s1", Name: "Focus Beats", Genre: "Lofi / Chill", Country: "JP", City: "Tokyo", Broadcast: "Online", Activities: []string{"programming"}},
+		{ID: "s2", Name: "Workout Rock", Genre: "Rock / Metal", Country: "US", City: "Seattle", Broadcast: "FM", Frequency: "99.9 FM", Activities: []string{"workout"}},
+		{ID: "s3", Name: "Chill Classical", Genre: "Classical", Country: "DE", City: "Berlin", Broadcast: "DAB+", Frequency: "DAB+"},
+		{ID: "s4", Name: "RTÉ Radio 1", Genre: "News / Talk", Country: "IE", City: "Dublin", Broadcast: "FM/DAB", Frequency: "88.5 FM"},
 	}
 
 	// Match by activity
@@ -383,9 +384,62 @@ func TestStoreFilterCombinations(t *testing.T) {
 		t.Errorf("Expected match for query 'de', got %v", res)
 	}
 
+	// Match by country name (e.g. searching "ireland" matches IE station)
+	res = FilterWithLocation(stations, "ireland", "", "", "")
+	if len(res) != 1 || res[0].ID != "s4" {
+		t.Errorf("Expected match for query 'ireland', got %v", res)
+	}
+
+	// Match by city (e.g. searching "dublin" matches Dublin station)
+	res = FilterWithLocation(stations, "dublin", "", "", "")
+	if len(res) != 1 || res[0].ID != "s4" {
+		t.Errorf("Expected match for city 'dublin', got %v", res)
+	}
+
+	// Match by frequency
+	res = FilterWithLocation(stations, "88.5", "", "", "")
+	if len(res) != 1 || res[0].ID != "s4" {
+		t.Errorf("Expected match for frequency '88.5', got %v", res)
+	}
+
+	// Match by broadcast "online"
+	res = FilterWithLocation(stations, "online", "", "", "")
+	if len(res) != 1 || res[0].ID != "s1" {
+		t.Errorf("Expected match for 'online', got %v", res)
+	}
+
+	// Filter by explicit country code "IE"
+	res = FilterWithLocation(stations, "", "", "", "IE")
+	if len(res) != 1 || res[0].ID != "s4" {
+		t.Errorf("Expected match for country code 'IE', got %v", res)
+	}
+
 	// 'all' activity and genre should not filter out
 	res = FilterWithActivity(stations, "", "all", "all")
-	if len(res) != 3 {
-		t.Errorf("Expected all 3 stations when filtering 'all', got %d", len(res))
+	if len(res) != 4 {
+		t.Errorf("Expected all 4 stations when filtering 'all', got %d", len(res))
+	}
+}
+
+func TestStoreGetCountriesAndCities(t *testing.T) {
+	store := NewStore()
+	store.Bundled = []Station{
+		{ID: "ie-1", Name: "RTÉ 1", Country: "IE", City: "Dublin"},
+		{ID: "ie-2", Name: "RTÉ 2FM", Country: "IE", City: "Dublin"},
+		{ID: "gb-1", Name: "BBC 1", Country: "GB", City: "London"},
+	}
+
+	countries := store.GetCountries()
+	if len(countries) != 2 {
+		t.Fatalf("Expected 2 countries, got %d", len(countries))
+	}
+	// IE should come first because it has 2 stations vs 1
+	if countries[0].Code != "IE" || countries[0].Count != 2 || countries[0].Name != "Ireland" {
+		t.Errorf("Expected first country to be Ireland with 2 stations, got %+v", countries[0])
+	}
+
+	cities := store.GetCities("IE")
+	if len(cities) != 1 || cities[0] != "Dublin" {
+		t.Errorf("Expected Dublin city for IE, got %v", cities)
 	}
 }

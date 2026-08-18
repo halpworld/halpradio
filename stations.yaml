@@ -8,6 +8,7 @@ stations:
     url: "https://ice1.somafm.com/groovesalad-128-mp3"
     genre: "Ambient / Chillout"
     country: "US"
+    broadcast: "Online"
     bitrate: 128
     codec: "MP3"
     homepage: "https://somafm.com"
@@ -18,6 +19,7 @@ stations:
     url: "https://ice1.somafm.com/dronezone-128-mp3"
     genre: "Ambient / Drone"
     country: "US"
+    broadcast: "Online"
     bitrate: 128
     codec: "MP3"
     homepage: "https://somafm.com"
@@ -28,6 +30,7 @@ stations:
     url: "https://ice1.somafm.com/defcon-128-mp3"
     genre: "Hacker / Electronic"
     country: "US"
+    broadcast: "Online"
     bitrate: 128
     codec: "MP3"
     homepage: "https://somafm.com"
@@ -38,6 +41,7 @@ stations:
     url: "https://radio.plaza.one/mp3"
     genre: "Vaporwave / Future Funk"
     country: "JP"
+    broadcast: "Online"
     bitrate: 128
     codec: "MP3"
     homepage: "https://plaza.one"
@@ -48,6 +52,7 @@ stations:
     url: "http://streams.fluxfm.de/Chillhop/mp3-320"
     genre: "Lofi / Hip Hop"
     country: "DE"
+    broadcast: "Online"
     bitrate: 320
     codec: "MP3"
     homepage: "https://fluxfm.de"
@@ -58,6 +63,7 @@ stations:
     url: "https://play.streamafrica.net/lofiradio"
     genre: "Lofi / Beats"
     country: "FR"
+    broadcast: "Online"
     bitrate: 128
     codec: "MP3"
     homepage: "https://lofigirl.com"
@@ -69,6 +75,10 @@ stations:
     url: "http://live-mp3-128.kexp.org/kexp128.mp3"
     genre: "Alternative / Indie"
     country: "US"
+    city: "Seattle"
+    state: "WA"
+    broadcast: "FM"
+    frequency: "90.3 FM"
     bitrate: 128
     codec: "MP3"
     homepage: "https://kexp.org"
@@ -79,6 +89,7 @@ stations:
     url: "https://ice1.somafm.com/indiepop-128-mp3"
     genre: "Indie Rock / Pop"
     country: "US"
+    broadcast: "Online"
     bitrate: 128
     codec: "MP3"
     homepage: "https://somafm.com"
@@ -89,6 +100,10 @@ stations:
     url: "https://stream.rockantenne.de/heavy-metal/stream/mp3"
     genre: "Heavy Metal / Rock"
     country: "DE"
+    city: "Munich"
+    state: "Bavaria"
+    broadcast: "DAB+"
+    frequency: "DAB+"
     bitrate: 128
     codec: "MP3"
     homepage: "https://www.rockantenne.de"
@@ -100,6 +115,10 @@ stations:
     url: "https://knkx-live-a.edge.audiocdn.com/6285_256k"
     genre: "Jazz"
     country: "US"
+    city: "Seattle"
+    state: "WA"
+    broadcast: "FM"
+    frequency: "88.5 FM"
     bitrate: 256
     codec: "AAC"
     homepage: "https://www.jazz24.org"
@@ -110,6 +129,9 @@ stations:
     url: "http://stream.srg-ssr.ch/m/rsc_de/mp3_128"
     genre: "Classical"
     country: "CH"
+    city: "Basel"
+    broadcast: "DAB+"
+    frequency: "DAB+"
     bitrate: 128
     codec: "MP3"
     homepage: "https://www.radioswissclassic.ch"
@@ -120,6 +142,10 @@ stations:
     url: "https://media-ssl.musicradio.com/ClassicFM"
     genre: "Classical"
     country: "GB"
+    city: "London"
+    state: "England"
+    broadcast: "FM/DAB"
+    frequency: "100-102 FM / DAB"
     bitrate: 128
     codec: "AAC"
     homepage: "https://www.classicfm.com"
@@ -131,6 +157,10 @@ stations:
     url: "https://stream.live.vc.bbcmedia.co.uk/bbc_world_service"
     genre: "News / Talk"
     country: "GB"
+    city: "London"
+    state: "England"
+    broadcast: "FM/DAB"
+    frequency: "DAB / Shortwave"
     bitrate: 128
     codec: "MP3"
     homepage: "https://www.bbc.co.uk/worldserviceradio"
@@ -141,6 +171,8 @@ stations:
     url: "https://npr-ice.streamguys1.com/live.mp3"
     genre: "News / Public Radio"
     country: "US"
+    broadcast: "FM"
+    frequency: "FM/Public"
     bitrate: 128
     codec: "MP3"
     homepage: "https://npr.org"
@@ -152,6 +184,7 @@ stations:
     url: "https://ice1.somafm.com/vaporwaves-128-mp3"
     genre: "Synthwave / Vaporwave"
     country: "US"
+    broadcast: "Online"
     bitrate: 128
     codec: "MP3"
     homepage: "https://somafm.com"
@@ -162,6 +195,7 @@ stations:
     url: "https://ice1.somafm.com/u80s-128-mp3"
     genre: "80s / New Wave / Synth"
     country: "US"
+    broadcast: "Online"
     bitrate: 128
     codec: "MP3"
     homepage: "https://somafm.com"
@@ -172,6 +206,7 @@ stations:
     url: "https://ice1.somafm.com/secretagent-128-mp3"
     genre: "Spy / Lounge / 60s"
     country: "US"
+    broadcast: "Online"
     bitrate: 128
     codec: "MP3"
     homepage: "https://somafm.com"
@@ -183,6 +218,7 @@ stations:
     url: "https://stream.nightride.fm/darksynth.mp3"
     genre: "Darksynth / Cyberpunk / Synthwave"
     country: "US"
+    broadcast: "Online"
     bitrate: 320
     codec: "MP3"
     homepage: "https://nightride.fm"
@@ -193,6 +229,7 @@ stations:
     url: "https://stream.nightride.fm/ebsm.mp3"
     genre: "Industrial / EBM / Dark Techno"
     country: "US"
+    broadcast: "Online"
     bitrate: 320
     codec: "MP3"
     homepage: "https://nightride.fm"
@@ -203,6 +240,7 @@ stations:
     url: "https://patmos.cdnstream.com/proxy/sanctua1?mp=/stream"
     genre: "Dark Electro / Industrial / EBM"
     country: "US"
+    broadcast: "Online"
     bitrate: 192
     codec: "MP3"
     homepage: "https://www.sanctuaryradio.com"
@@ -213,6 +251,7 @@ stations:
     url: "http://streams.radio.co/s62583474c/listen"
     genre: "Darkwave / Industrial / Gothic"
     country: "BE"
+    broadcast: "Online"
     bitrate: 128
     codec: "MP3"
     homepage: "https://gothville.radio"
@@ -223,6 +262,7 @@ stations:
     url: "https://ice1.somafm.com/doomed-128-mp3"
     genre: "Dark Industrial / Dark Ambient"
     country: "US"
+    broadcast: "Online"
     bitrate: 128
     codec: "MP3"
     homepage: "https://somafm.com"
@@ -233,6 +273,7 @@ stations:
     url: "https://ice1.somafm.com/cliqhop-128-mp3"
     genre: "IDM / Glitch / Hacker Beats"
     country: "US"
+    broadcast: "Online"
     bitrate: 128
     codec: "MP3"
     homepage: "https://somafm.com"
@@ -243,6 +284,7 @@ stations:
     url: "https://ice1.somafm.com/sf1033-128-mp3"
     genre: "Cyberpunk Ambient / Police Scanner"
     country: "US"
+    broadcast: "Online"
     bitrate: 128
     codec: "MP3"
     homepage: "https://somafm.com"
@@ -253,6 +295,7 @@ stations:
     url: "https://ice1.somafm.com/missioncontrol-128-mp3"
     genre: "Space Ambient / NASA Comms"
     country: "US"
+    broadcast: "Online"
     bitrate: 128
     codec: "MP3"
     homepage: "https://somafm.com"
@@ -263,6 +306,7 @@ stations:
     url: "http://Player.Kohina.com/icecast/stream.aac"
     genre: "Chiptune / Demoscene / Tracker"
     country: "FI"
+    broadcast: "Online"
     bitrate: 128
     codec: "AAC"
     homepage: "https://kohina.com"
@@ -273,6 +317,7 @@ stations:
     url: "http://bassdrive.radioca.st/stream"
     genre: "Drum & Bass / Jungle / Electronic"
     country: "US"
+    broadcast: "Online"
     bitrate: 192
     codec: "MP3"
     homepage: "https://bassdrive.com"
@@ -284,6 +329,8 @@ stations:
     url: "http://media-ice.musicradio.com/HeartUKMP3"
     genre: "Adult Contemporary / Pop / Hits"
     country: "GB"
+    broadcast: "FM/DAB"
+    frequency: "106.2 FM / DAB"
     bitrate: 128
     codec: "MP3"
     homepage: "https://www.heart.co.uk"
@@ -294,6 +341,10 @@ stations:
     url: "http://media-ice.musicradio.com/CapitalMP3"
     genre: "Top 40 / Pop / Hit Music"
     country: "GB"
+    city: "London"
+    state: "England"
+    broadcast: "FM/DAB"
+    frequency: "95.8 FM / DAB"
     bitrate: 128
     codec: "MP3"
     homepage: "https://www.capitalfm.com"
@@ -304,41 +355,195 @@ stations:
     url: "https://media-ssl.musicradio.com/SmoothUKMP3"
     genre: "Soft Rock / Easy Listening / Soul"
     country: "GB"
+    broadcast: "FM/DAB"
+    frequency: "102.2 FM / DAB"
     bitrate: 128
     codec: "MP3"
     homepage: "https://www.smoothradio.com"
     activities: ["relaxing", "reading", "thinking"]
 
-  # Ireland (IE) Top Stations
+  # Ireland (IE) Top Stations — Real FM / DAB / Public Broadcasters
   - id: rte-radio-1
     name: "RTÉ Radio 1"
     url: "http://icecast.rte.ie/radio1"
-    genre: "News / Talk / Variety"
+    genre: "Public Radio / News / Talk / Variety"
     country: "IE"
+    city: "Dublin"
+    state: "Leinster"
+    broadcast: "FM/DAB"
+    frequency: "88.5 FM"
     bitrate: 160
     codec: "MP3"
     homepage: "https://www.rte.ie/radio1"
-    activities: ["news", "thinking"]
+    activities: ["news", "thinking", "reading"]
+
+  - id: rte-2fm
+    name: "RTÉ 2FM"
+    url: "http://icecast.rte.ie/2fm"
+    genre: "Top 40 / Pop / Dance / Hits"
+    country: "IE"
+    city: "Dublin"
+    state: "Leinster"
+    broadcast: "FM/DAB"
+    frequency: "90.7 FM"
+    bitrate: 160
+    codec: "MP3"
+    homepage: "https://2fm.rte.ie"
+    activities: ["programming", "cleaning", "relaxing"]
+
+  - id: rte-lyric-fm
+    name: "RTÉ Lyric FM"
+    url: "http://icecast.rte.ie/lyric"
+    genre: "Classical / Jazz / Arts / Ambient"
+    country: "IE"
+    city: "Limerick"
+    state: "Munster"
+    broadcast: "FM/DAB"
+    frequency: "96-99 FM"
+    bitrate: 160
+    codec: "MP3"
+    homepage: "https://www.rte.ie/lyricfm"
+    activities: ["reading", "thinking", "relaxing", "programming"]
+
+  - id: rte-rnag
+    name: "RTÉ Raidió na Gaeltachta"
+    url: "http://icecast.rte.ie/rnag"
+    genre: "Irish / Folk / News / Traditional"
+    country: "IE"
+    city: "Galway"
+    state: "Connacht"
+    broadcast: "FM/DAB"
+    frequency: "92-94 FM"
+    bitrate: 160
+    codec: "MP3"
+    homepage: "https://www.rte.ie/rnag"
+    activities: ["relaxing", "thinking", "news"]
+
+  - id: rte-gold
+    name: "RTÉ Gold"
+    url: "http://icecast.rte.ie/gold"
+    genre: "Classic Hits / 70s & 80s / Retro Pop"
+    country: "IE"
+    city: "Dublin"
+    state: "Leinster"
+    broadcast: "DAB"
+    frequency: "DAB+"
+    bitrate: 160
+    codec: "MP3"
+    homepage: "https://www.rte.ie/gold"
+    activities: ["cleaning", "relaxing", "programming"]
 
   - id: today-fm
     name: "Today FM"
     url: "https://stream.audioxi.com/TD"
     genre: "Alternative / Pop / Rock"
     country: "IE"
+    city: "Dublin"
+    state: "Leinster"
+    broadcast: "FM"
+    frequency: "100-102 FM"
     bitrate: 128
     codec: "MP3"
     homepage: "https://www.todayfm.com"
-    activities: ["cleaning", "relaxing"]
+    activities: ["cleaning", "relaxing", "programming"]
 
   - id: newstalk-ireland
     name: "Newstalk Ireland"
     url: "https://edge.audioxi.com/NT"
     genre: "News / Talk / Current Affairs"
     country: "IE"
+    city: "Dublin"
+    state: "Leinster"
+    broadcast: "FM"
+    frequency: "106-108 FM"
     bitrate: 128
     codec: "MP3"
     homepage: "https://www.newstalk.com"
     activities: ["news", "thinking"]
+
+  - id: fm104-dublin
+    name: "FM104 Dublin (104.4 FM)"
+    url: "https://stream.audioxi.com/FM104"
+    genre: "Top 40 / Pop / Dance / Dublin FM"
+    country: "IE"
+    city: "Dublin"
+    state: "Leinster"
+    broadcast: "FM"
+    frequency: "104.4 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.fm104.ie"
+    activities: ["cleaning", "programming", "relaxing"]
+
+  - id: dublins-98fm
+    name: "Dublin's 98FM (98.1 FM)"
+    url: "https://edge.audioxi.com/98"
+    genre: "Pop / Chart Hits / Dublin FM"
+    country: "IE"
+    city: "Dublin"
+    state: "Leinster"
+    broadcast: "FM"
+    frequency: "98.1 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.98fm.com"
+    activities: ["cleaning", "relaxing"]
+
+  - id: spin-1038
+    name: "Spin 1038 Dublin"
+    url: "https://edge.audioxi.com/SP"
+    genre: "Dance / Hip Hop / Top 40 / Dublin FM"
+    country: "IE"
+    city: "Dublin"
+    state: "Leinster"
+    broadcast: "FM"
+    frequency: "103.8 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.spin1038.com"
+    activities: ["programming", "cleaning"]
+
+  - id: cork-96fm
+    name: "Cork's 96FM"
+    url: "https://stream.audioxi.com/96"
+    genre: "Adult Contemporary / Pop / Cork FM"
+    country: "IE"
+    city: "Cork"
+    state: "Munster"
+    broadcast: "FM"
+    frequency: "96.4 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.96fm.ie"
+    activities: ["cleaning", "relaxing"]
+
+  - id: redfm-cork
+    name: "Cork's Red FM"
+    url: "https://edge.audioxi.com/RED"
+    genre: "Pop / Chart / Dance / Cork FM"
+    country: "IE"
+    city: "Cork"
+    state: "Munster"
+    broadcast: "FM"
+    frequency: "104-106 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://redfm.ie"
+    activities: ["cleaning", "programming", "relaxing"]
+
+  - id: galway-bay-fm
+    name: "Galway Bay FM"
+    url: "https://edge.audioxi.com/GBFM"
+    genre: "News / Pop / Irish / Galway FM"
+    country: "IE"
+    city: "Galway"
+    state: "Connacht"
+    broadcast: "FM"
+    frequency: "95.8 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://galwaybayfm.ie"
+    activities: ["relaxing", "news"]
 
   # United States (US) Top Stations
   - id: radio-paradise
@@ -346,6 +551,7 @@ stations:
     url: "https://stream.radioparadise.com/mp3-320"
     genre: "Eclectic / Rock / World"
     country: "US"
+    broadcast: "Online"
     bitrate: 320
     codec: "MP3"
     homepage: "https://radioparadise.com"
@@ -356,6 +562,7 @@ stations:
     url: "https://icecast.walmradio.com:8443/classic"
     genre: "Classic Hits / 50s & 60s / Oldies"
     country: "US"
+    broadcast: "Online"
     bitrate: 320
     codec: "MP3"
     homepage: "https://walmradio.com/classic"
@@ -366,6 +573,7 @@ stations:
     url: "http://jking.cdnstream1.com/b22139_128mp3"
     genre: "Smooth Jazz / Chill"
     country: "US"
+    broadcast: "Online"
     bitrate: 192
     codec: "MP3"
     homepage: "http://101smoothjazz.com"
@@ -377,6 +585,8 @@ stations:
     url: "https://lhttp.qtfm.cn/live/15318317/64k.mp3"
     genre: "News / Talk / National"
     country: "CN"
+    broadcast: "FM/AM"
+    frequency: "106.1 FM / 540 AM"
     bitrate: 64
     codec: "MP3"
     homepage: "https://www.cnr.cn"
@@ -387,6 +597,8 @@ stations:
     url: "https://lhttp.qtfm.cn/live/1260/64k.mp3"
     genre: "Mandopop / Cantopop / Hits"
     country: "CN"
+    broadcast: "FM"
+    frequency: "99.3 FM"
     bitrate: 64
     codec: "MP3"
     homepage: "https://m.gdtv.cn"
@@ -397,6 +609,7 @@ stations:
     url: "http://asiafm.hk:8000/asiahd"
     genre: "Mandopop / Pop / HD Music"
     country: "CN"
+    broadcast: "Online"
     bitrate: 96
     codec: "AAC"
     homepage: "http://www.asiafm.net"
@@ -408,6 +621,7 @@ stations:
     url: "https://stream.gensokyoradio.net/3"
     genre: "Touhou / Doujin / Video Game"
     country: "JP"
+    broadcast: "Online"
     bitrate: 256
     codec: "MP3"
     homepage: "https://gensokyoradio.net"
@@ -418,6 +632,7 @@ stations:
     url: "http://gyusyabu.ddo.jp:8000/"
     genre: "Chiptune / FM Synth / Game Music"
     country: "JP"
+    broadcast: "Online"
     bitrate: 256
     codec: "MP3"
     homepage: "http://gyusyabu.ddo.jp/MP3/MP3.html"
@@ -428,6 +643,8 @@ stations:
     url: "https://jenny.torontocast.com:2000/stream/J1HITS?_=184325"
     genre: "J-Pop / Hits / Modern Pop"
     country: "JP"
+    broadcast: "FM"
+    frequency: "FM Web"
     bitrate: 128
     codec: "MP3"
     homepage: "https://en.j1fm.tokyo"
@@ -438,6 +655,8 @@ stations:
     url: "http://shonanbeachfm.out.airtime.pro:8000/shonanbeachfm_a"
     genre: "Jazz / Smooth Jazz / Pop"
     country: "JP"
+    broadcast: "FM"
+    frequency: "78.9 FM"
     bitrate: 128
     codec: "MP3"
     homepage: "https://www.beachfm.co.jp"
@@ -448,6 +667,7 @@ stations:
     url: "http://quincy.torontocast.com:2020/stream.mp3"
     genre: "J-Pop / Japanese Idols / Top 40"
     country: "JP"
+    broadcast: "Online"
     bitrate: 128
     codec: "MP3"
     homepage: "https://asiadreamradio.com"
@@ -459,6 +679,8 @@ stations:
     url: "http://cc.net2streams.com:8565/kissfm.mp3"
     genre: "Dance / Electronic / House"
     country: "AU"
+    broadcast: "FM"
+    frequency: "87.6-88.0 FM"
     bitrate: 128
     codec: "MP3"
     homepage: "https://kissfm.com.au"
@@ -469,6 +691,8 @@ stations:
     url: "http://playerservices.streamtheworld.com/api/livestream-redirect/ARN_GOLD1043.mp3"
     genre: "Classic Hits / 80s & 90s / Pop"
     country: "AU"
+    broadcast: "FM"
+    frequency: "104.3 FM"
     bitrate: 128
     codec: "MP3"
     homepage: "https://www.gold1043.com.au"
@@ -479,6 +703,8 @@ stations:
     url: "http://live-radio01.mediahubaustralia.com/2TJW/mp3/;stream.nsv"
     genre: "Alternative / Indie / New Music"
     country: "AU"
+    broadcast: "FM/DAB"
+    frequency: "105.7 FM / DAB"
     bitrate: 56
     codec: "AAC"
     homepage: "https://www.abc.net.au/triplej"
@@ -490,6 +716,8 @@ stations:
     url: "http://stream.radiobollyfm.in:8201/hd?t=1526570335"
     genre: "Bollywood / Hindi Hits / Pop"
     country: "IN"
+    broadcast: "FM"
+    frequency: "FM Online"
     bitrate: 128
     codec: "MP3"
     homepage: "http://www.radiobollyfm.in"
@@ -500,6 +728,7 @@ stations:
     url: "http://stream.zeno.fm/8ty8szwpwfeuv"
     genre: "Bollywood / Desi / Hindi Top Tracks"
     country: "IN"
+    broadcast: "Online"
     bitrate: 128
     codec: "MP3"
     homepage: "http://www.hitsofbollywood.com"
@@ -510,6 +739,8 @@ stations:
     url: "https://drive.uber.radio/uber/bollywoodnow/icecast.audio"
     genre: "Bollywood / Top 20 Hits / Pop"
     country: "IN"
+    broadcast: "FM"
+    frequency: "98.3 FM"
     bitrate: 128
     codec: "MP3"
     homepage: "https://mirchi.in"
@@ -521,6 +752,8 @@ stations:
     url: "https://live1.sr.se/p1-aac-320"
     genre: "News / Speech / Culture / Documentaries"
     country: "SE"
+    broadcast: "FM/DAB"
+    frequency: "92.4 FM"
     bitrate: 320
     codec: "AAC"
     homepage: "https://sverigesradio.se/p1"
@@ -531,6 +764,8 @@ stations:
     url: "https://live1.sr.se/p3-aac-320"
     genre: "Pop / Indie / Hip Hop / Youth"
     country: "SE"
+    broadcast: "FM/DAB"
+    frequency: "99.3 FM"
     bitrate: 320
     codec: "AAC"
     homepage: "https://sverigesradio.se/p3"
@@ -541,6 +776,8 @@ stations:
     url: "http://tx-bauerse.sharp-stream.com/http_live.php?ua=WEB&i=mixmegapol_instream_se_mp3"
     genre: "Adult Contemporary / Pop Hits"
     country: "SE"
+    broadcast: "FM"
+    frequency: "104.3 FM"
     bitrate: 128
     codec: "MP3"
     homepage: "https://www.mixmegapol.se"
@@ -552,6 +789,7 @@ stations:
     url: "https://listen.reyfm.de/kpop_320kbps.mp3"
     genre: "K-Pop / Dance / Chart Hits"
     country: "KR"
+    broadcast: "Online"
     bitrate: 320
     codec: "MP3"
     homepage: "https://www.reyfm.de"
@@ -562,6 +800,7 @@ stations:
     url: "https://antares.dribbcast.com/proxy/kpop?mp=/s"
     genre: "K-Pop / Hits / Dance"
     country: "KR"
+    broadcast: "Online"
     bitrate: 192
     codec: "MP3"
     homepage: "https://bigbradio.net/kpop"
@@ -572,6 +811,7 @@ stations:
     url: "https://listen.moe/kpop/fallback"
     genre: "K-Pop / Korean Pop / Hits"
     country: "KR"
+    broadcast: "Online"
     bitrate: 192
     codec: "MP3"
     homepage: "https://listen.moe/kpop"
@@ -582,6 +822,8 @@ stations:
     url: "http://amdlive-ch03-ctnd-com.akamaized.net/arirang_3ch/arirang_3ch_audio/chunklist_b128000.m3u8"
     genre: "K-Pop / News / Culture / Talk"
     country: "KR"
+    broadcast: "FM"
+    frequency: "88.7 FM"
     bitrate: 128
     codec: "AAC"
     homepage: "https://arirang.com/radio"
@@ -592,6 +834,7 @@ stations:
     url: "http://cast.oldpopcafe.net:7080/"
     genre: "Classic Pop / 70s & 80s / Oldies"
     country: "KR"
+    broadcast: "Online"
     bitrate: 128
     codec: "MP3"
     homepage: "https://oldpopcafe.net"

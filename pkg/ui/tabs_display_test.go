@@ -51,11 +51,12 @@ stations:
 	tabNames := []string{
 		"0: Activities",
 		"1: Catalog",
-		"2: Genres",
-		"3: Favorites",
-		"4: RadioBrowser",
-		"5: Custom",
-		"6: History",
+		"2: Countries",
+		"3: Genres",
+		"4: Favorites",
+		"5: RadioBrowser",
+		"6: Custom",
+		"7: History",
 	}
 
 	for _, size := range testSizes {

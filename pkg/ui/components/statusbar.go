@@ -38,7 +38,7 @@ func RenderStatusBar(searchQuery string, message string, activeTab int, width in
 		desc string
 	}
 
-	if activeTab == 6 {
+	if activeTab == 7 {
 		// History & Song Discovery Hub legend
 		if width >= 95 {
 			items = []struct {

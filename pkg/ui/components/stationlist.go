@@ -31,10 +31,20 @@ func RenderStationList(
 		return emptyStyle.Render("No stations found. Press [ / ] to search or [ a ] to add a new custom station.")
 	}
 
-	showBitrateAndCodec := (width >= 55)
+	showBitrateAndCodec := (width >= 65)
 	showCountry := (width >= 40)
+	showFullLocation := (width >= 85)
+	showBroadcast := (width >= 50)
+	showFullBroadcast := (width >= 96)
 
 	countryWidth := 5
+	if showFullLocation {
+		countryWidth = 14
+	}
+	broadcastWidth := 6
+	if showFullBroadcast {
+		broadcastWidth = 12
+	}
 	bitrateWidth := 7
 	codecWidth := 5
 	favWidth := 3
@@ -42,6 +52,9 @@ func RenderStationList(
 	fixedWidth := 5 + 2 + favWidth // prefix + fav sep + fav
 	if showCountry {
 		fixedWidth += 2 + countryWidth
+	}
+	if showBroadcast {
+		fixedWidth += 2 + broadcastWidth
 	}
 	if showBitrateAndCodec {
 		fixedWidth += 2 + bitrateWidth + 2 + codecWidth
@@ -73,7 +86,18 @@ func RenderStationList(
 	headerCols = append(headerCols, padRight("STATION NAME", nameWidth))
 	headerCols = append(headerCols, padRight("GENRE", genreWidth))
 	if showCountry {
-		headerCols = append(headerCols, padRight("FLAG", countryWidth))
+		headerLabel := "FLAG"
+		if showFullLocation {
+			headerLabel = "LOCATION"
+		}
+		headerCols = append(headerCols, padRight(headerLabel, countryWidth))
+	}
+	if showBroadcast {
+		headerLabel := "TYPE"
+		if showFullBroadcast {
+			headerLabel = "BROADCAST"
+		}
+		headerCols = append(headerCols, padRight(headerLabel, broadcastWidth))
 	}
 	if showBitrateAndCodec {
 		headerCols = append(headerCols, padRight("BITRATE", bitrateWidth))
@@ -121,7 +145,14 @@ func RenderStationList(
 
 		name := truncate(st.Name, nameWidth)
 		genre := truncate(st.Genre, genreWidth)
-		flag := st.CountryFlag()
+		location := st.CountryFlag()
+		if showFullLocation {
+			location = truncate(st.LocationString(), countryWidth)
+		}
+		bandText := st.ShortBroadcastBadge()
+		if showFullBroadcast {
+			bandText = truncate(st.BroadcastBadge(), broadcastWidth)
+		}
 		bitrate := "-"
 		if st.Bitrate > 0 {
 			bitrate = fmt.Sprintf("%dk", st.Bitrate)
@@ -135,7 +166,10 @@ func RenderStationList(
 		cols = append(cols, padRight(name, nameWidth))
 		cols = append(cols, padRight(genre, genreWidth))
 		if showCountry {
-			cols = append(cols, padRight(flag, countryWidth))
+			cols = append(cols, padRight(location, countryWidth))
+		}
+		if showBroadcast {
+			cols = append(cols, padRight(bandText, broadcastWidth))
 		}
 		if showBitrateAndCodec {
 			cols = append(cols, padRight(bitrate, bitrateWidth))

@@ -14,14 +14,14 @@ import (
 func TestHistoryTabSwitching(t *testing.T) {
 	m := createTestModel()
 
-	// Switch via key '7'
-	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'7'}})
+	// Switch via key '8'
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'8'}})
 	m = updatedModel.(Model)
-	if m.ActiveTab != 6 {
-		t.Fatalf("Expected ActiveTab to be 6 after pressing '7', got %d", m.ActiveTab)
+	if m.ActiveTab != 7 {
+		t.Fatalf("Expected ActiveTab to be 7 after pressing '8', got %d", m.ActiveTab)
 	}
-	if !strings.Contains(m.WindowTitle(), "7: History") {
-		t.Errorf("Expected WindowTitle to contain '7: History', got %q", m.WindowTitle())
+	if !strings.Contains(m.WindowTitle(), "8: History") {
+		t.Errorf("Expected WindowTitle to contain '8: History', got %q", m.WindowTitle())
 	}
 
 	// Switch to catalog
@@ -33,8 +33,8 @@ func TestHistoryTabSwitching(t *testing.T) {
 	// Switch via key 'H'
 	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'H'}})
 	m = updatedModel.(Model)
-	if m.ActiveTab != 6 {
-		t.Fatalf("Expected ActiveTab to be 6 after pressing 'H', got %d", m.ActiveTab)
+	if m.ActiveTab != 7 {
+		t.Fatalf("Expected ActiveTab to be 7 after pressing 'H', got %d", m.ActiveTab)
 	}
 }
 
@@ -116,7 +116,7 @@ func TestHistoryNavigationAndYank(t *testing.T) {
 	m.Store.AddHistory("ambient-1", "Ambient One", "Tycho - A Walk")
 	m.Store.AddHistory("rock-1", "Rock Heavy", "Boards of Canada - Dayvan Cowboy")
 
-	m.SwitchTab(6)
+	m.SwitchTab(7)
 	if m.HistoryIndex != 0 {
 		t.Fatalf("Expected HistoryIndex 0, got %d", m.HistoryIndex)
 	}
@@ -150,7 +150,7 @@ func TestHistoryNavigationAndYank(t *testing.T) {
 func TestHistoryBookmarkAction(t *testing.T) {
 	m := createTestModel()
 	m.Store.AddHistory("ambient-1", "Ambient One", "Tycho - A Walk")
-	m.SwitchTab(6)
+	m.SwitchTab(7)
 
 	// Press 's' to bookmark track
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
@@ -173,7 +173,7 @@ func TestHistoryClearAction(t *testing.T) {
 	m := createTestModel()
 	m.Store.AddHistory("ambient-1", "Ambient One", "Tycho - A Walk")
 	m.Store.AddHistory("rock-1", "Rock Heavy", "Boards of Canada - Dayvan Cowboy")
-	m.SwitchTab(6)
+	m.SwitchTab(7)
 
 	if len(m.Store.GetHistory()) != 2 {
 		t.Fatalf("Expected 2 history items")
@@ -194,7 +194,7 @@ func TestHistoryClearAction(t *testing.T) {
 func TestHistoryTuneInAction(t *testing.T) {
 	m := createTestModel()
 	m.Store.AddHistory("ambient-1", "Ambient One", "Tycho - A Walk")
-	m.SwitchTab(6)
+	m.SwitchTab(7)
 
 	// Press Enter on history item
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})

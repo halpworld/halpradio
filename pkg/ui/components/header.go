@@ -62,27 +62,29 @@ func RenderHeader(width int, activeTab int, status player.PlayStatus, backend st
 	// Tabs
 	var tabs []string
 	padX := 1
-	if width >= 102 {
+	if width >= 112 {
 		tabs = []string{
 			"1: Activities",
 			"2: Catalog",
-			"3: Genres",
-			"4: Favorites",
-			"5: RadioBrowser",
-			"6: Custom",
-			"7: History",
+			"3: Countries",
+			"4: Genres",
+			"5: Favorites",
+			"6: RadioBrowser",
+			"7: Custom",
+			"8: History",
 		}
-	} else if width >= 78 {
+	} else if width >= 86 {
 		tabs = []string{
 			"1:Activities",
 			"2:Catalog",
-			"3:Genres",
-			"4:Favs",
-			"5:Online",
-			"6:Custom",
-			"7:History",
+			"3:Countries",
+			"4:Genres",
+			"5:Favs",
+			"6:Online",
+			"7:Custom",
+			"8:History",
 		}
-		if width < 84 {
+		if width < 94 {
 			padX = 0
 		}
 	} else {
@@ -90,11 +92,12 @@ func RenderHeader(width int, activeTab int, status player.PlayStatus, backend st
 		tabs = []string{
 			"1:Act",
 			"2:Cat",
-			"3:Gen",
-			"4:Fav",
-			"5:Web",
-			"6:Add",
-			"7:Hist",
+			"3:Cntry",
+			"4:Gen",
+			"5:Fav",
+			"6:Web",
+			"7:Add",
+			"8:Hist",
 		}
 	}
 

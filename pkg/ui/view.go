@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"fmt"
+
 	"github.com/charmbracelet/lipgloss"
 	"github.com/halpworld/halpradio/pkg/plugin"
 	"github.com/halpworld/halpradio/pkg/ui/components"
@@ -137,6 +139,44 @@ func (m Model) View() string {
 		)
 		mainArea = lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, " ", stationListView)
 	} else if m.ActiveTab == 2 {
+		var countryItems []string
+		var selectedStr string
+		for i, c := range m.Countries {
+			str := fmt.Sprintf("%s %s (%d)", c.Flag, c.Name, c.Count)
+			countryItems = append(countryItems, str)
+			if m.CountryIndex == i+1 {
+				selectedStr = str
+			}
+		}
+		sidebarW := 28
+		if width < 70 {
+			sidebarW = 18
+		}
+		sidebarView := components.RenderSidebar(
+			" COUNTRIES / FM ",
+			countryItems,
+			selectedStr,
+			m.CountryIndex,
+			sidebarW,
+			mainContentHeight,
+			m.ActiveFocus == FocusSidebar,
+			m.Theme,
+		)
+		listWidth := width - sidebarW - 1
+		if listWidth < 20 {
+			listWidth = 20
+		}
+		stationListView := components.RenderStationList(
+			m.Stations,
+			m.SelectedIndex,
+			m.PlayingID,
+			listWidth,
+			mainContentHeight,
+			m.ActiveFocus == FocusMainList,
+			m.Theme,
+		)
+		mainArea = lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, " ", stationListView)
+	} else if m.ActiveTab == 3 {
 		sidebarW := 26
 		if width < 65 {
 			sidebarW = 18
@@ -165,7 +205,7 @@ func (m Model) View() string {
 			m.Theme,
 		)
 		mainArea = lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, " ", stationListView)
-	} else if m.ActiveTab == 6 {
+	} else if m.ActiveTab == 7 {
 		mainArea = components.RenderHistoryList(
 			m.Store.GetHistory(),
 			m.HistoryIndex,

@@ -69,8 +69,8 @@ func TestActivitiesLandingPage(t *testing.T) {
 		t.Fatalf("Expected 4 stations on activities tab, got %d", len(m.Stations))
 	}
 
-	// Switch to Genres tab (2) and select "Ambient"
-	m.SwitchTab(2)
+	// Switch to Genres tab (3) and select "Ambient"
+	m.SwitchTab(3)
 	if m.ActiveFocus != FocusSidebar {
 		t.Errorf("Expected ActiveFocus to be FocusSidebar on Genres tab")
 	}
@@ -92,6 +92,42 @@ func TestActivitiesLandingPage(t *testing.T) {
 
 	if len(m.Stations) != 4 {
 		t.Fatalf("Expected all 4 stations on Catalog tab despite SelectedGenre, got %d", len(m.Stations))
+	}
+}
+
+func TestCountriesTabFiltering(t *testing.T) {
+	m := createTestModel()
+
+	// Switch to Countries tab (2)
+	m.SwitchTab(2)
+	if m.ActiveFocus != FocusSidebar {
+		t.Errorf("Expected ActiveFocus to be FocusSidebar on Countries tab")
+	}
+
+	// In createTestModel, we have US (3 stations) and DE (1 station)
+	if len(m.Countries) != 2 {
+		t.Fatalf("Expected 2 countries, got %d", len(m.Countries))
+	}
+
+	// Select Germany (DE)
+	for i, c := range m.Countries {
+		if c.Code == "DE" {
+			m.CountryIndex = i + 1
+			m.SelectedCountry = "DE"
+			break
+		}
+	}
+	m.RefreshStations()
+
+	if len(m.Stations) != 1 || m.Stations[0].Country != "DE" {
+		t.Errorf("Expected 1 German station on Countries tab, got %d", len(m.Stations))
+	}
+
+	// Press 'C' key to toggle focus between sidebar and main list
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
+	m = updatedModel.(Model)
+	if m.ActiveFocus != FocusMainList {
+		t.Errorf("Expected ActiveFocus to switch to FocusMainList after 'C', got %v", m.ActiveFocus)
 	}
 }
 
@@ -128,14 +164,20 @@ func TestTabSwitchingResetsFocusToMainList(t *testing.T) {
 		t.Errorf("Expected ActiveFocus to be FocusMainList when switching to Catalog tab")
 	}
 
-	// Switch to Genres tab (2)
+	// Switch to Countries tab (2)
 	m.SwitchTab(2)
+	if m.ActiveFocus != FocusSidebar {
+		t.Errorf("Expected ActiveFocus to be FocusSidebar when switching to Countries tab")
+	}
+
+	// Switch to Genres tab (3)
+	m.SwitchTab(3)
 	if m.ActiveFocus != FocusSidebar {
 		t.Errorf("Expected ActiveFocus to be FocusSidebar when switching to Genres tab")
 	}
 
-	// Switch to Favorites tab (3)
-	m.SwitchTab(3)
+	// Switch to Favorites tab (4)
+	m.SwitchTab(4)
 	if m.ActiveFocus != FocusMainList {
 		t.Errorf("Expected ActiveFocus to be FocusMainList when switching to Favorites tab")
 	}

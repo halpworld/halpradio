@@ -22,7 +22,7 @@ func TestRenderHeader(t *testing.T) {
 	widths := []int{120, 80, 50}
 
 	for _, w := range widths {
-		for tab := 0; tab < 7; tab++ {
+		for tab := 0; tab < 8; tab++ {
 			for _, st := range statuses {
 				out := RenderHeader(w, tab, st, "mpv", th)
 				if out == "" {

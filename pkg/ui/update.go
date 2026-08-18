@@ -334,7 +334,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.IsSearching = false
 			case "enter":
 				m.IsSearching = false
-				if m.ActiveTab == 3 && m.SearchQuery != "" {
+				if m.ActiveTab == 5 && m.SearchQuery != "" {
 					return m, m.searchRadioBrowserCmd(m.SearchQuery)
 				}
 			case "backspace":
@@ -372,29 +372,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.fetchRegistryCmd()
 
 		case msg.String() == "tab":
-			if m.ActiveTab == 0 || m.ActiveTab == 2 {
+			if m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3 {
 				if m.ActiveFocus == FocusSidebar {
 					m.ActiveFocus = FocusMainList
 				} else {
 					m.ActiveFocus = FocusSidebar
 				}
 			} else {
-				m.SwitchTab((m.ActiveTab + 1) % 7)
+				m.SwitchTab((m.ActiveTab + 1) % 8)
 			}
 
 		case msg.String() == "shift+tab":
-			if m.ActiveTab == 0 || m.ActiveTab == 2 {
+			if m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3 {
 				if m.ActiveFocus == FocusSidebar {
 					m.ActiveFocus = FocusMainList
 				} else {
 					m.ActiveFocus = FocusSidebar
 				}
 			} else {
-				m.SwitchTab((m.ActiveTab - 1 + 7) % 7)
+				m.SwitchTab((m.ActiveTab - 1 + 8) % 8)
 			}
 
 		case key.Matches(msg, m.KeyMap.Up):
-			if (m.ActiveTab == 0 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
+			if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
 				if m.ActiveTab == 0 {
 					if m.ActivityIndex > 0 {
 						m.ActivityIndex--
@@ -402,6 +402,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.SelectedActivity = ""
 						} else {
 							m.SelectedActivity = m.Activities[m.ActivityIndex-1].ID
+						}
+						m.RefreshStations()
+					}
+				} else if m.ActiveTab == 2 {
+					if m.CountryIndex > 0 {
+						m.CountryIndex--
+						if m.CountryIndex == 0 {
+							m.SelectedCountry = ""
+						} else {
+							m.SelectedCountry = m.Countries[m.CountryIndex-1].Code
 						}
 						m.RefreshStations()
 					}
@@ -416,7 +426,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.RefreshStations()
 					}
 				}
-			} else if m.ActiveTab == 6 {
+			} else if m.ActiveTab == 7 {
 				if m.HistoryIndex > 0 {
 					m.HistoryIndex--
 				}
@@ -427,11 +437,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.Down):
-			if (m.ActiveTab == 0 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
+			if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
 				if m.ActiveTab == 0 {
 					if m.ActivityIndex < len(m.Activities) {
 						m.ActivityIndex++
 						m.SelectedActivity = m.Activities[m.ActivityIndex-1].ID
+						m.RefreshStations()
+					}
+				} else if m.ActiveTab == 2 {
+					if m.CountryIndex < len(m.Countries) {
+						m.CountryIndex++
+						m.SelectedCountry = m.Countries[m.CountryIndex-1].Code
 						m.RefreshStations()
 					}
 				} else {
@@ -441,7 +457,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.RefreshStations()
 					}
 				}
-			} else if m.ActiveTab == 6 {
+			} else if m.ActiveTab == 7 {
 				hist := m.Store.GetHistory()
 				if m.HistoryIndex < len(hist)-1 {
 					m.HistoryIndex++
@@ -451,9 +467,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.SelectedIndex++
 				}
 			}
-
 		case key.Matches(msg, m.KeyMap.Left):
-			if m.ActiveTab == 0 || m.ActiveTab == 2 {
+			if m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3 {
 				if m.ActiveFocus == FocusMainList {
 					m.ActiveFocus = FocusSidebar
 				} else if m.ActiveTab > 0 {
@@ -464,38 +479,46 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.Right):
-			if m.ActiveTab == 0 || m.ActiveTab == 2 {
+			if m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3 {
 				if m.ActiveFocus == FocusSidebar {
 					m.ActiveFocus = FocusMainList
-				} else if m.ActiveTab < 6 {
+				} else if m.ActiveTab < 7 {
 					m.SwitchTab(m.ActiveTab + 1)
 				}
-			} else if m.ActiveTab < 6 {
+			} else if m.ActiveTab < 7 {
 				m.SwitchTab(m.ActiveTab + 1)
 			}
 
 		case key.Matches(msg, m.KeyMap.Top):
-			if (m.ActiveTab == 0 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
+			if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
 				if m.ActiveTab == 0 {
 					m.ActivityIndex = 0
 					m.SelectedActivity = ""
+				} else if m.ActiveTab == 2 {
+					m.CountryIndex = 0
+					m.SelectedCountry = ""
 				} else {
 					m.GenreIndex = 0
 					m.SelectedGenre = ""
 				}
 				m.RefreshStations()
-			} else if m.ActiveTab == 6 {
+			} else if m.ActiveTab == 7 {
 				m.HistoryIndex = 0
 			} else {
 				m.SelectedIndex = 0
 			}
 
 		case key.Matches(msg, m.KeyMap.Bottom):
-			if (m.ActiveTab == 0 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
+			if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
 				if m.ActiveTab == 0 {
 					m.ActivityIndex = len(m.Activities)
 					if len(m.Activities) > 0 {
 						m.SelectedActivity = m.Activities[len(m.Activities)-1].ID
+					}
+				} else if m.ActiveTab == 2 {
+					m.CountryIndex = len(m.Countries)
+					if len(m.Countries) > 0 {
+						m.SelectedCountry = m.Countries[len(m.Countries)-1].Code
 					}
 				} else {
 					m.GenreIndex = len(m.Genres)
@@ -504,7 +527,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 				m.RefreshStations()
-			} else if m.ActiveTab == 6 {
+			} else if m.ActiveTab == 7 {
 				hist := m.Store.GetHistory()
 				if len(hist) > 0 {
 					m.HistoryIndex = len(hist) - 1
@@ -514,7 +537,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.HalfPageUp):
-			if (m.ActiveTab == 0 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
+			if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
 				if m.ActiveTab == 0 {
 					m.ActivityIndex -= 5
 					if m.ActivityIndex < 0 {
@@ -524,6 +547,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.SelectedActivity = ""
 					} else {
 						m.SelectedActivity = m.Activities[m.ActivityIndex-1].ID
+					}
+				} else if m.ActiveTab == 2 {
+					m.CountryIndex -= 5
+					if m.CountryIndex < 0 {
+						m.CountryIndex = 0
+					}
+					if m.CountryIndex == 0 {
+						m.SelectedCountry = ""
+					} else {
+						m.SelectedCountry = m.Countries[m.CountryIndex-1].Code
 					}
 				} else {
 					m.GenreIndex -= 5
@@ -537,7 +570,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 				m.RefreshStations()
-			} else if m.ActiveTab == 6 {
+			} else if m.ActiveTab == 7 {
 				m.HistoryIndex -= 5
 				if m.HistoryIndex < 0 {
 					m.HistoryIndex = 0
@@ -550,7 +583,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.HalfPageDown):
-			if (m.ActiveTab == 0 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
+			if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
 				if m.ActiveTab == 0 {
 					m.ActivityIndex += 5
 					if m.ActivityIndex > len(m.Activities) {
@@ -560,6 +593,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.SelectedActivity = ""
 					} else {
 						m.SelectedActivity = m.Activities[m.ActivityIndex-1].ID
+					}
+				} else if m.ActiveTab == 2 {
+					m.CountryIndex += 5
+					if m.CountryIndex > len(m.Countries) {
+						m.CountryIndex = len(m.Countries)
+					}
+					if m.CountryIndex == 0 {
+						m.SelectedCountry = ""
+					} else {
+						m.SelectedCountry = m.Countries[m.CountryIndex-1].Code
 					}
 				} else {
 					m.GenreIndex += 5
@@ -573,7 +616,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 				m.RefreshStations()
-			} else if m.ActiveTab == 6 {
+			} else if m.ActiveTab == 7 {
 				hist := m.Store.GetHistory()
 				m.HistoryIndex += 5
 				if m.HistoryIndex >= len(hist) {
@@ -604,14 +647,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.SwitchTab(3)
 		case msg.String() == "5":
 			m.SwitchTab(4)
+		case msg.String() == "6":
+			m.SwitchTab(5)
 			if len(m.RBStations) == 0 {
 				m.StatusMessage = "Fetching top stations from RadioBrowser..."
 				return m, m.searchRadioBrowserCmd("")
 			}
-		case msg.String() == "6":
-			m.SwitchTab(5)
-		case msg.String() == "7", key.Matches(msg, m.KeyMap.HistoryTab):
+		case msg.String() == "7":
 			m.SwitchTab(6)
+		case msg.String() == "8", key.Matches(msg, m.KeyMap.HistoryTab):
+			m.SwitchTab(7)
 
 		case key.Matches(msg, m.KeyMap.Activity):
 			if m.ActiveTab != 0 {
@@ -624,12 +669,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-		case key.Matches(msg, m.KeyMap.Category):
-			if m.ActiveTab == 6 {
-				m.Store.ClearHistory()
-				m.HistoryIndex = 0
-				m.StatusMessage = "Cleared track history log"
-			} else if m.ActiveTab != 2 {
+		case key.Matches(msg, m.KeyMap.CountryTab):
+			if m.ActiveTab != 2 {
 				m.SwitchTab(2)
 			} else {
 				if m.ActiveFocus == FocusSidebar {
@@ -639,18 +680,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+		case key.Matches(msg, m.KeyMap.Category):
+			if m.ActiveTab == 7 {
+				m.Store.ClearHistory()
+				m.HistoryIndex = 0
+				m.StatusMessage = "Cleared track history log"
+			} else if m.ActiveTab != 3 {
+				m.SwitchTab(3)
+			} else {
+				if m.ActiveFocus == FocusSidebar {
+					m.ActiveFocus = FocusMainList
+				} else {
+					m.ActiveFocus = FocusSidebar
+				}
+			}
+
 		case key.Matches(msg, m.KeyMap.NextStation):
-			if m.ActiveTab != 6 {
+			if m.ActiveTab != 7 {
 				m.PlayNextStation()
 			}
 
 		case key.Matches(msg, m.KeyMap.PrevStation):
-			if m.ActiveTab != 6 {
+			if m.ActiveTab != 7 {
 				m.PlayPrevStation()
 			}
 
 		case key.Matches(msg, m.KeyMap.PlayPause):
-			if m.ActiveTab == 6 {
+			if m.ActiveTab == 7 {
 				hist := m.Store.GetHistory()
 				if len(hist) > 0 && m.HistoryIndex < len(hist) {
 					entry := hist[m.HistoryIndex]
@@ -675,7 +731,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.StatusMessage = fmt.Sprintf("Track '%s' recorded from %s", entry.FullDisplay(), entry.StationName)
 					}
 				}
-			} else if (m.ActiveTab == 0 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
+			} else if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
 				m.ActiveFocus = FocusMainList
 				m.SelectedIndex = 0
 			} else if len(m.Stations) > 0 && m.SelectedIndex < len(m.Stations) {
@@ -697,7 +753,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.Stop):
-			if m.ActiveTab == 6 {
+			if m.ActiveTab == 7 {
 				hist := m.Store.GetHistory()
 				if len(hist) > 0 && m.HistoryIndex < len(hist) {
 					entry := hist[m.HistoryIndex]
@@ -717,7 +773,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.KeyMap.YankTrack):
 			var trackToCopy string
-			if m.ActiveTab == 6 {
+			if m.ActiveTab == 7 {
 				hist := m.Store.GetHistory()
 				if len(hist) > 0 && m.HistoryIndex < len(hist) {
 					trackToCopy = hist[m.HistoryIndex].FullDisplay()
@@ -742,7 +798,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.KeyMap.OpenSearch):
 			var trackToSearch string
-			if m.ActiveTab == 6 {
+			if m.ActiveTab == 7 {
 				hist := m.Store.GetHistory()
 				if len(hist) > 0 && m.HistoryIndex < len(hist) {
 					trackToSearch = hist[m.HistoryIndex].FullDisplay()
@@ -834,7 +890,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.KeyMap.AddStation):
 			m.EditingStationID = ""
-			m.AddInputs = make([]string, 5)
+			m.AddInputs = make([]string, 7)
 			m.AddFocusIdx = 0
 			m.AddErrMsg = ""
 			m.ShowAddModal = true
@@ -848,6 +904,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					st.URL,
 					st.Genre,
 					st.Country,
+					st.City,
+					st.Broadcast,
 					fmt.Sprintf("%d", st.Bitrate),
 				}
 				m.AddFocusIdx = 0
@@ -1205,20 +1263,36 @@ func (m Model) handleAddModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.AddErrMsg = "Invalid stream URL! Must start with http:// or https://"
 			return m, nil
 		}
-		bitrate, _ := strconv.Atoi(m.AddInputs[4])
-		if bitrate == 0 {
-			bitrate = 128
+		bitrate := 128
+		if len(m.AddInputs) > 6 {
+			if b, err := strconv.Atoi(strings.TrimSpace(m.AddInputs[6])); err == nil && b > 0 {
+				bitrate = b
+			}
+		} else if len(m.AddInputs) > 5 {
+			if b, err := strconv.Atoi(strings.TrimSpace(m.AddInputs[5])); err == nil && b > 0 {
+				bitrate = b
+			}
+		}
+		city := ""
+		if len(m.AddInputs) > 4 {
+			city = strings.TrimSpace(m.AddInputs[4])
+		}
+		broadcast := ""
+		if len(m.AddInputs) > 5 {
+			broadcast = strings.TrimSpace(m.AddInputs[5])
 		}
 
 		st := radio.Station{
-			ID:      m.EditingStationID,
-			Name:    name,
-			URL:     streamURL,
-			Genre:   strings.TrimSpace(m.AddInputs[2]),
-			Country: strings.ToUpper(strings.TrimSpace(m.AddInputs[3])),
-			Bitrate: bitrate,
-			Codec:   "MP3",
-			Source:  "local",
+			ID:        m.EditingStationID,
+			Name:      name,
+			URL:       streamURL,
+			Genre:     strings.TrimSpace(m.AddInputs[2]),
+			Country:   strings.ToUpper(strings.TrimSpace(m.AddInputs[3])),
+			City:      city,
+			Broadcast: broadcast,
+			Bitrate:   bitrate,
+			Codec:     "MP3",
+			Source:    "local",
 		}
 		_ = m.Store.AddOrUpdateLocalStation(st)
 		m.ShowAddModal = false

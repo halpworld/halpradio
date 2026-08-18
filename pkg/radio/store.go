@@ -124,13 +124,19 @@ func (s *Store) LoadSomaFM() error {
 
 func (s *Store) syncFavoritesLocked() {
 	for i := range s.Bundled {
+		s.Bundled[i] = EnrichStation(s.Bundled[i])
 		s.Bundled[i].IsFavorite = s.Favorites[s.Bundled[i].ID]
 	}
 	for i := range s.Local {
+		s.Local[i] = EnrichStation(s.Local[i])
 		s.Local[i].IsFavorite = s.Favorites[s.Local[i].ID]
 	}
 	for i := range s.SomaFM {
+		s.SomaFM[i] = EnrichStation(s.SomaFM[i])
 		s.SomaFM[i].IsFavorite = s.Favorites[s.SomaFM[i].ID]
+	}
+	for id, st := range s.FavItems {
+		s.FavItems[id] = EnrichStation(st)
 	}
 }
 
@@ -274,14 +280,88 @@ func (s *Store) GetCategories() []string {
 	return cats
 }
 
+type CountryInfo struct {
+	Code  string `json:"code"`
+	Name  string `json:"name"`
+	Flag  string `json:"flag"`
+	Count int    `json:"count"`
+}
+
+func (s *Store) GetCountries() []CountryInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	stations := s.GetAllStations()
+	countryMap := make(map[string]int)
+
+	for _, st := range stations {
+		code := strings.ToUpper(strings.TrimSpace(st.Country))
+		if code != "" {
+			countryMap[code]++
+		}
+	}
+
+	var list []CountryInfo
+	for code, count := range countryMap {
+		name := code
+		if n, ok := CountryCodeToName[code]; ok {
+			name = n
+		}
+		list = append(list, CountryInfo{
+			Code:  code,
+			Name:  name,
+			Flag:  CountryFlagForCode(code),
+			Count: count,
+		})
+	}
+
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].Count != list[j].Count {
+			return list[i].Count > list[j].Count // higher station count first
+		}
+		return list[i].Name < list[j].Name
+	})
+
+	return list
+}
+
+func (s *Store) GetCities(countryCode string) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	cityMap := make(map[string]bool)
+	code := strings.ToUpper(strings.TrimSpace(countryCode))
+
+	for _, st := range s.GetAllStations() {
+		if code != "" && !strings.EqualFold(st.Country, code) {
+			continue
+		}
+		if st.City != "" {
+			cityMap[st.City] = true
+		}
+	}
+
+	var cities []string
+	for c := range cityMap {
+		cities = append(cities, c)
+	}
+	sort.Strings(cities)
+	return cities
+}
+
 func Filter(stations []Station, query string, genre string) []Station {
-	return FilterWithActivity(stations, query, genre, "")
+	return FilterWithLocation(stations, query, genre, "", "")
 }
 
 func FilterWithActivity(stations []Station, query string, genre string, activity string) []Station {
+	return FilterWithLocation(stations, query, genre, activity, "")
+}
+
+func FilterWithLocation(stations []Station, query string, genre string, activity string, countryCode string) []Station {
 	q := strings.ToLower(strings.TrimSpace(query))
 	g := strings.ToLower(strings.TrimSpace(genre))
 	a := strings.ToLower(strings.TrimSpace(activity))
+	c := strings.ToUpper(strings.TrimSpace(countryCode))
 
 	var result []Station
 	for _, st := range stations {
@@ -295,11 +375,38 @@ func FilterWithActivity(stations []Station, query string, genre string, activity
 				continue
 			}
 		}
+		if c != "" && c != "ALL" {
+			if !strings.EqualFold(st.Country, c) {
+				continue
+			}
+		}
 		if q != "" {
 			matchName := strings.Contains(strings.ToLower(st.Name), q)
 			matchGenre := strings.Contains(strings.ToLower(st.Genre), q)
-			matchCountry := strings.Contains(strings.ToLower(st.Country), q)
-			if !matchName && !matchGenre && !matchCountry {
+			matchCountryCode := strings.Contains(strings.ToLower(st.Country), q)
+			matchCountryName := strings.Contains(strings.ToLower(st.CountryName()), q)
+			matchCity := strings.Contains(strings.ToLower(st.City), q)
+			matchState := strings.Contains(strings.ToLower(st.State), q)
+			matchBroadcast := strings.Contains(strings.ToLower(st.Broadcast), q) ||
+				strings.Contains(strings.ToLower(st.BroadcastType()), q) ||
+				strings.Contains(strings.ToLower(st.Frequency), q)
+			if (q == "terrestrial" || q == "fm" || q == "dab" || q == "am") && st.IsTerrestrial() {
+				if q == "terrestrial" || strings.Contains(strings.ToLower(st.BroadcastType()), q) {
+					matchBroadcast = true
+				}
+			}
+			if (q == "online" || q == "web") && !st.IsTerrestrial() {
+				matchBroadcast = true
+			}
+			matchActivity := false
+			for _, act := range st.Activities {
+				if strings.Contains(strings.ToLower(act), q) {
+					matchActivity = true
+					break
+				}
+			}
+
+			if !matchName && !matchGenre && !matchCountryCode && !matchCountryName && !matchCity && !matchState && !matchActivity && !matchBroadcast {
 				continue
 			}
 		}

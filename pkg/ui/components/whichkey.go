@@ -44,7 +44,8 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 			formatRow("N / [", "Prev station", 12),
 			formatRow("h / ←", "Prev tab / Sidebar", 12),
 			formatRow("l / →", "Next tab / Main list", 12),
-			formatRow("H / 7", "Jump to History tab", 12),
+			formatRow("C", "Browse Countries / FM", 12),
+			formatRow("H / 8", "Jump to History tab", 12),
 			formatRow("g / G", "Jump top / bottom", 12),
 			formatRow("Ctrl+u/d", "Half page up / down", 12),
 			"",
@@ -70,7 +71,7 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 			"",
 			sectionStyle.Render("🎨 INTERFACE & SEARCH"),
 			formatRow("/", "Live search bar", 11),
-			formatRow("w / c", "Filter activity / genre", 11),
+			formatRow("w / C / c", "Mode / Country / Genre", 11),
 			formatRow("v / t", "Visualizer / Theme", 11),
 			formatRow("? / F1", "Toggle this help menu", 11),
 			formatRow("q / ^c", "Quit halpradio", 11),
@@ -97,7 +98,7 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 			formatRow("+ / - / m", "Volume ±5% / Mute", 14),
 			formatRow("a / e / d", "Add / Edit / Del", 14),
 			formatRow("p / P", "Export PR / Plugins", 14),
-			formatRow("/ / w / v", "Search / Mode / Viz", 14),
+			formatRow("/ / C / w", "Search / Country / Mode", 14),
 			formatRow("t / ? / q", "Theme / Help / Quit", 14),
 		}
 		content = strings.Join(rows, "\n")

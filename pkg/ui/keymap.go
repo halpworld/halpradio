@@ -40,6 +40,7 @@ type KeyMap struct {
 
 	YankTrack  key.Binding
 	OpenSearch key.Binding
+	CountryTab key.Binding
 	HistoryTab key.Binding
 	Timer      key.Binding
 	Plugins    key.Binding
@@ -174,6 +175,10 @@ func DefaultKeyMap() KeyMap {
 		OpenSearch: key.NewBinding(
 			key.WithKeys("o"),
 			key.WithHelp("o", "open search in browser"),
+		),
+		CountryTab: key.NewBinding(
+			key.WithKeys("C"),
+			key.WithHelp("C", "countries / FM"),
 		),
 		HistoryTab: key.NewBinding(
 			key.WithKeys("H"),

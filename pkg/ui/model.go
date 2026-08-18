@@ -78,7 +78,7 @@ type Model struct {
 	Desktop    *desktop.Manager
 	PluginMgr  *plugin.Manager
 
-	ActiveTab     int // 0: Activities, 1: Catalog, 2: Genres, 3: Favorites, 4: RadioBrowser, 5: Custom, 6: History
+	ActiveTab     int // 0: Activities, 1: Catalog, 2: Countries, 3: Genres, 4: Favorites, 5: RadioBrowser, 6: Custom, 7: History
 	ActiveFocus   FocusArea
 	Stations      []radio.Station
 	RBStations    []radio.Station
@@ -88,6 +88,10 @@ type Model struct {
 	Activities       []radio.Activity
 	SelectedActivity string
 	ActivityIndex    int
+
+	Countries       []radio.CountryInfo
+	SelectedCountry string
+	CountryIndex    int
 
 	Genres        []string
 	SelectedGenre string
@@ -175,8 +179,13 @@ func NewModel(
 		Activities:                 radio.DefaultActivities,
 		SelectedActivity:           "",
 		ActivityIndex:              0,
+		Countries:                  store.GetCountries(),
+		SelectedCountry:            "",
+		CountryIndex:               0,
 		Genres:                     store.GetCategories(),
-		AddInputs:                  make([]string, 5),
+		SelectedGenre:              "",
+		GenreIndex:                 0,
+		AddInputs:                  make([]string, 7),
 		HistoryIndex:               0,
 		TimerPomodoroInputs:        make([]string, 7),
 		TimerPomodoroNotifyDesktop: cfg.EventNotifyDesktop,
@@ -191,13 +200,13 @@ func NewModel(
 func (m *Model) SwitchTab(tabIndex int) {
 	if tabIndex < 0 {
 		tabIndex = 0
-	} else if tabIndex > 6 {
-		tabIndex = 6
+	} else if tabIndex > 7 {
+		tabIndex = 7
 	}
 	m.ActiveTab = tabIndex
 	m.SelectedIndex = 0
 	m.HistoryIndex = 0
-	if m.ActiveTab == 0 || m.ActiveTab == 2 {
+	if m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3 {
 		m.ActiveFocus = FocusSidebar
 	} else {
 		m.ActiveFocus = FocusMainList
@@ -216,19 +225,21 @@ func (m *Model) RefreshStations() {
 	case 2:
 		baseList = m.Store.GetAllStations()
 	case 3:
-		baseList = m.Store.GetFavorites()
+		baseList = m.Store.GetAllStations()
 	case 4:
-		baseList = m.RBStations
+		baseList = m.Store.GetFavorites()
 	case 5:
-		baseList = m.Store.Local
+		baseList = m.RBStations
 	case 6:
+		baseList = m.Store.Local
+	case 7:
 		baseList = nil
 	default:
 		baseList = m.Store.GetAllStations()
 	}
 
 	selectedGenre := ""
-	if m.ActiveTab == 2 {
+	if m.ActiveTab == 3 {
 		selectedGenre = m.SelectedGenre
 	}
 
@@ -237,7 +248,15 @@ func (m *Model) RefreshStations() {
 		selectedActivity = m.SelectedActivity
 	}
 
-	m.Stations = radio.FilterWithActivity(baseList, m.SearchQuery, selectedGenre, selectedActivity)
+	selectedCountry := ""
+	if m.ActiveTab == 2 {
+		selectedCountry = m.SelectedCountry
+	}
+
+	m.Countries = m.Store.GetCountries()
+	m.Genres = m.Store.GetCategories()
+
+	m.Stations = radio.FilterWithLocation(baseList, m.SearchQuery, selectedGenre, selectedActivity, selectedCountry)
 	if m.SelectedIndex < 0 {
 		m.SelectedIndex = 0
 	}
@@ -256,7 +275,7 @@ func (m Model) WindowTitle() string {
 		timerPrefix = m.Timer.WindowTitleBadge()
 	}
 
-	tabNames := []string{"Activities", "Catalog", "Genres", "Favorites", "RadioBrowser", "Custom", "History"}
+	tabNames := []string{"Activities", "Catalog", "Countries", "Genres", "Favorites", "RadioBrowser", "Custom", "History"}
 	tabName := "Activities"
 	if m.ActiveTab >= 0 && m.ActiveTab < len(tabNames) {
 		tabName = tabNames[m.ActiveTab]

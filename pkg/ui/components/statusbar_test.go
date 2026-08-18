@@ -32,7 +32,7 @@ func TestRenderStatusBar(t *testing.T) {
 
 	// 4. History tab at multiple widths
 	for _, w := range []int{100, 70, 45} {
-		histOut := RenderStatusBar("", "", 6, w, th)
+		histOut := RenderStatusBar("", "", 7, w, th)
 		if !strings.Contains(histOut, "Yank") {
 			t.Errorf("Expected Yank key in history statusbar at width %d, got: %s", w, histOut)
 		}

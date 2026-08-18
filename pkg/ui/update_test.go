@@ -401,7 +401,7 @@ func TestModalsKeyboardHandling(t *testing.T) {
 	// 1. Add Station Modal
 	m.ShowAddModal = true
 	m.AddFocusIdx = 0
-	m.AddInputs = []string{"My Custom Station", "https://stream.example.com", "Electronic", "US", "128", "MP3", "https://example.com"}
+	m.AddInputs = []string{"My Custom Station", "https://stream.example.com", "Electronic", "US", "New York", "FM", "128"}
 
 	// Test Tab to cycle inputs
 	mModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})

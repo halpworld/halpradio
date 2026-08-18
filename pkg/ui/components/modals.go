@@ -152,6 +152,8 @@ func RenderAddStationModal(
 		"URL *:",
 		"Genre:",
 		"Country:",
+		"City:",
+		"Band/Type:",
 		"Bitrate:",
 	}
 

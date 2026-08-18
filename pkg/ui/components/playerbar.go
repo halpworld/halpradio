@@ -97,6 +97,17 @@ func RenderPlayerBar(
 
 	stationName := truncate(currStation.Name, maxLine1Left-4)
 	line1Left := fmt.Sprintf("%s %s", currStation.CountryFlag(), titleStyle.Render(stationName))
+
+	broadcastBadge := currStation.BroadcastBadge()
+	bandStyle := lipgloss.NewStyle().Foreground(th.Playing).Bold(true)
+	if !currStation.IsTerrestrial() {
+		bandStyle = lipgloss.NewStyle().Foreground(th.Muted)
+	}
+	bandRendered := " " + bandStyle.Render("["+broadcastBadge+"]")
+	if lipgloss.Width(line1Left)+lipgloss.Width(bandRendered) <= maxLine1Left {
+		line1Left += bandRendered
+	}
+
 	if currStation.Genre != "" && lipgloss.Width(line1Left)+lipgloss.Width(" ("+currStation.Genre+")") <= maxLine1Left {
 		line1Left += " " + genreStyle.Render("("+currStation.Genre+")")
 	}
