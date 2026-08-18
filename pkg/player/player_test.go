@@ -475,3 +475,42 @@ func TestICYListenerStationMismatchIgnored(t *testing.T) {
 		// Expected: no track dispatched
 	}
 }
+
+func TestPlayerManagerVolumeAndResumeEdgeCases(t *testing.T) {
+	pm := NewManager("auto", 80, nil)
+
+	// Test SetVolume clamping
+	vHigh := pm.SetVolume(150)
+	if vHigh != 100 || pm.Volume() != 100 {
+		t.Errorf("expected volume clamped to 100, got %d", vHigh)
+	}
+
+	vLow := pm.SetVolume(-20)
+	if vLow != 0 || pm.Volume() != 0 {
+		t.Errorf("expected volume clamped to 0, got %d", vLow)
+	}
+
+	// Test ToggleMute while 0 volume
+	pm.SetVolume(75)
+	if !pm.ToggleMute() || !pm.IsMuted() {
+		t.Errorf("expected isMuted true after ToggleMute")
+	}
+	if pm.ToggleMute() || pm.IsMuted() {
+		t.Errorf("expected isMuted false after second ToggleMute")
+	}
+
+	// Test Resume when no station has been played (safe no-op)
+	if err := pm.Resume(); err != nil {
+		t.Errorf("expected no error resuming with no current station, got %v", err)
+	}
+
+	// Test Resume when status is StatusStopped
+	st := radio.Station{ID: "test-st", Name: "Test Station", URL: "http://example.com/stream"}
+	pm.mu.Lock()
+	pm.currentStation = &st
+	pm.status = StatusStopped
+	pm.mu.Unlock()
+
+	// Should not error
+	_ = pm.Resume()
+}

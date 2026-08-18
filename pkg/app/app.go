@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -199,33 +200,245 @@ func RunPluginCLI(args []string, out io.Writer) (bool, error) {
 	}
 }
 
+// RunCurrent handles `halpradio current [--json]` CLI query mode for tmux / Waybar / status bars.
+func RunCurrent(args []string, out io.Writer) (bool, error) {
+	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
+		fmt.Fprintln(out, "Usage: halpradio current [--json]")
+		fmt.Fprintln(out, "Outputs currently playing station and track for tmux, Waybar, SketchyBar, or Polybar.")
+		return true, nil
+	}
+
+	isJSON := false
+	for _, arg := range args {
+		if arg == "--json" || arg == "-json" || arg == "-j" {
+			isJSON = true
+		}
+	}
+
+	resp, err := desktop.SendIPCCommand("", "current")
+	if err != nil {
+		if isJSON {
+			errPayload := map[string]string{
+				"status": "stopped",
+				"error":  err.Error(),
+			}
+			data, _ := json.MarshalIndent(errPayload, "", "  ")
+			fmt.Fprintln(out, string(data))
+			return false, err
+		}
+		fmt.Fprintf(out, "Error: %v\n", err)
+		return false, err
+	}
+
+	if !resp.Success {
+		if isJSON {
+			errPayload := map[string]string{
+				"status": "stopped",
+				"error":  resp.Message,
+			}
+			data, _ := json.MarshalIndent(errPayload, "", "  ")
+			fmt.Fprintln(out, string(data))
+			return false, fmt.Errorf("%s", resp.Message)
+		}
+		fmt.Fprintf(out, "Error: %s\n", resp.Message)
+		return false, fmt.Errorf("%s", resp.Message)
+	}
+
+	if isJSON {
+		if resp.Status != nil {
+			data, err := json.MarshalIndent(resp.Status, "", "  ")
+			if err != nil {
+				return false, err
+			}
+			fmt.Fprintln(out, string(data))
+		} else {
+			fmt.Fprintln(out, "{}")
+		}
+		return true, nil
+	}
+
+	// Plain text output for status bars
+	if resp.Status == nil {
+		fmt.Fprintln(out, "[STOPPED]")
+		return true, nil
+	}
+
+	st := resp.Status
+	station := desktop.SanitizeString(st.StationName, 256)
+	if station == "" {
+		station = desktop.SanitizeString(st.Station, 256)
+	}
+	track := desktop.SanitizeString(st.Track, 512)
+	if track == "" && (st.Artist != "" || st.Title != "") {
+		artist := desktop.SanitizeString(st.Artist, 256)
+		title := desktop.SanitizeString(st.Title, 256)
+		if artist != "" && title != "" {
+			track = fmt.Sprintf("%s - %s", artist, title)
+		} else if title != "" {
+			track = title
+		}
+	}
+
+	switch strings.ToLower(st.Status) {
+	case "playing":
+		if station != "" && track != "" && track != station {
+			fmt.Fprintf(out, "%s: %s\n", station, track)
+		} else if station != "" {
+			fmt.Fprintf(out, "%s\n", station)
+		} else if track != "" {
+			fmt.Fprintf(out, "%s\n", track)
+		} else {
+			fmt.Fprintln(out, "Streaming Live...")
+		}
+	case "paused":
+		if station != "" && track != "" && track != station {
+			fmt.Fprintf(out, "[PAUSED] %s: %s\n", station, track)
+		} else if station != "" {
+			fmt.Fprintf(out, "[PAUSED] %s\n", station)
+		} else {
+			fmt.Fprintln(out, "[PAUSED]")
+		}
+	case "stopped":
+		fmt.Fprintln(out, "[STOPPED]")
+	default:
+		cleanStatus := desktop.SanitizeString(st.Status, 32)
+		if station != "" {
+			fmt.Fprintf(out, "[%s] %s\n", strings.ToUpper(cleanStatus), station)
+		} else {
+			fmt.Fprintf(out, "[%s]\n", strings.ToUpper(cleanStatus))
+		}
+	}
+
+	return true, nil
+}
+
+// RunStatus handles `halpradio status [--json]` CLI query mode.
+func RunStatus(args []string, out io.Writer) (bool, error) {
+	isJSON := false
+	for _, arg := range args {
+		if arg == "--json" || arg == "-json" || arg == "-j" {
+			isJSON = true
+		}
+	}
+
+	if isJSON {
+		return RunCurrent(args, out)
+	}
+
+	resp, err := desktop.SendIPCCommand("", "status")
+	if err != nil {
+		fmt.Fprintf(out, "Status query error: %v\n", err)
+		return false, err
+	}
+
+	if !resp.Success {
+		fmt.Fprintf(out, "Error: %s\n", desktop.SanitizeString(resp.Message, 256))
+		return false, fmt.Errorf("%s", resp.Message)
+	}
+
+	if resp.Status != nil {
+		stName := desktop.SanitizeString(resp.Status.StationName, 256)
+		if stName == "" {
+			stName = desktop.SanitizeString(resp.Status.Station, 256)
+		}
+		cleanStatus := desktop.SanitizeString(resp.Status.Status, 32)
+		cleanBackend := desktop.SanitizeString(resp.Status.Backend, 32)
+		if stName != "" {
+			track := desktop.SanitizeString(resp.Status.Track, 512)
+			if track == "" {
+				track = stName
+			}
+			fmt.Fprintf(out, "[%s] %s - %s (vol: %d%%, backend: %s)\n", cleanStatus, stName, track, resp.Status.Volume, cleanBackend)
+		} else {
+			fmt.Fprintf(out, "[%s] Volume: %d%%\n", cleanStatus, resp.Status.Volume)
+		}
+	} else {
+		fmt.Fprintln(out, "[STOPPED]")
+	}
+	return true, nil
+}
+
 // RunRemote executes an IPC command against an active halpradio instance.
 func RunRemote(args []string, out io.Writer) (bool, error) {
-	if len(args) == 0 {
-		fmt.Fprintln(out, "Usage: halpradio remote <command>")
-		fmt.Fprintln(out, "Commands: play-pause, play, pause, stop, next, prev, volup, voldown, mute, random, status")
+	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
+		fmt.Fprintln(out, "Usage: halpradio remote <command> [--json]")
+		fmt.Fprintln(out, "Commands: toggle, play, pause, stop, next, prev, volup, voldown, mute, random, status, current")
 		return true, nil
 	}
 
 	actionStr := args[0]
+	isJSON := false
+	for _, arg := range args[1:] {
+		if arg == "--json" || arg == "-json" || arg == "-j" {
+			isJSON = true
+		}
+	}
+
+	if actionStr == "current" {
+		return RunCurrent(args[1:], out)
+	}
+	if actionStr == "status" && isJSON {
+		return RunCurrent(args[1:], out)
+	}
+
 	resp, err := desktop.SendIPCCommand("", actionStr)
 	if err != nil {
+		if isJSON {
+			errPayload := map[string]string{
+				"status": "error",
+				"error":  err.Error(),
+			}
+			data, _ := json.MarshalIndent(errPayload, "", "  ")
+			fmt.Fprintln(out, string(data))
+			return false, err
+		}
 		fmt.Fprintf(out, "Remote control error: %v\n", err)
 		return false, err
 	}
 
 	if !resp.Success {
+		if isJSON {
+			errPayload := map[string]string{
+				"status": "error",
+				"error":  resp.Message,
+			}
+			data, _ := json.MarshalIndent(errPayload, "", "  ")
+			fmt.Fprintln(out, string(data))
+			return false, fmt.Errorf("%s", resp.Message)
+		}
 		fmt.Fprintf(out, "Error: %s\n", resp.Message)
 		return false, fmt.Errorf("%s", resp.Message)
 	}
 
+	if isJSON {
+		if resp.Status != nil {
+			data, err := json.MarshalIndent(resp.Status, "", "  ")
+			if err != nil {
+				return false, err
+			}
+			fmt.Fprintln(out, string(data))
+		} else {
+			respJSON := map[string]interface{}{
+				"success": resp.Success,
+				"message": resp.Message,
+			}
+			data, _ := json.MarshalIndent(respJSON, "", "  ")
+			fmt.Fprintln(out, string(data))
+		}
+		return true, nil
+	}
+
 	if resp.Status != nil {
-		if resp.Status.Station != "" {
+		stName := resp.Status.StationName
+		if stName == "" {
+			stName = resp.Status.Station
+		}
+		if stName != "" {
 			track := resp.Status.Track
 			if track == "" {
-				track = resp.Status.Station
+				track = stName
 			}
-			fmt.Fprintf(out, "[%s] %s - %s (vol: %d%%, backend: %s)\n", resp.Status.Status, resp.Status.Station, track, resp.Status.Volume, resp.Status.Backend)
+			fmt.Fprintf(out, "[%s] %s - %s (vol: %d%%, backend: %s)\n", resp.Status.Status, stName, track, resp.Status.Volume, resp.Status.Backend)
 		} else {
 			fmt.Fprintf(out, "[%s] Volume: %d%%\n", resp.Status.Status, resp.Status.Volume)
 		}
@@ -237,30 +450,40 @@ func RunRemote(args []string, out io.Writer) (bool, error) {
 
 // SetupApp parses CLI flags, loads configuration, and initializes the AppInstance.
 func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstance, bool, error) {
-	if len(args) > 0 && args[0] == "remote" {
-		_, err := RunRemote(args[1:], out)
-		return nil, true, err
-	}
-	if len(args) > 0 && args[0] == "plugin" {
-		_, err := RunPluginCLI(args[1:], out)
-		return nil, true, err
-	}
-	if len(args) > 0 && (args[0] == "update-stations" || args[0] == "update-catalog") {
-		cfg, _ := util.LoadConfig()
-		updater := radio.NewCatalogUpdater(cfg.CatalogUpdateURL, cfg.CatalogCacheTTLHours)
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		defer cancel()
-		updated, count, err := updater.CheckAndUpdate(ctx, true)
-		if err != nil {
-			fmt.Fprintf(out, "Catalog update failed: %v\n", err)
+	if len(args) > 0 {
+		switch args[0] {
+		case "remote":
+			_, err := RunRemote(args[1:], out)
 			return nil, true, err
+		case "current":
+			_, err := RunCurrent(args[1:], out)
+			return nil, true, err
+		case "status":
+			_, err := RunStatus(args[1:], out)
+			return nil, true, err
+		case "toggle", "play", "pause", "stop", "next", "prev", "volup", "voldown", "mute", "random":
+			_, err := RunRemote(args, out)
+			return nil, true, err
+		case "plugin":
+			_, err := RunPluginCLI(args[1:], out)
+			return nil, true, err
+		case "update-stations", "update-catalog":
+			cfg, _ := util.LoadConfig()
+			updater := radio.NewCatalogUpdater(cfg.CatalogUpdateURL, cfg.CatalogCacheTTLHours)
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+			updated, count, err := updater.CheckAndUpdate(ctx, true)
+			if err != nil {
+				fmt.Fprintf(out, "Catalog update failed: %v\n", err)
+				return nil, true, err
+			}
+			if updated {
+				fmt.Fprintf(out, "✓ Successfully updated station catalog (%d stations cached to %s)\n", count, util.GetCatalogCacheFile())
+			} else {
+				fmt.Fprintf(out, "✓ Station catalog is already up to date (%d stations)\n", count)
+			}
+			return nil, true, nil
 		}
-		if updated {
-			fmt.Fprintf(out, "✓ Successfully updated station catalog (%d stations cached to %s)\n", count, util.GetCatalogCacheFile())
-		} else {
-			fmt.Fprintf(out, "✓ Station catalog is already up to date (%d stations)\n", count)
-		}
-		return nil, true, nil
 	}
 
 	fs := flag.NewFlagSet("halpradio", flag.ContinueOnError)
@@ -273,6 +496,7 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 	notificationsFlag := fs.Bool("notifications", true, "Enable desktop notifications on song change")
 	mprisFlag := fs.Bool("mpris", true, "Enable Linux MPRIS v2 D-Bus remote interface")
 	ipcFlag := fs.Bool("ipc", true, "Enable local IPC socket for CLI remote control")
+	discordFlag := fs.Bool("discord", true, "Enable Discord Rich Presence (RPC)")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, false, err
@@ -319,6 +543,9 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 	if !*ipcFlag {
 		cfg.IPCEnabled = false
 	}
+	if !*discordFlag {
+		cfg.DiscordRPC = false
+	}
 
 	store := radio.NewStore()
 	if err := store.Load(embeddedCatalog); err != nil {
@@ -354,6 +581,8 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 		NotificationsEnabled: cfg.SongNotifications,
 		MPRISEnabled:         cfg.MPRISEnabled,
 		IPCEnabled:           cfg.IPCEnabled,
+		DiscordEnabled:       cfg.DiscordRPC,
+		DiscordClientID:      cfg.DiscordClientID,
 	}, func(action desktop.MediaAction) {
 		if program == nil {
 			return

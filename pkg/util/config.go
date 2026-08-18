@@ -27,6 +27,8 @@ type Config struct {
 	SongNotifications    bool   `yaml:"song_notifications"`
 	MPRISEnabled         bool   `yaml:"mpris_enabled"`
 	IPCEnabled           bool   `yaml:"ipc_enabled"`
+	DiscordRPC           bool   `yaml:"discord_rpc"`
+	DiscordClientID      string `yaml:"discord_client_id,omitempty"`
 	PluginsEnabled       bool   `yaml:"plugins_enabled"`
 	PluginRegistryURL    string `yaml:"plugin_registry_url,omitempty"`
 	CatalogAutoUpdate    bool   `yaml:"catalog_auto_update"`
@@ -55,6 +57,8 @@ func DefaultConfig() Config {
 		SongNotifications:    true,
 		MPRISEnabled:         true,
 		IPCEnabled:           true,
+		DiscordRPC:           true,
+		DiscordClientID:      "1340000000000000000",
 		PluginsEnabled:       true,
 		PluginRegistryURL:    "https://raw.githubusercontent.com/halpworld/halpradio-plugins/main/registry.json",
 		CatalogAutoUpdate:    true,

@@ -218,30 +218,69 @@ halpradio -backend native
 
 ---
 
-## 🖥️ Desktop Integration: MPRIS v2, Media Keys & CLI Remote
+## 🖥️ Desktop Integration: Discord RPC, Status Bar IPC, MPRIS v2 & Media Keys
 
 `halpradio` provides deep desktop operating system integration across **macOS** and **Linux**:
+
+### 🎮 Discord Rich Presence (RPC)
+Shows live radio playback activity directly on your Discord profile in real time:
+- **Station Name**: e.g. `SomaFM Groove Salad`
+- **Track Info**: e.g. `Tycho - A Walk` (or `Streaming Live...`)
+- **Active Animal DJ Avatar**: Matches your active visualizer (`dj_cat`, `dj_dog`, `dj_bear`, `dj_frog`, `dj_bunny`).
+- **Duration**: Live elapsed listening timer.
+- Non-blocking and silent failover if Discord is not running.
+- Toggle via `-discord=false` flag or `discord_rpc: false` in `config.yaml`.
+
+### 📊 Status Line Query Mode (`tmux`, `Waybar`, `SketchyBar`, `Polybar`)
+Query the running instance instantly from scripts and custom desktop status lines without opening the TUI:
+```bash
+# Plain text output for status lines
+halpradio current
+# Output: SomaFM Groove Salad: Tycho - A Walk
+
+# Full JSON metadata payload for Waybar / Polybar / SketchyBar
+halpradio current --json
+# Output:
+# {
+#   "status": "playing",
+#   "station_id": "somafm_groovesalad",
+#   "station_name": "SomaFM Groove Salad",
+#   "artist": "Tycho",
+#   "title": "A Walk",
+#   "bitrate": 128,
+#   "backend": "mpv",
+#   "volume": 80,
+#   "visualizer": "dj-cat"
+# }
+```
+
+### 🍎 Remote Controls & Hotkey Scripting
+Control playback instantly from the terminal, window managers (i3/sway/hyprland), Raycast, Alfred, or tmux:
+```bash
+# Convenience shortcuts:
+halpradio toggle       # Toggle play / pause
+halpradio next         # Jump to next station
+halpradio prev         # Jump to previous station
+halpradio stop         # Stop playback
+halpradio current      # Query current station & track
+
+# Subcommand style:
+halpradio remote toggle
+halpradio remote volup       # Volume +5%
+halpradio remote voldown     # Volume -5%
+halpradio remote mute        # Toggle mute
+halpradio remote random      # Play random station
+halpradio remote status      # Inspect full status
+```
+- **macOS Shortcuts / Raycast / Alfred**: Map `halpradio toggle` or `halpradio next` to media keys or hotkeys.
+- **tmux**: Add `bind-key P run-shell "halpradio toggle"` and `set -g status-right "#(halpradio current)"` to `~/.tmux.conf`.
+- **Waybar**: Add custom module with `exec: "halpradio current --json"`, `return-type: "json"`.
 
 ### 🐧 Linux MPRIS v2 D-Bus Interface
 Registers standard D-Bus service `org.mpris.MediaPlayer2.halpradio` on the session bus.
 - Control halpradio seamlessly from your keyboard media keys, GNOME / KDE Plasma media panels, and Waybar/Polybar modules.
 - Supports standard MPRIS methods: `PlayPause`, `Play`, `Pause`, `Stop`, `Next`, `Previous`, `Quit`.
 - Control from terminal: `playerctl play-pause`, `playerctl next`, `playerctl previous`, `playerctl stop`.
-
-### 🍎 macOS & CLI Remote Control (`halpradio remote`)
-Control playback instantly without focusing the terminal window:
-```bash
-halpradio remote play-pause  # Toggle play / pause
-halpradio remote next        # Jump to next station
-halpradio remote prev        # Jump to previous station
-halpradio remote volup       # Volume +5%
-halpradio remote voldown     # Volume -5%
-halpradio remote mute        # Toggle mute
-halpradio remote random      # Play random station
-halpradio remote status      # Inspect playback status
-```
-- **macOS Shortcuts / Raycast / Alfred**: Map `halpradio remote play-pause` to hardware F7/F8/F9 or hotkeys.
-- **tmux**: Add `bind-key P run-shell "halpradio remote play-pause"` to `~/.tmux.conf`.
 
 ### 📢 Song Change Desktop Notifications
 Whenever a radio station broadcasts a new track title via ICY metadata, `halpradio` fires a native desktop notification banner:

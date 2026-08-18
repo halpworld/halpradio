@@ -2,7 +2,9 @@ package desktop
 
 import (
 	"runtime"
+	"strings"
 	"sync"
+	"time"
 )
 
 // DesktopConfig configures the desktop integration subsystem.
@@ -10,28 +12,36 @@ type DesktopConfig struct {
 	NotificationsEnabled bool
 	MPRISEnabled         bool
 	IPCEnabled           bool
+	DiscordEnabled       bool
+	DiscordClientID      string
 	SocketPath           string
 	Runner               CommandRunner // Optional custom command runner for notifications (e.g. mock runner for tests)
+	DiscordClient        DiscordClient // Optional custom Discord RPC client (e.g. for testing)
 }
 
-// Manager coordinates OS notifications, MPRIS D-Bus interface, and local IPC.
+// Manager coordinates OS notifications, MPRIS D-Bus interface, local IPC, and Discord RPC.
 type Manager struct {
-	mu       sync.Mutex
-	cfg      DesktopConfig
-	notifier *DesktopNotifier
-	mpris    *MPRISServer
-	ipc      *IPCServer
-	onAction func(MediaAction)
+	mu            sync.Mutex
+	cfg           DesktopConfig
+	notifier      *DesktopNotifier
+	mpris         *MPRISServer
+	ipc           *IPCServer
+	discord       DiscordClient
+	onAction      func(MediaAction)
+	playbackStart time.Time
 
 	// Cached playback state
 	status       string
+	stationID    string
 	stationName  string
 	stationGenre string
 	streamURL    string
+	bitrate      int
 	trackTitle   string
 	volume       int
 	isMuted      bool
 	backend      string
+	visualizer   string
 	closed       bool
 }
 
@@ -42,12 +52,21 @@ func NewManager(cfg DesktopConfig, onAction func(MediaAction)) *Manager {
 		notifier.SetRunner(cfg.Runner)
 	}
 
+	var discordClient DiscordClient
+	if cfg.DiscordClient != nil {
+		discordClient = cfg.DiscordClient
+	} else if cfg.DiscordEnabled {
+		discordClient = NewDiscordRPCClient(cfg.DiscordClientID)
+	}
+
 	m := &Manager{
-		cfg:      cfg,
-		notifier: notifier,
-		onAction: onAction,
-		volume:   80,
-		status:   "STOPPED",
+		cfg:        cfg,
+		notifier:   notifier,
+		discord:    discordClient,
+		onAction:   onAction,
+		volume:     80,
+		status:     "STOPPED",
+		visualizer: "dj-cat",
 	}
 
 	// Start IPC Server if enabled
@@ -126,28 +145,110 @@ func NewManager(cfg DesktopConfig, onAction func(MediaAction)) *Manager {
 
 // UpdatePlayback updates the state in DesktopManager and propagates to MPRIS.
 func (m *Manager) UpdatePlayback(status, stationName, genre, trackTitle, streamURL string, volume int, isMuted bool, backend string) {
+	m.UpdatePlaybackFull(status, "", stationName, genre, trackTitle, streamURL, 0, volume, isMuted, backend, "")
+}
+
+// UpdatePlaybackFull updates the complete playback state in DesktopManager and propagates to MPRIS and Discord RPC.
+func (m *Manager) UpdatePlaybackFull(status, stationID, stationName, genre, trackTitle, streamURL string, bitrate, volume int, isMuted bool, backend, visualizer string) {
 	if m == nil {
 		return
 	}
 
 	m.mu.Lock()
+	prevStatus := m.status
+	prevTrack := m.trackTitle
+	prevStation := m.stationName
+
 	m.status = status
+	m.stationID = stationID
 	m.stationName = stationName
 	m.stationGenre = genre
 	m.trackTitle = trackTitle
 	m.streamURL = streamURL
+	m.bitrate = bitrate
 	m.volume = volume
 	m.isMuted = isMuted
 	m.backend = backend
+	if visualizer != "" {
+		m.visualizer = visualizer
+	}
+
+	// Track playback duration timestamp
+	if strings.ToUpper(status) == "PLAYING" {
+		if strings.ToUpper(prevStatus) != "PLAYING" || prevTrack != trackTitle || prevStation != stationName || m.playbackStart.IsZero() {
+			m.playbackStart = time.Now()
+		}
+	} else if strings.ToUpper(status) == "STOPPED" {
+		m.playbackStart = time.Time{}
+	}
+
 	mpris := m.mpris
+	discord := m.discord
+	playbackStart := m.playbackStart
+	currViz := m.visualizer
 	m.mu.Unlock()
 
+	// Update MPRIS
 	if mpris != nil {
 		normVol := float64(volume) / 100.0
 		if isMuted {
 			normVol = 0.0
 		}
 		mpris.UpdatePlaybackState(status, stationName, genre, trackTitle, streamURL, normVol)
+	}
+
+	// Update Discord Rich Presence
+	if discord != nil {
+		go func() {
+			switch strings.ToUpper(status) {
+			case "PLAYING":
+				details := trackTitle
+				if details == "" || details == stationName {
+					details = "Streaming Live..."
+				}
+				state := stationName
+				if state == "" {
+					state = "Internet Radio"
+				}
+				imgKey, imgHover := GetDiscordDJAsset(currViz)
+				var startTime *time.Time
+				if !playbackStart.IsZero() {
+					startTime = &playbackStart
+				}
+				_ = discord.UpdateActivity(DiscordActivity{
+					State:      state,
+					Details:    details,
+					LargeImage: "halpradio_logo",
+					LargeText:  "halpradio - Terminal Internet Radio",
+					SmallImage: imgKey,
+					SmallText:  imgHover,
+					StartTime:  startTime,
+				})
+			case "PAUSED":
+				details := trackTitle
+				if details == "" {
+					details = "Paused"
+				} else {
+					details = "[Paused] " + details
+				}
+				state := stationName
+				if state == "" {
+					state = "Paused"
+				}
+				imgKey, imgHover := GetDiscordDJAsset(currViz)
+				_ = discord.UpdateActivity(DiscordActivity{
+					State:      state,
+					Details:    details,
+					LargeImage: "halpradio_logo",
+					LargeText:  "halpradio - Terminal Internet Radio",
+					SmallImage: imgKey,
+					SmallText:  imgHover,
+					StartTime:  nil,
+				})
+			case "STOPPED":
+				_ = discord.ClearActivity()
+			}
+		}()
 	}
 }
 
@@ -159,7 +260,7 @@ func (m *Manager) NotifySong(stationName, trackTitle string) {
 	m.mu.Lock()
 	status := m.status
 	m.mu.Unlock()
-	if status == "STOPPED" || status == "PAUSED" {
+	if strings.ToUpper(status) == "STOPPED" || strings.ToUpper(status) == "PAUSED" {
 		return
 	}
 	m.notifier.NotifySong(stationName, trackTitle)
@@ -174,13 +275,35 @@ func (m *Manager) GetPlaybackInfo() *PlaybackInfo {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	artist, title := SplitArtistTitle(m.trackTitle)
+	if title == "" && m.stationName != "" {
+		title = m.stationName
+	}
+	station := m.stationName
+
+	normStatus := strings.ToLower(m.status)
+	if normStatus == "" {
+		normStatus = "stopped"
+	}
+
+	viz := m.visualizer
+	if viz == "" {
+		viz = "dj-cat"
+	}
+
 	return &PlaybackInfo{
-		Status:  m.status,
-		Station: m.stationName,
-		Track:   m.trackTitle,
-		Volume:  m.volume,
-		Muted:   m.isMuted,
-		Backend: m.backend,
+		Status:      normStatus,
+		StationID:   m.stationID,
+		StationName: m.stationName,
+		Station:     station,
+		Artist:      artist,
+		Title:       title,
+		Track:       m.trackTitle,
+		Bitrate:     m.bitrate,
+		Volume:      m.volume,
+		Muted:       m.isMuted,
+		Backend:     m.backend,
+		Visualizer:  viz,
 	}
 }
 
@@ -198,6 +321,16 @@ func (m *Manager) SetNotifierRunner(r CommandRunner) {
 		return
 	}
 	m.notifier.SetRunner(r)
+}
+
+// SetDiscordClient sets a custom Discord client on the manager.
+func (m *Manager) SetDiscordClient(d DiscordClient) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.discord = d
 }
 
 // Close gracefully shuts down all desktop subsystems.
@@ -222,6 +355,11 @@ func (m *Manager) Close() error {
 	if m.mpris != nil {
 		_ = m.mpris.Close()
 		m.mpris = nil
+	}
+
+	if m.discord != nil {
+		_ = m.discord.Close()
+		m.discord = nil
 	}
 
 	return nil

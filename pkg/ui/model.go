@@ -324,25 +324,37 @@ func (m *Model) SetPluginManager(pm *plugin.Manager) {
 
 func (m *Model) SyncDesktop() {
 	st := m.Player.CurrentStation()
+	stationID := ""
 	stationName := ""
 	genre := ""
 	streamURL := ""
+	bitrate := 0
 	if st != nil {
+		stationID = st.ID
 		stationName = st.Name
 		genre = st.Genre
 		streamURL = st.URL
+		bitrate = st.Bitrate
+	}
+
+	vizMode := ""
+	if m.Visualizer != nil {
+		vizMode = m.Visualizer.Mode
 	}
 
 	if m.Desktop != nil {
-		m.Desktop.UpdatePlayback(
+		m.Desktop.UpdatePlaybackFull(
 			string(m.Player.Status()),
+			stationID,
 			stationName,
 			genre,
 			m.Player.CurrentTrack(),
 			streamURL,
+			bitrate,
 			m.Player.Volume(),
 			m.Player.IsMuted(),
 			m.Player.ActiveBackend(),
+			vizMode,
 		)
 	}
 

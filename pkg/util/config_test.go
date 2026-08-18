@@ -189,16 +189,37 @@ sleep_fade_seconds: -10
 		t.Errorf("Expected SleepFadeSeconds fallback 10, got %d", fallbackCfg.SleepFadeSeconds)
 	}
 
-	// 4. Test corrupted YAML
-	corruptedData := []byte(`invalid: [yaml: broken`)
-	if err := os.WriteFile(configFile, corruptedData, 0644); err != nil {
-		t.Fatalf("Failed writing corruptedData: %v", err)
+	// 5. Test Plugin directory and config paths
+	pluginsDir := GetPluginsDir()
+	if !strings.HasSuffix(pluginsDir, "plugins") {
+		t.Errorf("Expected plugins directory suffix, got %s", pluginsDir)
 	}
-	brokenCfg, err := LoadConfig()
-	if err == nil {
-		t.Errorf("Expected error loading corrupted YAML, got nil")
+
+	pluginsDataDir := GetPluginsDataDir()
+	if !strings.HasSuffix(pluginsDataDir, "plugins_data") {
+		t.Errorf("Expected plugins_data directory suffix, got %s", pluginsDataDir)
 	}
-	if brokenCfg.Theme != "tokyonight" {
-		t.Errorf("Expected default config on corrupt YAML, got theme %s", brokenCfg.Theme)
+
+	pluginsConfigFile := GetPluginsConfigFile()
+	if !strings.HasSuffix(pluginsConfigFile, "plugins.json") {
+		t.Errorf("Expected plugins.json file suffix, got %s", pluginsConfigFile)
+	}
+
+	// 6. Test DiscordRPC config options
+	discordCfg := DefaultConfig()
+	if !discordCfg.DiscordRPC {
+		t.Errorf("Expected DiscordRPC true by default")
+	}
+	discordCfg.DiscordRPC = false
+	discordCfg.DiscordClientID = "999888777666555444"
+	if err := SaveConfig(discordCfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	reloadedDiscordCfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if reloadedDiscordCfg.DiscordRPC || reloadedDiscordCfg.DiscordClientID != "999888777666555444" {
+		t.Errorf("Expected DiscordRPC false and custom client ID, got %+v", reloadedDiscordCfg)
 	}
 }

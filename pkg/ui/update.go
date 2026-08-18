@@ -870,6 +870,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.KeyMap.Visualizer):
 			mode := m.Visualizer.CycleMode()
 			m.StatusMessage = fmt.Sprintf("Visualizer mode: %s", mode)
+			m.SyncDesktop()
 		}
 	}
 

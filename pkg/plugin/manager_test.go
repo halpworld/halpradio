@@ -190,3 +190,52 @@ func TestSandboxCapabilities(t *testing.T) {
 		t.Errorf("InvokeHook on non-existent hook returned error: %v", err)
 	}
 }
+
+func TestManagerHelpersAndHandlers(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("XDG_CONFIG_HOME", tempHome)
+
+	mgr := NewManager("https://example.com/registry.json")
+	if mgr.RegistryClient() == nil {
+		t.Errorf("expected non-nil RegistryClient")
+	}
+
+	var flashReceived string
+	mgr.SetFlashHandler(func(msg string) {
+		flashReceived = msg
+	})
+	if mgr.onFlash != nil {
+		mgr.onFlash("test flash")
+	}
+	if flashReceived != "test flash" {
+		t.Errorf("expected flash handler to receive message")
+	}
+
+	var logReceived string
+	mgr.SetLogHandler(func(level int, msg string) {
+		logReceived = msg
+	})
+
+	mgr.log(1, "test log")
+	if logReceived != "test log" {
+		t.Errorf("expected log handler to receive message")
+	}
+
+	_ = mgr.Init()
+	defer mgr.Close()
+
+	// Test ToRegistryPlugin
+	regP := RegistryPlugin{
+		ID:          "demo-plugin",
+		Name:        "Demo",
+		Version:     "2.0.0",
+		Author:      "author",
+		Description: "desc",
+		DownloadURL: "https://demo.com/plugin.wasm",
+	}
+	convP := regP.ToRegistryPlugin()
+	if convP.ID != "demo-plugin" || convP.Version != "2.0.0" {
+		t.Errorf("unexpected ToRegistryPlugin conversion: %+v", convP)
+	}
+}

@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"net"
 	"testing"
 )
 
@@ -139,5 +140,33 @@ func TestStorageAndEventPermissions(t *testing.T) {
 	}
 	if p.HasEvent("on_custom_other") {
 		t.Errorf("expected HasEvent(on_custom_other) to be false")
+	}
+}
+
+func TestIsPrivateOrLoopbackIP(t *testing.T) {
+	privateIPs := []string{
+		"127.0.0.1",
+		"10.0.0.1",
+		"172.16.0.1",
+		"192.168.1.1",
+		"169.254.1.1",
+		"::1",
+		"fc00::1",
+		"fe80::1",
+	}
+
+	for _, ipStr := range privateIPs {
+		ip := net.ParseIP(ipStr)
+		if ip == nil {
+			t.Fatalf("failed to parse IP: %s", ipStr)
+		}
+		if !IsPrivateOrLoopbackIP(ip) {
+			t.Errorf("expected IsPrivateOrLoopbackIP(%s) to be true", ipStr)
+		}
+	}
+
+	publicIP := net.ParseIP("8.8.8.8")
+	if IsPrivateOrLoopbackIP(publicIP) {
+		t.Errorf("expected IsPrivateOrLoopbackIP(8.8.8.8) to be false")
 	}
 }

@@ -38,7 +38,7 @@ func TestDesktopManagerLifecycle(t *testing.T) {
 
 	// Verify initial playback info
 	info := mgr.GetPlaybackInfo()
-	if info.Status != "STOPPED" || info.Volume != 80 {
+	if info.Status != "stopped" || info.Volume != 80 {
 		t.Errorf("unexpected initial info: %+v", info)
 	}
 
@@ -46,7 +46,7 @@ func TestDesktopManagerLifecycle(t *testing.T) {
 	mgr.UpdatePlayback("PLAYING", "Synthwave City", "Synthwave", "Kavinsky - Nightcall", "http://stream.url", 90, false, "native")
 
 	info = mgr.GetPlaybackInfo()
-	if info.Status != "PLAYING" || info.Station != "Synthwave City" || info.Track != "Kavinsky - Nightcall" || info.Volume != 90 {
+	if info.Status != "playing" || info.Station != "Synthwave City" || info.Track != "Kavinsky - Nightcall" || info.Artist != "Kavinsky" || info.Title != "Nightcall" || info.Volume != 90 {
 		t.Errorf("unexpected updated info: %+v", info)
 	}
 
@@ -100,9 +100,28 @@ func TestDesktopManagerNilSafe(t *testing.T) {
 	mgr.UpdatePlayback("PLAYING", "Station", "Genre", "Track", "URL", 80, false, "mpv")
 	mgr.NotifySong("Station", "Track")
 	mgr.SetNotificationsEnabled(false)
+	mgr.SetNotifierRunner(nil)
+	mgr.SetDiscordClient(nil)
 	info := mgr.GetPlaybackInfo()
 	if info == nil {
 		t.Errorf("expected non-nil PlaybackInfo")
 	}
 	_ = mgr.Close()
+}
+
+func TestDesktopNotifierGetRunnerAndSetters(t *testing.T) {
+	notifier := NewNotifier(true)
+	customRunner := func(ctx context.Context, name string, args ...string) error {
+		return nil
+	}
+	notifier.SetRunner(customRunner)
+	if notifier.GetRunner() == nil {
+		t.Errorf("expected non-nil runner")
+	}
+
+	mgr := NewManager(DesktopConfig{}, nil)
+	defer mgr.Close()
+	mgr.SetNotifierRunner(customRunner)
+	mockD := &MockDiscordClient{}
+	mgr.SetDiscordClient(mockD)
 }

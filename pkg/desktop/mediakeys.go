@@ -71,7 +71,7 @@ func ParseAction(str string) (MediaAction, bool) {
 		return ActionRandom, true
 	case "quit", "exit":
 		return ActionQuit, true
-	case "status", "info":
+	case "status", "info", "current":
 		return ActionStatus, true
 	default:
 		return "", false

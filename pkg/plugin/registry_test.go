@@ -73,3 +73,51 @@ func TestRegistryDownloadAndInstallSecurity(t *testing.T) {
 		t.Errorf("expected error for directory traversal plugin ID")
 	}
 }
+
+func TestFetchRegistry(t *testing.T) {
+	regData := []byte(`{
+		"version": "1.0.0",
+		"plugins": [
+			{
+				"id": "discord-rpc",
+				"name": "Discord Rich Presence",
+				"version": "1.0.0",
+				"author": "halpradio",
+				"description": "Show status on Discord",
+				"download_url": "https://example.com/discord.wasm",
+				"checksum": "abc123"
+			}
+		]
+	}`)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(regData)
+	}))
+	defer ts.Close()
+
+	client := NewRegistryClient(ts.URL)
+	index, err := client.FetchRegistry(context.Background())
+	if err != nil {
+		t.Fatalf("FetchRegistry failed: %v", err)
+	}
+	if len(index.Plugins) != 1 || index.Plugins[0].ID != "discord-rpc" {
+		t.Errorf("unexpected registry index: %+v", index)
+	}
+
+	// Test fallback on 500 error
+	badServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer badServer.Close()
+
+	badClient := NewRegistryClient(badServer.URL)
+	fallbackIndex, err := badClient.FetchRegistry(context.Background())
+	if err == nil {
+		t.Errorf("expected error when registry returns 500")
+	}
+	if len(fallbackIndex.Plugins) == 0 {
+		t.Errorf("expected non-empty fallback registry")
+	}
+}

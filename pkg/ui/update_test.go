@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/halpworld/halpradio/pkg/desktop"
 	"github.com/halpworld/halpradio/pkg/player"
+	"github.com/halpworld/halpradio/pkg/plugin"
 	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/util"
 )
@@ -386,5 +388,95 @@ func TestModelLifecycleAndInit(t *testing.T) {
 	title := m.WindowTitle()
 	if title == "" {
 		t.Errorf("Expected non-empty window title")
+	}
+}
+
+func TestModalsKeyboardHandling(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	m := createTestModel()
+
+	// 1. Add Station Modal
+	m.ShowAddModal = true
+	m.AddFocusIdx = 0
+	m.AddInputs = []string{"My Custom Station", "https://stream.example.com", "Electronic", "US", "128", "MP3", "https://example.com"}
+
+	// Test Tab to cycle inputs
+	mModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = mModel.(Model)
+	if m.AddFocusIdx != 1 {
+		t.Errorf("expected AddFocusIdx = 1 after Tab, got %d", m.AddFocusIdx)
+	}
+
+	// Test Enter to submit
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mModel.(Model)
+	if m.ShowAddModal {
+		t.Errorf("expected ShowAddModal = false after successful submission")
+	}
+
+	// Test Escape on Add Modal
+	m.ShowAddModal = true
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = mModel.(Model)
+	if m.ShowAddModal {
+		t.Errorf("expected ShowAddModal = false after Escape")
+	}
+
+	// 2. Permission Approval Modal
+	m.ShowPermissionApproval = true
+	m.ApprovalPlugin = plugin.PluginInfo{
+		Manifest: plugin.Manifest{ID: "test-plugin"},
+	}
+
+	// Press 'y' to approve
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	m = mModel.(Model)
+	if m.ShowPermissionApproval {
+		t.Errorf("expected ShowPermissionApproval = false after 'y'")
+	}
+
+	// 3. Plugin Modal
+	m.ShowPluginModal = true
+	m.PluginModalTab = 0 // Installed tab
+
+	// Test Tab to switch plugin tab
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = mModel.(Model)
+	if m.PluginModalTab != 1 {
+		t.Errorf("expected PluginModalTab = 1 after Tab, got %d", m.PluginModalTab)
+	}
+
+	// Test Esc to close plugin modal
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = mModel.(Model)
+	if m.ShowPluginModal {
+		t.Errorf("expected ShowPluginModal = false after Esc")
+	}
+}
+
+func TestCatalogUpdateHandling(t *testing.T) {
+	m := createTestModel()
+
+	// 1. CatalogUpdatedMsg updated
+	mModel, _ := m.Update(CatalogUpdatedMsg{Updated: true, StationsCount: 250})
+	m = mModel.(Model)
+	if !strings.Contains(m.StatusMessage, "Station catalog updated") {
+		t.Errorf("expected update status message, got %s", m.StatusMessage)
+	}
+
+	// 2. Plugin flash and notification messages
+	mModel, _ = m.Update(PluginFlashMsg("Plugin flash message"))
+	m = mModel.(Model)
+	if m.StatusMessage != "Plugin flash message" {
+		t.Errorf("expected flash message, got %s", m.StatusMessage)
+	}
+
+	mModel, _ = m.Update(PluginNotificationMsg{Title: "PTitle", Message: "PBody"})
+	m = mModel.(Model)
+	if !strings.Contains(m.StatusMessage, "PTitle") {
+		t.Errorf("expected notification title in status, got %s", m.StatusMessage)
 	}
 }

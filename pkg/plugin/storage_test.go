@@ -90,3 +90,19 @@ func TestStorageSecurityValidation(t *testing.T) {
 		t.Errorf("expected error for value exceeding MaxValueLength")
 	}
 }
+
+func TestStorageGetAll(t *testing.T) {
+	tempDir := t.TempDir()
+	s, err := NewStorage(tempDir, "getall-plugin")
+	if err != nil {
+		t.Fatalf("NewStorage failed: %v", err)
+	}
+
+	_ = s.Set("k1", "v1")
+	_ = s.Set("k2", "v2")
+
+	all := s.GetAll()
+	if len(all) != 2 || all["k1"] != "v1" || all["k2"] != "v2" {
+		t.Errorf("unexpected GetAll() result: %+v", all)
+	}
+}
