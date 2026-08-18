@@ -164,7 +164,7 @@ halpradio --version
 | `n` / `]` | Jump and play **Next station** in list |
 | `N` / `[` | Jump and play **Previous station** in list |
 | `h` / `l` or `←` / `→` | Switch focus between sidebar and main list / Prev & next tab |
-| `1` - `7` | Direct jump to Tab (`1: Catalog`, `2: Activities`, `3: Genres`, `4: Favorites`, `5: RadioBrowser`, `6: Custom`, `7: History`) |
+| `1` - `7` | Direct jump to Tab (`1: Activities`, `2: Catalog`, `3: Genres`, `4: Favorites`, `5: RadioBrowser`, `6: Custom`, `7: History`) |
 | `H` | Jump directly to Track History tab |
 | `Tab` / `Shift+Tab` | Cycle focus between sidebar and station list |
 | `g` / `G` | Jump to top / bottom of list |

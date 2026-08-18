@@ -78,7 +78,7 @@ type Model struct {
 	Desktop    *desktop.Manager
 	PluginMgr  *plugin.Manager
 
-	ActiveTab     int // 0: Catalog, 1: Activities, 2: Genres, 3: Favorites, 4: RadioBrowser, 5: Custom, 6: History
+	ActiveTab     int // 0: Activities, 1: Catalog, 2: Genres, 3: Favorites, 4: RadioBrowser, 5: Custom, 6: History
 	ActiveFocus   FocusArea
 	Stations      []radio.Station
 	RBStations    []radio.Station
@@ -171,7 +171,7 @@ func NewModel(
 		Visualizer:                 viz,
 		Timer:                      tm,
 		ActiveTab:                  0,
-		ActiveFocus:                FocusMainList,
+		ActiveFocus:                FocusSidebar,
 		Activities:                 radio.DefaultActivities,
 		SelectedActivity:           "",
 		ActivityIndex:              0,
@@ -197,7 +197,7 @@ func (m *Model) SwitchTab(tabIndex int) {
 	m.ActiveTab = tabIndex
 	m.SelectedIndex = 0
 	m.HistoryIndex = 0
-	if m.ActiveTab == 1 || m.ActiveTab == 2 {
+	if m.ActiveTab == 0 || m.ActiveTab == 2 {
 		m.ActiveFocus = FocusSidebar
 	} else {
 		m.ActiveFocus = FocusMainList
@@ -233,7 +233,7 @@ func (m *Model) RefreshStations() {
 	}
 
 	selectedActivity := ""
-	if m.ActiveTab == 1 {
+	if m.ActiveTab == 0 {
 		selectedActivity = m.SelectedActivity
 	}
 
@@ -256,8 +256,8 @@ func (m Model) WindowTitle() string {
 		timerPrefix = m.Timer.WindowTitleBadge()
 	}
 
-	tabNames := []string{"Catalog", "Activities", "Genres", "Favorites", "RadioBrowser", "Custom", "History"}
-	tabName := "Catalog"
+	tabNames := []string{"Activities", "Catalog", "Genres", "Favorites", "RadioBrowser", "Custom", "History"}
+	tabName := "Activities"
 	if m.ActiveTab >= 0 && m.ActiveTab < len(tabNames) {
 		tabName = tabNames[m.ActiveTab]
 	}

@@ -64,8 +64,8 @@ func RenderHeader(width int, activeTab int, status player.PlayStatus, backend st
 	padX := 1
 	if width >= 102 {
 		tabs = []string{
-			"1: Catalog",
-			"2: Activities",
+			"1: Activities",
+			"2: Catalog",
 			"3: Genres",
 			"4: Favorites",
 			"5: RadioBrowser",
@@ -74,8 +74,8 @@ func RenderHeader(width int, activeTab int, status player.PlayStatus, backend st
 		}
 	} else if width >= 78 {
 		tabs = []string{
-			"1:Catalog",
-			"2:Modes",
+			"1:Activities",
+			"2:Catalog",
 			"3:Genres",
 			"4:Favs",
 			"5:Online",
@@ -88,8 +88,8 @@ func RenderHeader(width int, activeTab int, status player.PlayStatus, backend st
 	} else {
 		padX = 0
 		tabs = []string{
-			"1:Cat",
-			"2:Act",
+			"1:Act",
+			"2:Cat",
 			"3:Gen",
 			"4:Fav",
 			"5:Web",

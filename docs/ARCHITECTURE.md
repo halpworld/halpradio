@@ -24,7 +24,7 @@ flowchart TD
 
 1. **Model ([`pkg/ui/model.go`](../pkg/ui/model.go))**  
    Houses all application state including:
-   - Active tab index (`1: Catalog`, `2: Activities`, `3: Genres`, `4: Favorites`, `5: RadioBrowser`, `6: Custom`)
+   - Active tab index (`1: Activities`, `2: Catalog`, `3: Genres`, `4: Favorites`, `5: RadioBrowser`, `6: Custom`, `7: History`)
    - Station catalog & store handle ([`pkg/radio/store.go`](../pkg/radio/store.go))
    - Audio player handle ([`pkg/player/player.go`](../pkg/player/player.go))
    - UI focus states (`FocusMainList`, `FocusSidebar`), list cursor selections, and search queries

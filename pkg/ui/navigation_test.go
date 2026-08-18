@@ -55,15 +55,18 @@ stations:
 	return NewModel(store, pm, cfg)
 }
 
-func TestCatalogTabDisplaysAllStations(t *testing.T) {
+func TestActivitiesLandingPage(t *testing.T) {
 	m := createTestModel()
 
-	// Initial state on catalog tab (0)
+	// Initial state on Activities landing tab (0)
 	if m.ActiveTab != 0 {
-		t.Fatalf("Expected initial ActiveTab to be 0, got %d", m.ActiveTab)
+		t.Fatalf("Expected initial ActiveTab to be 0 (Activities), got %d", m.ActiveTab)
+	}
+	if m.ActiveFocus != FocusSidebar {
+		t.Errorf("Expected initial ActiveFocus to be FocusSidebar on Activities landing page")
 	}
 	if len(m.Stations) != 4 {
-		t.Fatalf("Expected 4 stations on catalog tab, got %d", len(m.Stations))
+		t.Fatalf("Expected 4 stations on activities tab, got %d", len(m.Stations))
 	}
 
 	// Switch to Genres tab (2) and select "Ambient"
@@ -81,8 +84,8 @@ func TestCatalogTabDisplaysAllStations(t *testing.T) {
 		t.Fatalf("Expected 2 Ambient stations on Genres tab, got %d", len(m.Stations))
 	}
 
-	// Switch back to Catalog tab (0)
-	m.SwitchTab(0)
+	// Switch to Catalog tab (1)
+	m.SwitchTab(1)
 	if m.ActiveFocus != FocusMainList {
 		t.Errorf("Expected ActiveFocus to be FocusMainList on Catalog tab")
 	}
@@ -95,8 +98,7 @@ func TestCatalogTabDisplaysAllStations(t *testing.T) {
 func TestActivitiesTabFiltering(t *testing.T) {
 	m := createTestModel()
 
-	// Switch to Activities tab (1)
-	m.SwitchTab(1)
+	// Landing is Activities tab (0)
 	if m.ActiveFocus != FocusSidebar {
 		t.Errorf("Expected ActiveFocus to be FocusSidebar on Activities tab")
 	}
@@ -115,10 +117,15 @@ func TestActivitiesTabFiltering(t *testing.T) {
 func TestTabSwitchingResetsFocusToMainList(t *testing.T) {
 	m := createTestModel()
 
-	// Switch to Activities tab (1)
-	m.SwitchTab(1)
+	// Landing is Activities tab (0)
 	if m.ActiveFocus != FocusSidebar {
-		t.Errorf("Expected ActiveFocus to be FocusSidebar when switching to Activities tab")
+		t.Errorf("Expected ActiveFocus to be FocusSidebar on Activities tab")
+	}
+
+	// Switch to Catalog tab (1)
+	m.SwitchTab(1)
+	if m.ActiveFocus != FocusMainList {
+		t.Errorf("Expected ActiveFocus to be FocusMainList when switching to Catalog tab")
 	}
 
 	// Switch to Genres tab (2)
@@ -133,18 +140,18 @@ func TestTabSwitchingResetsFocusToMainList(t *testing.T) {
 		t.Errorf("Expected ActiveFocus to be FocusMainList when switching to Favorites tab")
 	}
 
-	// Switch to Catalog tab (0)
+	// Switch to Activities tab (0)
 	m.SwitchTab(0)
-	if m.ActiveFocus != FocusMainList {
-		t.Errorf("Expected ActiveFocus to be FocusMainList when switching to Catalog tab")
+	if m.ActiveFocus != FocusSidebar {
+		t.Errorf("Expected ActiveFocus to be FocusSidebar when switching to Activities tab")
 	}
 }
 
 func TestUpDownNavigationOnCatalogMovesStationCursor(t *testing.T) {
 	m := createTestModel()
 
-	// Ensure we are on Catalog tab
-	m.SwitchTab(0)
+	// Switch to Catalog tab (1)
+	m.SwitchTab(1)
 	if m.SelectedIndex != 0 {
 		t.Fatalf("Expected SelectedIndex 0, got %d", m.SelectedIndex)
 	}

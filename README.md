@@ -51,14 +51,14 @@ docker run --rm -it --device /dev/snd halpworld/halpradio:latest
   <img src="./docs/images/demo.gif" alt="halpradio Interactive Terminal Demo" width="850" />
 </p>
 
-### 📻 Main Station Catalog & Live Audio Playback
+### 💼 Activity Modes Landing Page & Split-View Sidebar
 <p align="center">
-  <img src="./docs/images/preview.png" alt="halpradio Main Station Catalog — Real Terminal Screenshot" width="850" />
+  <img src="./docs/images/preview.png" alt="halpradio Activity Modes Landing Page — Real Terminal Screenshot" width="850" />
 </p>
 
-### 💼 Activity Modes & Split-View Sidebar
+### 📻 Curated Station Catalog Browser
 <p align="center">
-  <img src="./docs/images/workmodes.png" alt="halpradio Work Modes Tab — Real Terminal Screenshot" width="850" />
+  <img src="./docs/images/catalog.png" alt="halpradio Station Catalog Browser — Real Terminal Screenshot" width="850" />
 </p>
 
 ### ⌨️ WhichKey Overlay & Theme Selection
@@ -301,7 +301,7 @@ Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Over
 | | `n` / `]` | Jump and play **Next station** in active list |
 | | `N` / `[` | Jump and play **Previous station** in active list |
 | | `h` / `l` or `←` / `→` | Focus sidebar / main list or prev/next tab |
-| | `1` - `7` | Direct jump to Tab (1: Catalog, 2: Activities, 3: Genres, 4: Favorites, 5: Online, 6: Custom, 7: History) |
+| | `1` - `7` | Direct jump to Tab (1: Activities, 2: Catalog, 3: Genres, 4: Favorites, 5: Online, 6: Custom, 7: History) |
 | | `H` | Jump directly to Track History tab |
 | | `g` / `G` | Jump to top / bottom of list |
 | | `Ctrl+u` / `Ctrl+d` | Half page up / down |

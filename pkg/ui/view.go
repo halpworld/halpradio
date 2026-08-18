@@ -98,7 +98,7 @@ func (m Model) View() string {
 	}
 
 	var mainArea string
-	if m.ActiveTab == 1 {
+	if m.ActiveTab == 0 {
 		var actItems []string
 		var selectedStr string
 		for i, act := range m.Activities {

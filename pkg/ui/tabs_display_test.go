@@ -49,8 +49,8 @@ stations:
 	}
 
 	tabNames := []string{
-		"0: Catalog",
-		"1: Activities",
+		"0: Activities",
+		"1: Catalog",
 		"2: Genres",
 		"3: Favorites",
 		"4: RadioBrowser",

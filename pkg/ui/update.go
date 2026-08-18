@@ -372,7 +372,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.fetchRegistryCmd()
 
 		case msg.String() == "tab":
-			if m.ActiveTab == 1 || m.ActiveTab == 2 {
+			if m.ActiveTab == 0 || m.ActiveTab == 2 {
 				if m.ActiveFocus == FocusSidebar {
 					m.ActiveFocus = FocusMainList
 				} else {
@@ -383,7 +383,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case msg.String() == "shift+tab":
-			if m.ActiveTab == 1 || m.ActiveTab == 2 {
+			if m.ActiveTab == 0 || m.ActiveTab == 2 {
 				if m.ActiveFocus == FocusSidebar {
 					m.ActiveFocus = FocusMainList
 				} else {
@@ -394,8 +394,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.Up):
-			if (m.ActiveTab == 1 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
-				if m.ActiveTab == 1 {
+			if (m.ActiveTab == 0 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
+				if m.ActiveTab == 0 {
 					if m.ActivityIndex > 0 {
 						m.ActivityIndex--
 						if m.ActivityIndex == 0 {
@@ -427,8 +427,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.Down):
-			if (m.ActiveTab == 1 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
-				if m.ActiveTab == 1 {
+			if (m.ActiveTab == 0 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
+				if m.ActiveTab == 0 {
 					if m.ActivityIndex < len(m.Activities) {
 						m.ActivityIndex++
 						m.SelectedActivity = m.Activities[m.ActivityIndex-1].ID
@@ -453,7 +453,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.Left):
-			if m.ActiveTab == 1 || m.ActiveTab == 2 {
+			if m.ActiveTab == 0 || m.ActiveTab == 2 {
 				if m.ActiveFocus == FocusMainList {
 					m.ActiveFocus = FocusSidebar
 				} else if m.ActiveTab > 0 {
@@ -464,7 +464,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.Right):
-			if m.ActiveTab == 1 || m.ActiveTab == 2 {
+			if m.ActiveTab == 0 || m.ActiveTab == 2 {
 				if m.ActiveFocus == FocusSidebar {
 					m.ActiveFocus = FocusMainList
 				} else if m.ActiveTab < 6 {
@@ -475,8 +475,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.Top):
-			if (m.ActiveTab == 1 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
-				if m.ActiveTab == 1 {
+			if (m.ActiveTab == 0 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
+				if m.ActiveTab == 0 {
 					m.ActivityIndex = 0
 					m.SelectedActivity = ""
 				} else {
@@ -491,8 +491,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.Bottom):
-			if (m.ActiveTab == 1 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
-				if m.ActiveTab == 1 {
+			if (m.ActiveTab == 0 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
+				if m.ActiveTab == 0 {
 					m.ActivityIndex = len(m.Activities)
 					if len(m.Activities) > 0 {
 						m.SelectedActivity = m.Activities[len(m.Activities)-1].ID
@@ -514,8 +514,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.HalfPageUp):
-			if (m.ActiveTab == 1 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
-				if m.ActiveTab == 1 {
+			if (m.ActiveTab == 0 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
+				if m.ActiveTab == 0 {
 					m.ActivityIndex -= 5
 					if m.ActivityIndex < 0 {
 						m.ActivityIndex = 0
@@ -550,8 +550,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.HalfPageDown):
-			if (m.ActiveTab == 1 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
-				if m.ActiveTab == 1 {
+			if (m.ActiveTab == 0 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
+				if m.ActiveTab == 0 {
 					m.ActivityIndex += 5
 					if m.ActivityIndex > len(m.Activities) {
 						m.ActivityIndex = len(m.Activities)
@@ -614,8 +614,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.SwitchTab(6)
 
 		case key.Matches(msg, m.KeyMap.Activity):
-			if m.ActiveTab != 1 {
-				m.SwitchTab(1)
+			if m.ActiveTab != 0 {
+				m.SwitchTab(0)
 			} else {
 				if m.ActiveFocus == FocusSidebar {
 					m.ActiveFocus = FocusMainList
@@ -675,7 +675,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.StatusMessage = fmt.Sprintf("Track '%s' recorded from %s", entry.FullDisplay(), entry.StationName)
 					}
 				}
-			} else if (m.ActiveTab == 1 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
+			} else if (m.ActiveTab == 0 || m.ActiveTab == 2) && m.ActiveFocus == FocusSidebar {
 				m.ActiveFocus = FocusMainList
 				m.SelectedIndex = 0
 			} else if len(m.Stations) > 0 && m.SelectedIndex < len(m.Stations) {
