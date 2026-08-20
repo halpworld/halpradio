@@ -1,0 +1,44 @@
+name: Demos
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  demos:
+    name: Regenerate Demos & Screenshots
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Install VHS and dependencies
+        uses: charmbracelet/vhs-action@v2
+        with:
+          install-fonts: 'true'
+
+      - name: Generate demos and screenshots
+        run: .github/scripts/generate_demos.sh
+
+      - name: Commit and push updated demos
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'docs: regenerate demos & screenshots'
+          commit_user_name: 'github-actions[bot]'
+          commit_user_email: '41898282+github-actions[bot]@users.noreply.github.com'
+          file_pattern: 'docs/images/*.gif docs/images/*.png'
+          branch: ${{ github.event.repository.default_branch }}
