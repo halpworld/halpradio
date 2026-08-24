@@ -515,3 +515,105 @@ background: "#2d353b"
 		t.Errorf("Expected sample_theme.yaml.example to be created")
 	}
 }
+
+func TestRunHelp(t *testing.T) {
+	var buf bytes.Buffer
+	RunHelp(&buf)
+	out := buf.String()
+	if !strings.Contains(out, "halpradio - Terminal Internet Radio Player") {
+		t.Errorf("Expected app help header, got: %s", out)
+	}
+	if !strings.Contains(out, "play <target>") || !strings.Contains(out, "stations [list|search|fav]") {
+		t.Errorf("Expected core commands in help output, got: %s", out)
+	}
+
+	// Test help routing via SetupApp
+	buf.Reset()
+	_, isDone, err := SetupApp([]string{"help"}, nil, &buf)
+	if err != nil || !isDone {
+		t.Fatalf("SetupApp help routing failed: %v", err)
+	}
+	if !strings.Contains(buf.String(), "halpradio - Terminal Internet Radio Player") {
+		t.Errorf("Expected help output, got: %s", buf.String())
+	}
+}
+
+func TestFormatPlaybackInfo(t *testing.T) {
+	st := &desktop.PlaybackInfo{
+		Status:      "playing",
+		StationID:   "somafm_groovesalad",
+		StationName: "SomaFM Groove Salad",
+		Artist:      "Tycho",
+		Title:       "A Walk",
+		Track:       "Tycho - A Walk",
+		Bitrate:     128,
+		Volume:      80,
+		Backend:     "native",
+	}
+
+	// 1. Full template
+	formatted := formatPlaybackInfo(st, "[%p] %s | %a - %T (vol: %v%%, %r kbps)")
+	expected := "[PLAYING] SomaFM Groove Salad | Tycho - A Walk (vol: 80%, 128 kbps)"
+	if formatted != expected {
+		t.Errorf("Format mismatch: got %q, want %q", formatted, expected)
+	}
+
+	// 2. Track only
+	formatted = formatPlaybackInfo(st, "%s: %t")
+	expected = "SomaFM Groove Salad: Tycho - A Walk"
+	if formatted != expected {
+		t.Errorf("Format mismatch: got %q, want %q", formatted, expected)
+	}
+
+	// 3. Nil state fallback
+	formatted = formatPlaybackInfo(nil, "[%p]")
+	if formatted != "[STOPPED]" {
+		t.Errorf("Expected [STOPPED] on nil state, got %q", formatted)
+	}
+}
+
+func TestRunCurrentAndStatusWithFormat(t *testing.T) {
+	sockPath := desktop.GetDefaultSocketPath()
+
+	server, err := desktop.StartIPCServer(sockPath, func(action desktop.MediaAction) (*desktop.PlaybackInfo, error) {
+		return &desktop.PlaybackInfo{
+			Status:      "playing",
+			StationName: "Chill Beats",
+			Track:       "Artist - Song Title",
+			Volume:      70,
+		}, nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to start IPC server: %v", err)
+	}
+	defer server.Close()
+
+	var buf bytes.Buffer
+	done, err := RunCurrent([]string{"--format", "%s: %t"}, &buf)
+	if err != nil || !done {
+		t.Fatalf("RunCurrent --format failed: %v", err)
+	}
+	if !strings.Contains(buf.String(), "Chill Beats: Artist - Song Title") {
+		t.Errorf("Expected formatted current output, got: %s", buf.String())
+	}
+
+	buf.Reset()
+	done, err = RunStatus([]string{"-f", "[%p] %s (%v%%)"}, &buf)
+	if err != nil || !done {
+		t.Fatalf("RunStatus -f failed: %v", err)
+	}
+	if !strings.Contains(buf.String(), "[PLAYING] Chill Beats (70%)") {
+		t.Errorf("Expected formatted status output, got: %s", buf.String())
+	}
+}
+
+func TestSetupAppVersionSubcommand(t *testing.T) {
+	var buf bytes.Buffer
+	_, isDone, err := SetupApp([]string{"version"}, nil, &buf)
+	if err != nil || !isDone {
+		t.Fatalf("SetupApp version subcommand failed: %v", err)
+	}
+	if !strings.Contains(buf.String(), Version) {
+		t.Errorf("Expected version in output, got: %s", buf.String())
+	}
+}

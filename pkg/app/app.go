@@ -201,23 +201,89 @@ func RunPluginCLI(args []string, out io.Writer) (bool, error) {
 	}
 }
 
-// RunCurrent handles `halpradio current [--json]` CLI query mode for tmux / Waybar / status bars.
+// formatPlaybackInfo interpolates %s, %t, %a, %T, %p, %v, %b, %r into a custom status template.
+func formatPlaybackInfo(st *desktop.PlaybackInfo, tmpl string) string {
+	if tmpl == "" {
+		return ""
+	}
+	if st == nil {
+		st = &desktop.PlaybackInfo{Status: "stopped"}
+	}
+	stationName := desktop.SanitizeString(st.StationName, 256)
+	if stationName == "" {
+		stationName = desktop.SanitizeString(st.Station, 256)
+	}
+	track := desktop.SanitizeString(st.Track, 512)
+	if track == "" && (st.Artist != "" || st.Title != "") {
+		artist := desktop.SanitizeString(st.Artist, 256)
+		title := desktop.SanitizeString(st.Title, 256)
+		if artist != "" && title != "" {
+			track = fmt.Sprintf("%s - %s", artist, title)
+		} else if title != "" {
+			track = title
+		}
+	}
+	artist := desktop.SanitizeString(st.Artist, 256)
+	title := desktop.SanitizeString(st.Title, 256)
+	if artist == "" && title == "" && track != "" {
+		artist, title = desktop.SplitArtistTitle(track)
+	}
+
+	cleanStatus := desktop.SanitizeString(st.Status, 32)
+	cleanBackend := desktop.SanitizeString(st.Backend, 32)
+
+	res := strings.ReplaceAll(tmpl, "%%", "\x00")
+	res = strings.ReplaceAll(res, "%s", stationName)
+	res = strings.ReplaceAll(res, "%t", track)
+	res = strings.ReplaceAll(res, "%a", artist)
+	res = strings.ReplaceAll(res, "%T", title)
+	res = strings.ReplaceAll(res, "%p", strings.ToUpper(cleanStatus))
+	res = strings.ReplaceAll(res, "%v", fmt.Sprintf("%d", st.Volume))
+	res = strings.ReplaceAll(res, "%b", cleanBackend)
+	res = strings.ReplaceAll(res, "%r", fmt.Sprintf("%d", st.Bitrate))
+	res = strings.ReplaceAll(res, "\x00", "%")
+	return res
+}
+
+// RunCurrent handles `halpradio current [--json] [--format "<tmpl>"]` CLI query mode for tmux / Waybar / status bars.
 func RunCurrent(args []string, out io.Writer) (bool, error) {
 	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
-		fmt.Fprintln(out, "Usage: halpradio current [--json]")
-		fmt.Fprintln(out, "Outputs currently playing station and track for tmux, Waybar, SketchyBar, or Polybar.")
+		io.WriteString(out, "Usage: halpradio current [--json] [--format \"<template>\"]\n")
+		io.WriteString(out, "Outputs currently playing station and track for tmux, Waybar, SketchyBar, or Polybar.\n\n")
+		io.WriteString(out, "Format placeholders:\n")
+		io.WriteString(out, "  %s  Station name\n")
+		io.WriteString(out, "  %t  Track title (Artist - Title)\n")
+		io.WriteString(out, "  %a  Artist name\n")
+		io.WriteString(out, "  %T  Song title\n")
+		io.WriteString(out, "  %p  Playback status (PLAYING, PAUSED, STOPPED)\n")
+		io.WriteString(out, "  %v  Volume percentage\n")
+		io.WriteString(out, "  %b  Active backend\n")
+		io.WriteString(out, "  %r  Bitrate (kbps)\n")
 		return true, nil
 	}
 
 	isJSON := false
-	for _, arg := range args {
+	var formatTmpl string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
 		if arg == "--json" || arg == "-json" || arg == "-j" {
 			isJSON = true
+		} else if strings.HasPrefix(arg, "--format=") {
+			formatTmpl = strings.TrimPrefix(arg, "--format=")
+		} else if strings.HasPrefix(arg, "-f=") {
+			formatTmpl = strings.TrimPrefix(arg, "-f=")
+		} else if (arg == "--format" || arg == "-format" || arg == "-f") && i+1 < len(args) {
+			formatTmpl = args[i+1]
+			i++
 		}
 	}
 
 	resp, err := desktop.SendIPCCommand("", "current")
 	if err != nil {
+		if formatTmpl != "" {
+			fmt.Fprintln(out, formatPlaybackInfo(&desktop.PlaybackInfo{Status: "stopped"}, formatTmpl))
+			return true, nil
+		}
 		if isJSON {
 			errPayload := map[string]string{
 				"status": "stopped",
@@ -232,6 +298,10 @@ func RunCurrent(args []string, out io.Writer) (bool, error) {
 	}
 
 	if !resp.Success {
+		if formatTmpl != "" {
+			fmt.Fprintln(out, formatPlaybackInfo(&desktop.PlaybackInfo{Status: "stopped"}, formatTmpl))
+			return true, nil
+		}
 		if isJSON {
 			errPayload := map[string]string{
 				"status": "stopped",
@@ -243,6 +313,11 @@ func RunCurrent(args []string, out io.Writer) (bool, error) {
 		}
 		fmt.Fprintf(out, "Error: %s\n", resp.Message)
 		return false, fmt.Errorf("%s", resp.Message)
+	}
+
+	if formatTmpl != "" {
+		fmt.Fprintln(out, formatPlaybackInfo(resp.Status, formatTmpl))
+		return true, nil
 	}
 
 	if isJSON {
@@ -313,16 +388,25 @@ func RunCurrent(args []string, out io.Writer) (bool, error) {
 	return true, nil
 }
 
-// RunStatus handles `halpradio status [--json]` CLI query mode.
+// RunStatus handles `halpradio status [--json] [--format "<tmpl>"]` CLI query mode.
 func RunStatus(args []string, out io.Writer) (bool, error) {
 	isJSON := false
-	for _, arg := range args {
+	var formatTmpl string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
 		if arg == "--json" || arg == "-json" || arg == "-j" {
 			isJSON = true
+		} else if strings.HasPrefix(arg, "--format=") {
+			formatTmpl = strings.TrimPrefix(arg, "--format=")
+		} else if strings.HasPrefix(arg, "-f=") {
+			formatTmpl = strings.TrimPrefix(arg, "-f=")
+		} else if (arg == "--format" || arg == "-format" || arg == "-f") && i+1 < len(args) {
+			formatTmpl = args[i+1]
+			i++
 		}
 	}
 
-	if isJSON {
+	if isJSON || formatTmpl != "" {
 		return RunCurrent(args, out)
 	}
 
@@ -449,10 +533,69 @@ func RunRemote(args []string, out io.Writer) (bool, error) {
 	return true, nil
 }
 
+// RunHelp prints comprehensive CLI usage, commands, flags, and workflow examples.
+func RunHelp(out io.Writer) {
+	fmt.Fprintln(out, "halpradio - Terminal Internet Radio Player & Streamer")
+	fmt.Fprintln(out, "")
+	fmt.Fprintln(out, "Usage:")
+	fmt.Fprintln(out, "  halpradio [flags]                       Launch interactive Bubble Tea TUI")
+	fmt.Fprintln(out, "  halpradio <command> [arguments] [flags] Execute standalone CLI command")
+	fmt.Fprintln(out, "")
+	fmt.Fprintln(out, "Core Commands:")
+	fmt.Fprintln(out, "  play <target> [flags]         Stream radio directly without TUI (index, ID, name, URL, or random)")
+	fmt.Fprintln(out, "  stations [list|search|fav]    Discover, search, filter, and manage station catalog")
+	fmt.Fprintln(out, "  current [flags]               Query currently playing track for status bars (tmux, Waybar)")
+	fmt.Fprintln(out, "  status [flags]                Get full playback status snapshot (JSON or formatted)")
+	fmt.Fprintln(out, "  volume [value] [flags]        Query or adjust volume (e.g. halpradio volume +5, 60)")
+	fmt.Fprintln(out, "")
+	fmt.Fprintln(out, "Desktop & Playback Controls:")
+	fmt.Fprintln(out, "  toggle                        Toggle play/pause on active instance")
+	fmt.Fprintln(out, "  pause / stop                  Pause or stop playback")
+	fmt.Fprintln(out, "  next / prev                   Play next or previous station")
+	fmt.Fprintln(out, "  mute                          Toggle mute")
+	fmt.Fprintln(out, "  random                        Play random station")
+	fmt.Fprintln(out, "  remote <action>               Send custom IPC action to running instance")
+	fmt.Fprintln(out, "  plugin <list|install|...>     Manage sandboxed Wasm plugins")
+	fmt.Fprintln(out, "  update-stations               Update station catalog from online repository")
+	fmt.Fprintln(out, "")
+	fmt.Fprintln(out, "Interactive TUI Flags:")
+	fmt.Fprintln(out, "  -backend <engine>             Audio player backend (auto, native, mpv, vlc, ffplay, mplayer, mpg123)")
+	fmt.Fprintln(out, "  -theme <name>                 Theme (tokyonight, catppuccin, synthwave, nord, gruvbox, dracula)")
+	fmt.Fprintln(out, "  -notifications=false          Disable song change desktop notifications")
+	fmt.Fprintln(out, "  -autopause=false              Disable auto-pause on headphone disconnect")
+	fmt.Fprintln(out, "  -version                      Show version")
+	fmt.Fprintln(out, "")
+	io.WriteString(out, "Top Automation Examples:\n")
+	io.WriteString(out, "  halpradio play 2 --volume 30                  # Headless stream by index\n")
+	io.WriteString(out, "  halpradio play somafm_groovesalad -d 45m       # 45-minute focus session\n")
+	io.WriteString(out, "  halpradio stations list --genre ambient        # List ambient stations\n")
+	io.WriteString(out, "  halpradio stations list --plain | fzf | awk '{print $2}' | xargs halpradio play\n")
+	io.WriteString(out, "  halpradio current --format \"[%p] %s - %t\"     # Status bar ticker\n")
+	io.WriteString(out, "  halpradio volume +5                           # Increase volume by 5%\n")
+}
+
 // SetupApp parses CLI flags, loads configuration, and initializes the AppInstance.
 func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstance, bool, error) {
 	if len(args) > 0 {
 		switch args[0] {
+		case "help", "--help", "-h":
+			RunHelp(out)
+			return nil, true, nil
+		case "version":
+			fmt.Fprintf(out, "halpradio v%s - LazyVim-inspired Terminal Internet Radio Streamer\n", Version)
+			return nil, true, nil
+		case "play":
+			_, err := RunPlay(args[1:], embeddedCatalog, out)
+			return nil, true, err
+		case "stations", "station":
+			_, err := RunStations(args[1:], embeddedCatalog, out)
+			return nil, true, err
+		case "search", "find":
+			_, err := RunStations(append([]string{"search"}, args[1:]...), embeddedCatalog, out)
+			return nil, true, err
+		case "volume", "vol":
+			_, err := RunVolume(args[1:], out)
+			return nil, true, err
 		case "remote":
 			_, err := RunRemote(args[1:], out)
 			return nil, true, err
@@ -462,7 +605,7 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 		case "status":
 			_, err := RunStatus(args[1:], out)
 			return nil, true, err
-		case "toggle", "play", "pause", "stop", "next", "prev", "volup", "voldown", "mute", "random":
+		case "toggle", "pause", "stop", "next", "prev", "volup", "voldown", "mute", "random":
 			_, err := RunRemote(args, out)
 			return nil, true, err
 		case "plugin":
