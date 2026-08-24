@@ -125,3 +125,21 @@ func TestDesktopNotifierGetRunnerAndSetters(t *testing.T) {
 	mockD := &MockDiscordClient{}
 	mgr.SetDiscordClient(mockD)
 }
+
+func TestIsOwnedByCurrentUser(t *testing.T) {
+	tempFile, err := os.CreateTemp("", "halpradio-test-stat-*")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	fi, err := tempFile.Stat()
+	if err != nil {
+		t.Fatalf("failed to stat temp file: %v", err)
+	}
+
+	if !isOwnedByCurrentUser(fi) {
+		t.Errorf("expected temp file to be owned by current user")
+	}
+}

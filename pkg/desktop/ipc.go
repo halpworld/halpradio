@@ -11,7 +11,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/halpworld/halpradio/pkg/util"
@@ -291,12 +290,8 @@ func SendIPCCommand(socketPath string, action string) (*IPCResponse, error) {
 	}
 
 	// Security: Verify socket file ownership on Unix systems
-	if runtime.GOOS != "windows" {
-		if stat, ok := fi.Sys().(*syscall.Stat_t); ok {
-			if stat.Uid != uint32(os.Getuid()) {
-				return nil, fmt.Errorf("socket %s is not owned by current user (security violation)", socketPath)
-			}
-		}
+	if !isOwnedByCurrentUser(fi) {
+		return nil, fmt.Errorf("socket %s is not owned by current user (security violation)", socketPath)
 	}
 
 	conn, err := net.DialTimeout("unix", socketPath, 2*time.Second)

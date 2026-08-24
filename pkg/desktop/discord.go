@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -400,12 +399,8 @@ func dialDiscordSocket() (net.Conn, error) {
 			}
 
 			// Security: In shared temporary directories, verify socket ownership
-			if runtime.GOOS != "windows" {
-				if stat, ok := fi.Sys().(*syscall.Stat_t); ok {
-					if stat.Uid != uint32(os.Getuid()) {
-						continue // Skip socket owned by other users
-					}
-				}
+			if !isOwnedByCurrentUser(fi) {
+				continue // Skip socket owned by other users
 			}
 
 			conn, err := net.DialTimeout("unix", sockPath, 250*time.Millisecond)

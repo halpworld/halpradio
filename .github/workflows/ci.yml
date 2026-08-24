@@ -102,3 +102,17 @@ jobs:
           GOOS: "linux"
           GOARCH: "arm64"
         run: go build -o /dev/null main.go
+
+      - name: Verify Windows AMD64 build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: "windows"
+          GOARCH: "amd64"
+        run: go build -o /dev/null main.go
+
+      - name: Verify Windows ARM64 build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: "windows"
+          GOARCH: "arm64"
+        run: go build -o /dev/null main.go
