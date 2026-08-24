@@ -372,4 +372,3 @@ func TestExportThemePathTraversal(t *testing.T) {
 		t.Errorf("Exported path escaped destination directory: %s (rel: %s)", exportedPath, rel)
 	}
 }
-
