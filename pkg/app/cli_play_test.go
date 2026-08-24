@@ -213,4 +213,3 @@ func TestRunPlayEmptyCatalogError(t *testing.T) {
 		t.Errorf("Expected error for empty catalog")
 	}
 }
-
