@@ -15,6 +15,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/player"
 	"github.com/halpworld/halpradio/pkg/plugin"
 	"github.com/halpworld/halpradio/pkg/radio"
+	"github.com/halpworld/halpradio/pkg/theme"
 	"github.com/halpworld/halpradio/pkg/ui"
 	"github.com/halpworld/halpradio/pkg/util"
 )
@@ -490,10 +491,11 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 	fs.SetOutput(out)
 
 	backendFlag := fs.String("backend", "auto", "Audio player backend: auto, native, mpv, vlc, ffplay, mplayer, mpg123")
-	themeFlag := fs.String("theme", "", "Color theme: tokyonight, catppuccin, synthwave, nord, gruvbox, dracula")
+	themeFlag := fs.String("theme", "", "Color theme: built-in (tokyonight, catppuccin, synthwave, nord, gruvbox, dracula) or custom from ~/.config/halpradio/themes/")
 	versionFlag := fs.Bool("version", false, "Show halpradio version")
 	updateCatalogFlag := fs.Bool("update-catalog", false, "Update stations catalog from remote repository")
 	notificationsFlag := fs.Bool("notifications", true, "Enable desktop notifications on song change")
+	autoPauseFlag := fs.Bool("autopause", true, "Pause playback when headphones disconnect (e.g. AirPods taken out)")
 	mprisFlag := fs.Bool("mpris", true, "Enable Linux MPRIS v2 D-Bus remote interface")
 	ipcFlag := fs.Bool("ipc", true, "Enable local IPC socket for CLI remote control")
 	discordFlag := fs.Bool("discord", true, "Enable Discord Rich Presence (RPC)")
@@ -506,6 +508,10 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 		fmt.Fprintf(out, "halpradio v%s - LazyVim-inspired Terminal Internet Radio Streamer\n", Version)
 		return nil, true, nil
 	}
+
+	_ = util.EnsureConfigDir()
+	_ = theme.EnsureExampleTheme(util.GetThemesDir())
+	_, _ = theme.LoadCustomThemes(util.GetThemesDir())
 
 	cfg, err := util.LoadConfig()
 	if err != nil {
@@ -537,6 +543,9 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 	if !*notificationsFlag {
 		cfg.SongNotifications = false
 	}
+	if !*autoPauseFlag {
+		cfg.AutoPause = false
+	}
 	if !*mprisFlag {
 		cfg.MPRISEnabled = false
 	}
@@ -560,6 +569,12 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 			program.Send(ui.TrackUpdatedMsg(info))
 		}
 	})
+	pm.SetOnAutoPause(func() {
+		if program != nil {
+			program.Send(ui.AutoPauseMsg{})
+		}
+	})
+	pm.SetAutoPause(cfg.AutoPause)
 
 	pluginMgr := plugin.NewManager(cfg.PluginRegistryURL)
 	pluginMgr.SetNotifyHandler(func(title, msg string) {
@@ -646,7 +661,7 @@ func Run(embeddedCatalog []byte) {
 	}
 
 	// Clean up player, desktop, and plugin services on exit
-	_ = appInst.Player.Stop()
+	_ = appInst.Player.Close()
 	if appInst.Desktop != nil {
 		_ = appInst.Desktop.Close()
 	}

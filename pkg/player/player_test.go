@@ -43,6 +43,44 @@ func TestPlayerToggleMute(t *testing.T) {
 	}
 }
 
+func TestAutoPauseLifecycle(t *testing.T) {
+	pm := NewManager("auto", 80, nil)
+	pm.SetOnAutoPause(func() {})
+	pm.SetAutoPause(true)
+	pm.SetAutoPause(false)
+	pm.SetAutoPause(true)
+	if err := pm.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+	if pm.Status() != StatusStopped {
+		t.Errorf("Expected stopped status after Close, got %s", pm.Status())
+	}
+}
+
+func TestAutoPauseOnDeviceLoss(t *testing.T) {
+	pm := NewManager("auto", 80, nil)
+	pm.mu.Lock()
+	pm.status = StatusPlaying
+	pm.mu.Unlock()
+
+	called := false
+	pm.SetOnAutoPause(func() { called = true })
+	pm.autoPauseOnDeviceLoss()
+
+	if pm.Status() != StatusPaused {
+		t.Errorf("Expected paused after device loss, got %s", pm.Status())
+	}
+	if !called {
+		t.Errorf("Expected onAutoPause callback to fire")
+	}
+
+	called = false
+	pm.autoPauseOnDeviceLoss()
+	if called {
+		t.Errorf("Expected no callback when not playing")
+	}
+}
+
 func TestBackendDetection(t *testing.T) {
 	backend := detectBackend("native")
 	if backend != "native" {

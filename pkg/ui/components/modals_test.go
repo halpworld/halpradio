@@ -31,9 +31,21 @@ func TestRenderModals(t *testing.T) {
 	}
 
 	// 2. Theme Picker Modal
-	themeModal := RenderThemePickerModal("tokyonight", 80, 24, th)
+	themeModal := RenderThemePickerModal("tokyonight", 0, 80, 24, th)
 	if !strings.Contains(themeModal, "SELECT COLOR THEME") || !strings.Contains(themeModal, "Tokyo Night") {
 		t.Errorf("Expected theme picker modal content, got: %s", themeModal)
+	}
+
+	// 2b. Theme Picker with Custom Theme
+	theme.RegisterTheme("custom-test", theme.Theme{
+		ID:       "custom-test",
+		Name:     "My Custom Theme",
+		Primary:  "#123456",
+		IsCustom: true,
+	})
+	customThemeModal := RenderThemePickerModal("custom-test", 6, 80, 24, th)
+	if !strings.Contains(customThemeModal, "My Custom Theme") || !strings.Contains(customThemeModal, "(Custom)") {
+		t.Errorf("Expected custom theme and (Custom) tag in modal, got: %s", customThemeModal)
 	}
 
 	// 3. Add Station Modal

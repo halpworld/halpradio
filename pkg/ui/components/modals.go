@@ -68,9 +68,9 @@ func RenderPRExportModal(st radio.Station, width int, height int, th theme.Theme
 	return PlaceOverlay(modalBox, width, height)
 }
 
-func RenderThemePickerModal(currentTheme string, width int, height int, th theme.Theme) string {
-	boxWidth := 46
-	if width < 50 {
+func RenderThemePickerModal(currentTheme string, cursor int, width int, height int, th theme.Theme) string {
+	boxWidth := 56
+	if width < 60 {
 		boxWidth = width - 4
 	}
 
@@ -79,16 +79,64 @@ func RenderThemePickerModal(currentTheme string, width int, height int, th theme
 		Foreground(th.Primary).
 		Align(lipgloss.Center)
 
-	themeNames := []string{"tokyonight", "catppuccin", "synthwave", "nord", "gruvbox", "dracula"}
+	allThemes := theme.GetAllThemes()
+	if len(allThemes) == 0 {
+		allThemes = []theme.Theme{th}
+	}
+
+	if cursor < 0 {
+		cursor = 0
+	}
+	if cursor >= len(allThemes) {
+		cursor = len(allThemes) - 1
+	}
+
+	// Calculate scrolling window
+	maxVisible := height - 10
+	if maxVisible < 5 {
+		maxVisible = 5
+	}
+	if maxVisible > 12 {
+		maxVisible = 12
+	}
+
+	startIdx := 0
+	endIdx := len(allThemes)
+	if len(allThemes) > maxVisible {
+		if cursor >= maxVisible {
+			startIdx = cursor - maxVisible + 1
+		}
+		endIdx = startIdx + maxVisible
+		if endIdx > len(allThemes) {
+			endIdx = len(allThemes)
+			startIdx = endIdx - maxVisible
+			if startIdx < 0 {
+				startIdx = 0
+			}
+		}
+	}
+
 	var rows []string
 
-	for i, name := range themeNames {
-		t := theme.GetTheme(name)
-		isSelected := (name == currentTheme)
+	if startIdx > 0 {
+		rows = append(rows, lipgloss.NewStyle().Foreground(th.Muted).Italic(true).Render(fmt.Sprintf("    ▲ ... (%d more above)", startIdx)))
+	}
 
-		cursor := "  "
-		if isSelected {
-			cursor = "❯ "
+	for i := startIdx; i < endIdx; i++ {
+		t := allThemes[i]
+		isCurrent := (t.ID == currentTheme || strings.EqualFold(t.Name, currentTheme) || strings.EqualFold(t.ID, currentTheme))
+		isCursor := (i == cursor)
+
+		var keyPrefix string
+		if i < 9 {
+			keyPrefix = fmt.Sprintf("[%d]", i+1)
+		} else {
+			keyPrefix = "   "
+		}
+
+		cursorSym := "  "
+		if isCursor {
+			cursorSym = "❯ "
 		}
 
 		colorSample := lipgloss.NewStyle().
@@ -97,11 +145,25 @@ func RenderThemePickerModal(currentTheme string, width int, height int, th theme
 			Bold(true).
 			Render(" " + t.Name + " ")
 
-		row := fmt.Sprintf("[%d] %s%s", i+1, cursor, colorSample)
-		if isSelected {
+		customTag := ""
+		if t.IsCustom {
+			customTag = lipgloss.NewStyle().Foreground(th.Secondary).Italic(true).Render(" (Custom)")
+		}
+
+		activeMarker := ""
+		if isCurrent {
+			activeMarker = lipgloss.NewStyle().Foreground(th.Playing).Bold(true).Render(" ●")
+		}
+
+		row := fmt.Sprintf("%s %s%s%s%s", keyPrefix, cursorSym, colorSample, customTag, activeMarker)
+		if isCursor {
 			row = lipgloss.NewStyle().Bold(true).Render(row)
 		}
 		rows = append(rows, row)
+	}
+
+	if endIdx < len(allThemes) {
+		rows = append(rows, lipgloss.NewStyle().Foreground(th.Muted).Italic(true).Render(fmt.Sprintf("    ▼ ... (%d more below)", len(allThemes)-endIdx)))
 	}
 
 	content := lipgloss.JoinVertical(
@@ -110,8 +172,8 @@ func RenderThemePickerModal(currentTheme string, width int, height int, th theme
 		"",
 		strings.Join(rows, "\n"),
 		"",
-		lipgloss.NewStyle().Foreground(th.Muted).Render("Press [ 1-6 ] or [ j/k ] and [ Enter ] to apply"),
-		lipgloss.NewStyle().Foreground(th.Muted).Render("Press [ Esc ] to close"),
+		lipgloss.NewStyle().Foreground(th.Muted).Render("Press [ 1-9 ] or [ j/k / ↑↓ ] and [ Enter ] to apply"),
+		lipgloss.NewStyle().Foreground(th.Muted).Render("Press [ E ] to export active theme | [ Esc ] to close"),
 	)
 
 	modalBox := lipgloss.NewStyle().

@@ -26,7 +26,7 @@ func (m Model) View() string {
 	}
 
 	if m.ShowThemePicker {
-		return components.RenderThemePickerModal(m.Config.Theme, width, height, m.Theme)
+		return components.RenderThemePickerModal(m.Config.Theme, m.ThemeCursor, width, height, m.Theme)
 	}
 
 	if m.ShowAddModal {

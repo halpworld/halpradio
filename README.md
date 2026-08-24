@@ -289,6 +289,11 @@ Whenever a radio station broadcasts a new track title via ICY metadata, `halprad
 - Built-in deduplication ensures zero spam.
 - Toggle via `-notifications=false` or `song_notifications: false` in `config.yaml`.
 
+### 🎧 Automatic Headphone Pause (macOS)
+When the default audio output device leaves Bluetooth — e.g. AirPods taken out of the ears or the case closed — playback pauses automatically, matching macOS Music behavior:
+- Works with every backend (`mpv`, `vlc`, `ffplay`, `native`, ...).
+- Toggle via `-autopause=false` or `autopause: false` in `config.yaml`.
+
 ---
 
 ## ⌨️ Navigation & Keybindings (Vim & Media Style)
@@ -355,7 +360,7 @@ halpradio plugin update --all          # Update plugins to latest version
 
 ---
 
-## 🎨 Themes & Customization
+## 🎨 Themes & Custom Themes Engine
 
 Switch themes on the fly by pressing `t` or pass `-theme <name>` via CLI:
 
@@ -365,6 +370,11 @@ Switch themes on the fly by pressing `t` or pass `-theme <name>` via CLI:
 - ❄️ **Nord** (`nord`) — Cool arctic blue minimalism
 - 🪵 **Gruvbox Dark** (`gruvbox`) — Warm retro terminal tones
 - 🧛 **Dracula** (`dracula`) — High-contrast gothic vampire theme
+
+### 🛠️ Custom User Themes (`~/.config/halpradio/themes/*.yaml`)
+Drop any YAML theme file into `~/.config/halpradio/themes/` (e.g. `rose-pine.yaml`, `everforest.yaml`) and it will automatically appear in the theme picker (`t`) and CLI. Press `E` inside the Theme Picker to export the active theme as a starter template!
+
+Explore and contribute community themes in the official **[halpradio-themes](https://github.com/halpworld/halpradio-themes)** repository.
 
 ---
 

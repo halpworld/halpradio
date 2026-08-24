@@ -13,6 +13,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/player"
 	"github.com/halpworld/halpradio/pkg/plugin"
 	"github.com/halpworld/halpradio/pkg/radio"
+	"github.com/halpworld/halpradio/pkg/theme"
 	"github.com/halpworld/halpradio/pkg/util"
 )
 
@@ -152,6 +153,23 @@ func TestMediaActionMessages(t *testing.T) {
 	_, quitCmd := m.Update(MediaQuitMsg{})
 	if quitCmd == nil {
 		t.Errorf("MediaQuitMsg expected tea.Quit command")
+	}
+}
+
+func TestAutoPauseMessage(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	m := createTestModel()
+	m.PlayingID = "some-station"
+	mModel, _ := m.Update(AutoPauseMsg{})
+	m = mModel.(Model)
+	if m.PlayingID != "" {
+		t.Errorf("Expected PlayingID cleared on AutoPauseMsg")
+	}
+	if m.StatusMessage != "Paused - headphones disconnected" {
+		t.Errorf("Unexpected status message: %s", m.StatusMessage)
 	}
 }
 
@@ -478,5 +496,85 @@ func TestCatalogUpdateHandling(t *testing.T) {
 	m = mModel.(Model)
 	if !strings.Contains(m.StatusMessage, "PTitle") {
 		t.Errorf("expected notification title in status, got %s", m.StatusMessage)
+	}
+}
+
+func TestThemePickerNavigationAndExport(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	m := createTestModel()
+
+	// Open theme picker
+	mModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	m = mModel.(Model)
+	if !m.ShowThemePicker {
+		t.Fatalf("Expected ShowThemePicker true")
+	}
+
+	// Move cursor down (j)
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = mModel.(Model)
+	if m.ThemeCursor != 1 {
+		t.Errorf("Expected ThemeCursor 1 after 'j', got %d", m.ThemeCursor)
+	}
+
+	// Move cursor down (down arrow)
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = mModel.(Model)
+	if m.ThemeCursor != 2 {
+		t.Errorf("Expected ThemeCursor 2 after down arrow, got %d", m.ThemeCursor)
+	}
+
+	// Move cursor up (k)
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	m = mModel.(Model)
+	if m.ThemeCursor != 1 {
+		t.Errorf("Expected ThemeCursor 1 after 'k', got %d", m.ThemeCursor)
+	}
+
+	// Jump to end (G)
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	m = mModel.(Model)
+	allThemes := theme.GetAllThemes()
+	if m.ThemeCursor != len(allThemes)-1 {
+		t.Errorf("Expected ThemeCursor at end (%d), got %d", len(allThemes)-1, m.ThemeCursor)
+	}
+
+	// Jump to top (g)
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	m = mModel.(Model)
+	if m.ThemeCursor != 0 {
+		t.Errorf("Expected ThemeCursor 0 after 'g', got %d", m.ThemeCursor)
+	}
+
+	// Export active theme (E)
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'E'}})
+	m = mModel.(Model)
+	if !strings.Contains(m.StatusMessage, "Exported theme") {
+		t.Errorf("Expected export status message, got: %s", m.StatusMessage)
+	}
+
+	// Press Enter on cursor 0 (tokyonight)
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mModel.(Model)
+	if m.ShowThemePicker {
+		t.Errorf("Expected ShowThemePicker false after Enter")
+	}
+	if m.Theme.Name != "Tokyo Night" {
+		t.Errorf("Expected Tokyo Night theme, got %s", m.Theme.Name)
+	}
+
+	// Reopen and press 4 (Nord)
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	m = mModel.(Model)
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'4'}})
+	m = mModel.(Model)
+	if m.ShowThemePicker {
+		t.Errorf("Expected ShowThemePicker false after pressing 4")
+	}
+	if m.Theme.Name != "Nord" {
+		t.Errorf("Expected Nord theme, got %s", m.Theme.Name)
 	}
 }

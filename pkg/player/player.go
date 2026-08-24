@@ -78,6 +78,9 @@ type Manager struct {
 	otoSampleRate int
 	nativePlayer  NativeAudioPlayer
 	nativeStream  io.Closer
+
+	onAutoPause   func()
+	autoPauseStop func()
 }
 
 func NewManager(preferredBackend string, initialVolume int, onTrackUpd func(TrackInfo)) *Manager {
@@ -91,6 +94,53 @@ func NewManager(preferredBackend string, initialVolume int, onTrackUpd func(Trac
 		activeBackend: detectBackend(preferredBackend),
 	}
 	return m
+}
+
+// SetOnAutoPause registers a callback that is invoked after playback is
+// automatically paused because the audio output device left Bluetooth.
+func (m *Manager) SetOnAutoPause(cb func()) {
+	m.mu.Lock()
+	m.onAutoPause = cb
+	m.mu.Unlock()
+}
+
+// SetAutoPause enables or disables automatic pausing when the default audio
+// output device leaves Bluetooth (e.g. AirPods taken out of the ears).
+func (m *Manager) SetAutoPause(enabled bool) {
+	m.mu.Lock()
+	if m.autoPauseStop != nil {
+		stop := m.autoPauseStop
+		m.autoPauseStop = nil
+		m.mu.Unlock()
+		stop()
+		m.mu.Lock()
+	}
+	if enabled {
+		m.autoPauseStop = startAutoPause(func() { m.autoPauseOnDeviceLoss() })
+	}
+	m.mu.Unlock()
+}
+
+func (m *Manager) autoPauseOnDeviceLoss() {
+	m.mu.Lock()
+	status := m.status
+	m.mu.Unlock()
+	if status != StatusPlaying && status != StatusConnecting {
+		return
+	}
+	_ = m.Pause()
+	m.mu.Lock()
+	cb := m.onAutoPause
+	m.mu.Unlock()
+	if cb != nil {
+		cb()
+	}
+}
+
+// Close releases all player resources, including system audio device listeners.
+func (m *Manager) Close() error {
+	m.SetAutoPause(false)
+	return m.Stop()
 }
 
 func detectBackend(preferred string) string {

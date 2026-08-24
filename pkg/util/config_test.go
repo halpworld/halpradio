@@ -44,6 +44,9 @@ func TestConfigDefaults(t *testing.T) {
 	if !cfg.SongNotifications {
 		t.Errorf("Expected SongNotifications true by default")
 	}
+	if !cfg.AutoPause {
+		t.Errorf("Expected AutoPause true by default")
+	}
 	if !cfg.MPRISEnabled {
 		t.Errorf("Expected MPRISEnabled true by default")
 	}
@@ -74,6 +77,14 @@ func TestConfigPathsAndLifecycle(t *testing.T) {
 
 	if _, err := os.Stat(configDir); os.IsNotExist(err) {
 		t.Fatalf("Expected configDir %s to exist", configDir)
+	}
+
+	themesDir := GetThemesDir()
+	if !strings.HasSuffix(themesDir, "themes") {
+		t.Errorf("Expected themes directory suffix, got %s", themesDir)
+	}
+	if _, err := os.Stat(themesDir); os.IsNotExist(err) {
+		t.Fatalf("Expected themesDir %s to exist", themesDir)
 	}
 
 	stationsFile := GetLocalStationsFile()

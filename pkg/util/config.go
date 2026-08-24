@@ -25,6 +25,7 @@ type Config struct {
 	EventTerminalBell    bool   `yaml:"event_terminal_bell"`
 	EventCommandHook     string `yaml:"event_command_hook,omitempty"`
 	SongNotifications    bool   `yaml:"song_notifications"`
+	AutoPause            bool   `yaml:"autopause"`
 	MPRISEnabled         bool   `yaml:"mpris_enabled"`
 	IPCEnabled           bool   `yaml:"ipc_enabled"`
 	DiscordRPC           bool   `yaml:"discord_rpc"`
@@ -55,6 +56,7 @@ func DefaultConfig() Config {
 		EventTerminalBell:    true,
 		EventCommandHook:     "",
 		SongNotifications:    true,
+		AutoPause:            true,
 		MPRISEnabled:         true,
 		IPCEnabled:           true,
 		DiscordRPC:           true,
@@ -83,7 +85,14 @@ func GetConfigDir() string {
 // EnsureConfigDir creates the configuration directory if it doesn't exist.
 func EnsureConfigDir() error {
 	dir := GetConfigDir()
-	return os.MkdirAll(dir, 0700)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return err
+	}
+	return os.MkdirAll(GetThemesDir(), 0700)
+}
+
+func GetThemesDir() string {
+	return filepath.Join(GetConfigDir(), "themes")
 }
 
 func GetLocalStationsFile() string {

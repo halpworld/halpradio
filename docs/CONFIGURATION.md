@@ -17,6 +17,7 @@ All user state and settings are stored in your platform's standard configuration
 ├── stations.yaml     # Custom user-added radio stations
 ├── favorites.json    # Favorited stations list
 ├── saved_tracks.txt  # Bookmarked tracks from history
+├── themes/           # Custom YAML themes (*.yaml)
 ├── plugins.json      # Plugin enabled states & approved permissions
 ├── plugins/          # Installed WebAssembly plugin packages
 └── plugins_data/     # Sandboxed persistent storage per plugin
@@ -28,7 +29,7 @@ All user state and settings are stored in your platform's standard configuration
 # Audio & Player Preferences
 volume: 80
 player_backend: "auto"     # auto, native, mpv, vlc, cvlc, ffplay, mplayer, mpg123
-theme: "tokyonight"        # tokyonight, catppuccin, synthwave, nord, gruvbox, dracula
+theme: "tokyonight"        # built-in (tokyonight, catppuccin, synthwave, nord, gruvbox, dracula) or custom theme ID
 visualizer_mode: "dj-cat"   # dj-cat, dj-dog, dj-bear, dj-frog, dj-bunny, bars, wave, spectrum, minimal, off
 search_provider: "spotify"  # spotify, youtube, apple, soundcloud, bandcamp, ddg, google
 last_station_id: ""        # Remembers last played station

@@ -197,6 +197,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.SyncDesktop()
 		return m, tea.SetWindowTitle(m.WindowTitle())
 
+	case AutoPauseMsg:
+		m.PlayingID = ""
+		m.StatusMessage = "Paused - headphones disconnected"
+		m.SyncDesktop()
+		return m, tea.SetWindowTitle(m.WindowTitle())
+
 	case MediaStopMsg:
 		_ = m.Player.Stop()
 		m.PlayingID = ""
@@ -293,23 +299,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.ShowThemePicker {
-			switch msg.String() {
-			case "esc", "q":
-				m.ShowThemePicker = false
-			case "1":
-				m.applyTheme("tokyonight")
-			case "2":
-				m.applyTheme("catppuccin")
-			case "3":
-				m.applyTheme("synthwave")
-			case "4":
-				m.applyTheme("nord")
-			case "5":
-				m.applyTheme("gruvbox")
-			case "6":
-				m.applyTheme("dracula")
-			}
-			return m, nil
+			return m.handleThemePickerKey(msg)
 		}
 
 		if m.ShowAddModal {
@@ -361,6 +351,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.KeyMap.Theme):
 			m.ShowThemePicker = true
+			allThemes := theme.GetAllThemes()
+			m.ThemeCursor = 0
+			for i, t := range allThemes {
+				if t.ID == m.Config.Theme || strings.EqualFold(t.Name, m.Config.Theme) || t.ID == m.Theme.ID {
+					m.ThemeCursor = i
+					break
+				}
+			}
 
 		case key.Matches(msg, m.KeyMap.Timer):
 			m.openTimerModal()
@@ -958,6 +956,83 @@ func (m *Model) applyTheme(name string) {
 	m.Theme = theme.GetTheme(name)
 	m.ShowThemePicker = false
 	m.StatusMessage = fmt.Sprintf("Theme changed to %s", m.Theme.Name)
+	_ = util.SaveConfig(m.Config)
+}
+
+func (m Model) handleThemePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	allThemes := theme.GetAllThemes()
+
+	switch msg.String() {
+	case "esc", "q":
+		m.ShowThemePicker = false
+		return m, nil
+
+	case "j", "down":
+		if m.ThemeCursor < len(allThemes)-1 {
+			m.ThemeCursor++
+		}
+		return m, nil
+
+	case "k", "up":
+		if m.ThemeCursor > 0 {
+			m.ThemeCursor--
+		}
+		return m, nil
+
+	case "g", "home":
+		m.ThemeCursor = 0
+		return m, nil
+
+	case "G", "end":
+		if len(allThemes) > 0 {
+			m.ThemeCursor = len(allThemes) - 1
+		}
+		return m, nil
+
+	case "ctrl+u", "pgup":
+		m.ThemeCursor -= 5
+		if m.ThemeCursor < 0 {
+			m.ThemeCursor = 0
+		}
+		return m, nil
+
+	case "ctrl+d", "pgdown":
+		m.ThemeCursor += 5
+		if m.ThemeCursor >= len(allThemes) {
+			if len(allThemes) > 0 {
+				m.ThemeCursor = len(allThemes) - 1
+			} else {
+				m.ThemeCursor = 0
+			}
+		}
+		return m, nil
+
+	case "enter", " ":
+		if len(allThemes) > 0 && m.ThemeCursor < len(allThemes) {
+			m.applyTheme(allThemes[m.ThemeCursor].ID)
+		}
+		return m, nil
+
+	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+		idx := int(msg.String()[0] - '1')
+		if idx >= 0 && idx < len(allThemes) {
+			m.ThemeCursor = idx
+			m.applyTheme(allThemes[idx].ID)
+		}
+		return m, nil
+
+	case "e", "E":
+		exportPath, err := theme.ExportActiveTheme(util.GetThemesDir(), m.Theme)
+		if err == nil {
+			m.StatusMessage = fmt.Sprintf("✓ Exported theme to %s", exportPath)
+			_, _ = theme.LoadCustomThemes(util.GetThemesDir())
+		} else {
+			m.StatusMessage = fmt.Sprintf("Error exporting theme: %v", err)
+		}
+		return m, nil
+	}
+
+	return m, nil
 }
 
 func (m *Model) handleTimerEvent(ev timer.Event) {

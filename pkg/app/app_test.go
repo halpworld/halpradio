@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/halpworld/halpradio/pkg/desktop"
+	"github.com/halpworld/halpradio/pkg/util"
 )
 
 func TestSetupAppVersion(t *testing.T) {
@@ -464,5 +466,52 @@ func TestRunRemoteEdgeCases(t *testing.T) {
 	done, err = RunRemote([]string{"status", "--json"}, &buf)
 	if err != nil || !done || !strings.Contains(buf.String(), `"status": "playing"`) {
 		t.Errorf("expected json output for remote status --json, got %s", buf.String())
+	}
+}
+
+func TestSetupAppCustomTheme(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	// Create custom theme in themes dir
+	themesDir := util.GetThemesDir()
+	_ = os.MkdirAll(themesDir, 0700)
+	customYAML := `
+name: "Everforest Dark"
+primary: "#a7c080"
+background: "#2d353b"
+`
+	if err := os.WriteFile(filepath.Join(themesDir, "everforest.yaml"), []byte(customYAML), 0644); err != nil {
+		t.Fatalf("Failed to write custom theme: %v", err)
+	}
+
+	var buf bytes.Buffer
+	appInst, isVersion, err := SetupApp([]string{
+		"-theme", "everforest",
+	}, []byte{}, &buf)
+	if err != nil {
+		t.Fatalf("Unexpected error for -theme everforest: %v", err)
+	}
+	if isVersion {
+		t.Errorf("Expected isVersion false")
+	}
+	if appInst == nil {
+		t.Fatalf("Expected non-nil AppInstance")
+	}
+	defer func() {
+		if appInst.Desktop != nil {
+			_ = appInst.Desktop.Close()
+		}
+	}()
+
+	if appInst.Config.Theme != "everforest" {
+		t.Errorf("Expected theme 'everforest', got %s", appInst.Config.Theme)
+	}
+
+	// Verify sample_theme.yaml.example was automatically created
+	sampleFile := filepath.Join(themesDir, "sample_theme.yaml.example")
+	if _, err := os.Stat(sampleFile); os.IsNotExist(err) {
+		t.Errorf("Expected sample_theme.yaml.example to be created")
 	}
 }

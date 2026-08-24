@@ -63,6 +63,10 @@ type MediaMuteMsg struct{}
 type MediaRandomMsg struct{}
 type MediaQuitMsg struct{}
 
+// AutoPauseMsg is sent when the player paused itself after the audio output
+// device left Bluetooth (e.g. AirPods taken out of the ears).
+type AutoPauseMsg struct{}
+
 type Model struct {
 	Width  int
 	Height int
@@ -104,6 +108,7 @@ type Model struct {
 
 	ShowWhichKey    bool
 	ShowThemePicker bool
+	ThemeCursor     int
 	ShowPRExport    bool
 	ShowAddModal    bool
 	ShowTimerModal  bool
@@ -191,6 +196,14 @@ func NewModel(
 		TimerPomodoroNotifyDesktop: cfg.EventNotifyDesktop,
 		TimerPomodoroNotifyBell:    cfg.EventTerminalBell,
 		LastTickTime:               time.Now(),
+	}
+
+	allThemes := theme.GetAllThemes()
+	for i, t := range allThemes {
+		if t.ID == cfg.Theme || t.Name == th.Name || t.ID == th.ID {
+			m.ThemeCursor = i
+			break
+		}
 	}
 
 	m.RefreshStations()
