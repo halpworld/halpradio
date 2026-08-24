@@ -35,7 +35,7 @@ jobs:
         run: .github/scripts/generate_demos.sh
 
       - name: Commit and push updated demos
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: 'docs: regenerate demos & screenshots'
           commit_user_name: 'github-actions[bot]'
