@@ -30,9 +30,9 @@ func TestRenderModals(t *testing.T) {
 		t.Errorf("Expected PR Export modal content, got: %s", prModal)
 	}
 
-	// 2. Theme Picker Modal
-	themeModal := RenderThemePickerModal("tokyonight", 0, 80, 24, th)
-	if !strings.Contains(themeModal, "SELECT COLOR THEME") || !strings.Contains(themeModal, "Tokyo Night") {
+	// 2. Theme Picker Modal (Installed tab)
+	themeModal := RenderThemePickerModal(theme.GetAllThemes(), nil, 0, 0, "tokyonight", false, "", "", 80, 24, th)
+	if !strings.Contains(themeModal, "COLOR THEMES") || !strings.Contains(themeModal, "Tokyo Night") {
 		t.Errorf("Expected theme picker modal content, got: %s", themeModal)
 	}
 
@@ -43,9 +43,25 @@ func TestRenderModals(t *testing.T) {
 		Primary:  "#123456",
 		IsCustom: true,
 	})
-	customThemeModal := RenderThemePickerModal("custom-test", 6, 80, 24, th)
+	customThemeModal := RenderThemePickerModal(theme.GetAllThemes(), nil, 0, 6, "custom-test", true, "", "", 80, 24, th)
 	if !strings.Contains(customThemeModal, "My Custom Theme") || !strings.Contains(customThemeModal, "(Custom)") {
 		t.Errorf("Expected custom theme and (Custom) tag in modal, got: %s", customThemeModal)
+	}
+
+	// 2c. Theme Picker Community Hub Tab (Tab 1)
+	regThemes := []theme.RegistryTheme{
+		{
+			ID:          "rose-pine",
+			Name:        "Rosé Pine",
+			Author:      "mvllow",
+			Description: "All natural pine",
+			Category:    "Pastel",
+			Primary:     "#eb6f92",
+		},
+	}
+	communityModal := RenderThemePickerModal(theme.GetAllThemes(), regThemes, 1, 0, "tokyonight", false, "Ready", "rose", 80, 24, th)
+	if !strings.Contains(communityModal, "Community Hub") || !strings.Contains(communityModal, "Rosé Pine") {
+		t.Errorf("Expected community hub themes in modal, got: %s", communityModal)
 	}
 
 	// 3. Add Station Modal

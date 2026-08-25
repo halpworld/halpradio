@@ -33,16 +33,8 @@ type AppInstance struct {
 
 // RunPluginCLI handles plugin subcommands: list, install, remove, enable, disable, update.
 func RunPluginCLI(args []string, out io.Writer) (bool, error) {
-	if len(args) == 0 || args[0] == "help" || args[0] == "--help" {
-		fmt.Fprintln(out, "halpradio plugin - Sandboxed Wasm Plugin Manager")
-		fmt.Fprintln(out, "")
-		fmt.Fprintln(out, "Usage:")
-		fmt.Fprintln(out, "  halpradio plugin list                  List installed and official registry plugins")
-		fmt.Fprintln(out, "  halpradio plugin install <plugin-id>   Install a plugin from official registry")
-		fmt.Fprintln(out, "  halpradio plugin enable <plugin-id>    Enable an installed plugin")
-		fmt.Fprintln(out, "  halpradio plugin disable <plugin-id>   Disable an installed plugin")
-		fmt.Fprintln(out, "  halpradio plugin remove <plugin-id>    Uninstall an installed plugin")
-		fmt.Fprintln(out, "  halpradio plugin update <id|--all>     Update installed plugins from registry")
+	if len(args) == 0 || IsHelpArg(args[0]) {
+		PrintPluginHelp(out)
 		return true, nil
 	}
 
@@ -100,7 +92,7 @@ func RunPluginCLI(args []string, out io.Writer) (bool, error) {
 		return true, nil
 
 	case "install", "add":
-		if len(args) < 2 {
+		if len(args) < 2 || IsHelpArg(args[1]) {
 			fmt.Fprintln(out, "Error: plugin ID required. Usage: halpradio plugin install <plugin-id>")
 			return false, fmt.Errorf("plugin ID required")
 		}
@@ -136,7 +128,7 @@ func RunPluginCLI(args []string, out io.Writer) (bool, error) {
 		return true, nil
 
 	case "enable":
-		if len(args) < 2 {
+		if len(args) < 2 || IsHelpArg(args[1]) {
 			fmt.Fprintln(out, "Error: plugin ID required. Usage: halpradio plugin enable <plugin-id>")
 			return false, fmt.Errorf("plugin ID required")
 		}
@@ -150,7 +142,7 @@ func RunPluginCLI(args []string, out io.Writer) (bool, error) {
 		return true, nil
 
 	case "disable":
-		if len(args) < 2 {
+		if len(args) < 2 || IsHelpArg(args[1]) {
 			fmt.Fprintln(out, "Error: plugin ID required. Usage: halpradio plugin disable <plugin-id>")
 			return false, fmt.Errorf("plugin ID required")
 		}
@@ -163,7 +155,7 @@ func RunPluginCLI(args []string, out io.Writer) (bool, error) {
 		return true, nil
 
 	case "remove", "rm", "uninstall":
-		if len(args) < 2 {
+		if len(args) < 2 || IsHelpArg(args[1]) {
 			fmt.Fprintln(out, "Error: plugin ID required. Usage: halpradio plugin remove <plugin-id>")
 			return false, fmt.Errorf("plugin ID required")
 		}
@@ -196,7 +188,12 @@ func RunPluginCLI(args []string, out io.Writer) (bool, error) {
 		return true, nil
 
 	default:
-		fmt.Fprintf(out, "Unknown plugin command %q. Run 'halpradio plugin --help'\n", cmd)
+		sugg := SuggestCommand(cmd, []string{"list", "install", "enable", "disable", "remove", "update"})
+		if sugg != "" {
+			fmt.Fprintf(out, "Unknown plugin command %q. Did you mean %q? Run 'halpradio plugin --help'\n", cmd, sugg)
+		} else {
+			fmt.Fprintf(out, "Unknown plugin command %q. Run 'halpradio plugin --help'\n", cmd)
+		}
 		return false, fmt.Errorf("unknown plugin command: %s", cmd)
 	}
 }
@@ -247,18 +244,8 @@ func formatPlaybackInfo(st *desktop.PlaybackInfo, tmpl string) string {
 
 // RunCurrent handles `halpradio current [--json] [--format "<tmpl>"]` CLI query mode for tmux / Waybar / status bars.
 func RunCurrent(args []string, out io.Writer) (bool, error) {
-	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
-		io.WriteString(out, "Usage: halpradio current [--json] [--format \"<template>\"]\n")
-		io.WriteString(out, "Outputs currently playing station and track for tmux, Waybar, SketchyBar, or Polybar.\n\n")
-		io.WriteString(out, "Format placeholders:\n")
-		io.WriteString(out, "  %s  Station name\n")
-		io.WriteString(out, "  %t  Track title (Artist - Title)\n")
-		io.WriteString(out, "  %a  Artist name\n")
-		io.WriteString(out, "  %T  Song title\n")
-		io.WriteString(out, "  %p  Playback status (PLAYING, PAUSED, STOPPED)\n")
-		io.WriteString(out, "  %v  Volume percentage\n")
-		io.WriteString(out, "  %b  Active backend\n")
-		io.WriteString(out, "  %r  Bitrate (kbps)\n")
+	if len(args) > 0 && IsHelpArg(args[0]) {
+		PrintCurrentHelp(out)
 		return true, nil
 	}
 
@@ -445,9 +432,8 @@ func RunStatus(args []string, out io.Writer) (bool, error) {
 
 // RunRemote executes an IPC command against an active halpradio instance.
 func RunRemote(args []string, out io.Writer) (bool, error) {
-	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		fmt.Fprintln(out, "Usage: halpradio remote <command> [--json]")
-		fmt.Fprintln(out, "Commands: toggle, play, pause, stop, next, prev, volup, voldown, mute, random, status, current")
+	if len(args) == 0 || IsHelpArg(args[0]) {
+		PrintRemoteHelp(out)
 		return true, nil
 	}
 
@@ -535,83 +521,64 @@ func RunRemote(args []string, out io.Writer) (bool, error) {
 
 // RunHelp prints comprehensive CLI usage, commands, flags, and workflow examples.
 func RunHelp(out io.Writer) {
-	fmt.Fprintln(out, "halpradio - Terminal Internet Radio Player & Streamer")
-	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "Usage:")
-	fmt.Fprintln(out, "  halpradio [flags]                       Launch interactive Bubble Tea TUI")
-	fmt.Fprintln(out, "  halpradio <command> [arguments] [flags] Execute standalone CLI command")
-	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "Core Commands:")
-	fmt.Fprintln(out, "  play <target> [flags]         Stream radio directly without TUI (index, ID, name, URL, or random)")
-	fmt.Fprintln(out, "  stations [list|search|fav]    Discover, search, filter, and manage station catalog")
-	fmt.Fprintln(out, "  current [flags]               Query currently playing track for status bars (tmux, Waybar)")
-	fmt.Fprintln(out, "  status [flags]                Get full playback status snapshot (JSON or formatted)")
-	fmt.Fprintln(out, "  volume [value] [flags]        Query or adjust volume (e.g. halpradio volume +5, 60)")
-	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "Desktop & Playback Controls:")
-	fmt.Fprintln(out, "  toggle                        Toggle play/pause on active instance")
-	fmt.Fprintln(out, "  pause / stop                  Pause or stop playback")
-	fmt.Fprintln(out, "  next / prev                   Play next or previous station")
-	fmt.Fprintln(out, "  mute                          Toggle mute")
-	fmt.Fprintln(out, "  random                        Play random station")
-	fmt.Fprintln(out, "  remote <action>               Send custom IPC action to running instance")
-	fmt.Fprintln(out, "  plugin <list|install|...>     Manage sandboxed Wasm plugins")
-	fmt.Fprintln(out, "  update-stations               Update station catalog from online repository")
-	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "Interactive TUI Flags:")
-	fmt.Fprintln(out, "  -backend <engine>             Audio player backend (auto, native, mpv, vlc, ffplay, mplayer, mpg123)")
-	fmt.Fprintln(out, "  -theme <name>                 Theme (tokyonight, catppuccin, synthwave, nord, gruvbox, dracula)")
-	fmt.Fprintln(out, "  -notifications=false          Disable song change desktop notifications")
-	fmt.Fprintln(out, "  -autopause=false              Disable auto-pause on headphone disconnect")
-	fmt.Fprintln(out, "  -version                      Show version")
-	fmt.Fprintln(out, "")
-	io.WriteString(out, "Top Automation Examples:\n")
-	io.WriteString(out, "  halpradio play 2 --volume 30                  # Headless stream by index\n")
-	io.WriteString(out, "  halpradio play somafm_groovesalad -d 45m       # 45-minute focus session\n")
-	io.WriteString(out, "  halpradio stations list --genre ambient        # List ambient stations\n")
-	io.WriteString(out, "  halpradio stations list --plain | fzf | awk '{print $2}' | xargs halpradio play\n")
-	io.WriteString(out, "  halpradio current --format \"[%p] %s - %t\"     # Status bar ticker\n")
-	io.WriteString(out, "  halpradio volume +5                           # Increase volume by 5%\n")
+	PrintRootHelp(out)
 }
 
 // SetupApp parses CLI flags, loads configuration, and initializes the AppInstance.
 func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstance, bool, error) {
 	if len(args) > 0 {
-		switch args[0] {
-		case "help", "--help", "-h":
-			RunHelp(out)
+		switch {
+		case args[0] == "help":
+			done := RouteHelp(args[1:], embeddedCatalog, out)
+			if !done {
+				return nil, true, fmt.Errorf("unknown help topic: %s", strings.Join(args[1:], " "))
+			}
 			return nil, true, nil
-		case "version":
+		case IsHelpArg(args[0]):
+			PrintRootHelp(out)
+			return nil, true, nil
+		case args[0] == "version" || args[0] == "-version" || args[0] == "--version" || args[0] == "-v":
 			fmt.Fprintf(out, "halpradio v%s - LazyVim-inspired Terminal Internet Radio Streamer\n", Version)
 			return nil, true, nil
-		case "play":
+		case args[0] == "play":
 			_, err := RunPlay(args[1:], embeddedCatalog, out)
 			return nil, true, err
-		case "stations", "station":
+		case args[0] == "stations" || args[0] == "station":
 			_, err := RunStations(args[1:], embeddedCatalog, out)
 			return nil, true, err
-		case "search", "find":
+		case args[0] == "search" || args[0] == "find":
 			_, err := RunStations(append([]string{"search"}, args[1:]...), embeddedCatalog, out)
 			return nil, true, err
-		case "volume", "vol":
+		case args[0] == "volume" || args[0] == "vol":
 			_, err := RunVolume(args[1:], out)
 			return nil, true, err
-		case "remote":
+		case args[0] == "remote":
 			_, err := RunRemote(args[1:], out)
 			return nil, true, err
-		case "current":
+		case args[0] == "current":
 			_, err := RunCurrent(args[1:], out)
 			return nil, true, err
-		case "status":
+		case args[0] == "status":
 			_, err := RunStatus(args[1:], out)
 			return nil, true, err
-		case "toggle", "pause", "stop", "next", "prev", "volup", "voldown", "mute", "random":
+		case args[0] == "toggle" || args[0] == "pause" || args[0] == "stop" || args[0] == "next" || args[0] == "prev" || args[0] == "volup" || args[0] == "voldown" || args[0] == "mute" || args[0] == "random":
+			if len(args) > 1 && IsHelpArg(args[1]) {
+				PrintPlaybackControlHelp(args[0], out)
+				return nil, true, nil
+			}
 			_, err := RunRemote(args, out)
 			return nil, true, err
-		case "plugin":
+		case args[0] == "theme" || args[0] == "themes":
+			_, err := RunThemeCLI(args[1:], out)
+			return nil, true, err
+		case args[0] == "plugin" || args[0] == "plugins":
 			_, err := RunPluginCLI(args[1:], out)
 			return nil, true, err
-		case "update-stations", "update-catalog":
+		case args[0] == "update-stations" || args[0] == "update-catalog":
+			if len(args) > 1 && IsHelpArg(args[1]) {
+				PrintUpdateStationsHelp(out)
+				return nil, true, nil
+			}
 			cfg, _ := util.LoadConfig()
 			updater := radio.NewCatalogUpdater(cfg.CatalogUpdateURL, cfg.CatalogCacheTTLHours)
 			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
@@ -627,15 +594,38 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 				fmt.Fprintf(out, "✓ Station catalog is already up to date (%d stations)\n", count)
 			}
 			return nil, true, nil
+		case !strings.HasPrefix(args[0], "-"):
+			sugg := SuggestCommand(args[0], RootCommands)
+			if sugg != "" {
+				fmt.Fprintf(out, "%s: %q is not a valid halpradio command.\n\nDid you mean this?\n  %s\n\nRun 'halpradio --help' for available commands.\n",
+					styleError.Render("halpradio"),
+					args[0],
+					styleSuggestion.Render(sugg),
+				)
+			} else {
+				fmt.Fprintf(out, "%s: %q is not a valid halpradio command. Run 'halpradio --help' for available commands.\n",
+					styleError.Render("halpradio"),
+					args[0],
+				)
+			}
+			return nil, true, fmt.Errorf("unknown command: %s", args[0])
 		}
 	}
 
 	fs := flag.NewFlagSet("halpradio", flag.ContinueOnError)
 	fs.SetOutput(out)
+	fs.Usage = func() {
+		PrintRootHelp(out)
+	}
 
 	backendFlag := fs.String("backend", "auto", "Audio player backend: auto, native, mpv, vlc, ffplay, mplayer, mpg123")
-	themeFlag := fs.String("theme", "", "Color theme: built-in (tokyonight, catppuccin, synthwave, nord, gruvbox, dracula) or custom from ~/.config/halpradio/themes/")
+	fs.StringVar(backendFlag, "b", "auto", "Audio player backend (shorthand)")
+	themeFlag := fs.String("theme", "", "Color theme")
+	fs.StringVar(themeFlag, "t", "", "Color theme (shorthand)")
 	versionFlag := fs.Bool("version", false, "Show halpradio version")
+	fs.BoolVar(versionFlag, "v", false, "Show halpradio version (shorthand)")
+	helpFlag := fs.Bool("help", false, "Show halpradio help")
+	fs.BoolVar(helpFlag, "h", false, "Show halpradio help (shorthand)")
 	updateCatalogFlag := fs.Bool("update-catalog", false, "Update stations catalog from remote repository")
 	notificationsFlag := fs.Bool("notifications", true, "Enable desktop notifications on song change")
 	autoPauseFlag := fs.Bool("autopause", true, "Pause playback when headphones disconnect (e.g. AirPods taken out)")
@@ -644,7 +634,15 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 	discordFlag := fs.Bool("discord", true, "Enable Discord Rich Presence (RPC)")
 
 	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return nil, true, nil
+		}
 		return nil, false, err
+	}
+
+	if *helpFlag {
+		PrintRootHelp(out)
+		return nil, true, nil
 	}
 
 	if *versionFlag {

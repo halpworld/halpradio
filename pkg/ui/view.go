@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/halpworld/halpradio/pkg/plugin"
+	"github.com/halpworld/halpradio/pkg/theme"
 	"github.com/halpworld/halpradio/pkg/ui/components"
 )
 
@@ -26,7 +27,24 @@ func (m Model) View() string {
 	}
 
 	if m.ShowThemePicker {
-		return components.RenderThemePickerModal(m.Config.Theme, m.ThemeCursor, width, height, m.Theme)
+		installed := theme.GetAllThemes()
+		cursor := m.ThemeCursor
+		if m.ThemeModalTab == 1 {
+			cursor = m.ThemeRegistryCursor
+		}
+		return components.RenderThemePickerModal(
+			installed,
+			m.ThemeRegistryList,
+			m.ThemeModalTab,
+			cursor,
+			m.Config.Theme,
+			m.IsPreviewingTheme,
+			m.ThemeStatusMsg,
+			m.ThemeSearchQuery,
+			width,
+			height,
+			m.Theme,
+		)
 	}
 
 	if m.ShowAddModal {

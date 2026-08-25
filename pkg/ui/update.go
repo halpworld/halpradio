@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -98,6 +99,55 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Desktop.NotifySong(msg.Title, msg.Message)
 		}
 		m.StatusMessage = fmt.Sprintf("[%s] %s", msg.Title, msg.Message)
+		return m, nil
+
+	case ThemeRegistryLoadedMsg:
+		if msg.Err != nil && len(msg.Themes) == 0 {
+			client := m.ThemeClient
+			if client == nil {
+				client = theme.NewRegistryClient(m.Config.ThemeRegistryURL)
+			}
+			reg, _ := client.FetchRegistry(context.Background())
+			m.ThemeRegistryList = reg.Themes
+			m.ThemeStatusMsg = "Registry offline (using offline catalog)"
+		} else {
+			m.ThemeRegistryList = msg.Themes
+			m.ThemeStatusMsg = ""
+		}
+		return m, nil
+
+	case ThemeInstalledMsg:
+		if msg.Err != nil {
+			m.ThemeStatusMsg = fmt.Sprintf("Install error: %v", msg.Err)
+		} else {
+			m.ThemeStatusMsg = fmt.Sprintf("✓ Theme %s installed!", msg.ThemeID)
+			m.StatusMessage = fmt.Sprintf("✓ Downloaded and applied theme %s", msg.ThemeID)
+			m.applyTheme(msg.ThemeID)
+			m.ShowThemePicker = false
+		}
+		return m, nil
+
+	case ThemeDeletedMsg:
+		if msg.Err != nil {
+			m.ThemeStatusMsg = fmt.Sprintf("Delete error: %v", msg.Err)
+		} else {
+			m.ThemeStatusMsg = fmt.Sprintf("✓ Deleted theme %s", msg.ThemeID)
+			m.StatusMessage = fmt.Sprintf("✓ Deleted theme %s", msg.ThemeID)
+			if m.Config.Theme == msg.ThemeID || m.Theme.ID == msg.ThemeID {
+				m.applyTheme("tokyonight")
+			}
+			allThemes := theme.GetAllThemes()
+			if m.ThemeCursor >= len(allThemes) {
+				m.ThemeCursor = len(allThemes) - 1
+			}
+			if m.ThemeCursor < 0 {
+				m.ThemeCursor = 0
+			}
+		}
+		return m, nil
+
+	case ThemeFlashMsg:
+		m.ThemeStatusMsg = string(msg)
 		return m, nil
 
 	case TrackUpdatedMsg:
@@ -351,6 +401,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.KeyMap.Theme):
 			m.ShowThemePicker = true
+			m.ThemeModalTab = 0
+			m.IsPreviewingTheme = false
+			m.ThemeStatusMsg = ""
+			m.ThemeSearchQuery = ""
+			m.ThemeIsSearching = false
 			allThemes := theme.GetAllThemes()
 			m.ThemeCursor = 0
 			for i, t := range allThemes {
@@ -359,6 +414,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					break
 				}
 			}
+			return m, m.fetchThemeRegistryCmd()
 
 		case key.Matches(msg, m.KeyMap.Timer):
 			m.openTimerModal()
@@ -954,80 +1010,364 @@ func (m *Model) openTimerModal() {
 func (m *Model) applyTheme(name string) {
 	m.Config.Theme = name
 	m.Theme = theme.GetTheme(name)
+	m.IsPreviewingTheme = false
 	m.ShowThemePicker = false
 	m.StatusMessage = fmt.Sprintf("Theme changed to %s", m.Theme.Name)
 	_ = util.SaveConfig(m.Config)
 }
 
+func (m Model) getFilteredRegistryThemes() []theme.RegistryTheme {
+	var filtered []theme.RegistryTheme
+	q := strings.ToLower(strings.TrimSpace(m.ThemeSearchQuery))
+	for _, rt := range m.ThemeRegistryList {
+		if q == "" ||
+			strings.Contains(strings.ToLower(rt.Name), q) ||
+			strings.Contains(strings.ToLower(rt.Author), q) ||
+			strings.Contains(strings.ToLower(rt.Description), q) ||
+			strings.Contains(strings.ToLower(rt.Category), q) ||
+			strings.Contains(strings.ToLower(rt.ID), q) {
+			filtered = append(filtered, rt)
+		}
+	}
+	return filtered
+}
+
+func (m Model) fetchThemeRegistryCmd() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+
+		client := m.ThemeClient
+		if client == nil {
+			client = theme.NewRegistryClient(m.Config.ThemeRegistryURL)
+		}
+
+		index, err := client.FetchRegistry(ctx)
+		if err != nil {
+			return ThemeRegistryLoadedMsg{
+				Themes: index.Themes,
+				Err:    err,
+			}
+		}
+		return ThemeRegistryLoadedMsg{
+			Themes: index.Themes,
+			Err:    nil,
+		}
+	}
+}
+
+func (m Model) installThemeCmd(th theme.RegistryTheme) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		client := m.ThemeClient
+		if client == nil {
+			client = theme.NewRegistryClient(m.Config.ThemeRegistryURL)
+		}
+
+		err := client.DownloadAndInstall(ctx, th, util.GetThemesDir())
+		if err != nil {
+			return ThemeInstalledMsg{ThemeID: th.ID, Err: err}
+		}
+		return ThemeInstalledMsg{ThemeID: th.ID, Err: nil}
+	}
+}
+
+func (m Model) deleteThemeCmd(themeID string) tea.Cmd {
+	return func() tea.Msg {
+		client := m.ThemeClient
+		if client == nil {
+			client = theme.NewRegistryClient(m.Config.ThemeRegistryURL)
+		}
+
+		err := client.Uninstall(themeID, util.GetThemesDir())
+		return ThemeDeletedMsg{ThemeID: themeID, Err: err}
+	}
+}
+
 func (m Model) handleThemePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	allThemes := theme.GetAllThemes()
+	filteredReg := m.getFilteredRegistryThemes()
+
+	// Search filter mode in Community Hub
+	if m.ThemeIsSearching {
+		switch msg.String() {
+		case "esc", "enter":
+			m.ThemeIsSearching = false
+			return m, nil
+		case "backspace":
+			if len(m.ThemeSearchQuery) > 0 {
+				m.ThemeSearchQuery = m.ThemeSearchQuery[:len(m.ThemeSearchQuery)-1]
+				m.ThemeRegistryCursor = 0
+			} else {
+				m.ThemeIsSearching = false
+			}
+			return m, nil
+		default:
+			if len(msg.String()) == 1 {
+				m.ThemeSearchQuery += msg.String()
+				m.ThemeRegistryCursor = 0
+			}
+			return m, nil
+		}
+	}
 
 	switch msg.String() {
 	case "esc", "q":
+		if m.IsPreviewingTheme {
+			m.Theme = m.PreviewOriginalTheme
+			m.IsPreviewingTheme = false
+		}
 		m.ShowThemePicker = false
+		m.ThemeStatusMsg = ""
+		m.ThemeSearchQuery = ""
+		return m, nil
+
+	case "tab":
+		m.ThemeModalTab = (m.ThemeModalTab + 1) % 2
+		if m.IsPreviewingTheme {
+			if m.ThemeModalTab == 0 && len(allThemes) > 0 && m.ThemeCursor < len(allThemes) {
+				m.Theme = allThemes[m.ThemeCursor]
+			} else if m.ThemeModalTab == 1 && len(filteredReg) > 0 && m.ThemeRegistryCursor < len(filteredReg) {
+				m.Theme = filteredReg[m.ThemeRegistryCursor].ToTheme()
+			}
+		}
+		return m, nil
+
+	case "shift+tab":
+		m.ThemeModalTab = (m.ThemeModalTab - 1 + 2) % 2
+		if m.IsPreviewingTheme {
+			if m.ThemeModalTab == 0 && len(allThemes) > 0 && m.ThemeCursor < len(allThemes) {
+				m.Theme = allThemes[m.ThemeCursor]
+			} else if m.ThemeModalTab == 1 && len(filteredReg) > 0 && m.ThemeRegistryCursor < len(filteredReg) {
+				m.Theme = filteredReg[m.ThemeRegistryCursor].ToTheme()
+			}
+		}
+		return m, nil
+
+	case "p", "P":
+		// Toggle interactive live preview in TUI
+		if !m.IsPreviewingTheme {
+			m.PreviewOriginalTheme = theme.GetTheme(m.Config.Theme)
+			m.IsPreviewingTheme = true
+			if m.ThemeModalTab == 0 && len(allThemes) > 0 && m.ThemeCursor < len(allThemes) {
+				m.Theme = allThemes[m.ThemeCursor]
+			} else if m.ThemeModalTab == 1 && len(filteredReg) > 0 && m.ThemeRegistryCursor < len(filteredReg) {
+				m.Theme = filteredReg[m.ThemeRegistryCursor].ToTheme()
+			}
+			m.ThemeStatusMsg = fmt.Sprintf("👁️ Live previewing %s! Press [p/Esc] to revert, [Enter/i] to apply.", m.Theme.Name)
+		} else {
+			m.Theme = m.PreviewOriginalTheme
+			m.IsPreviewingTheme = false
+			m.ThemeStatusMsg = "Reverted live preview"
+		}
 		return m, nil
 
 	case "j", "down":
-		if m.ThemeCursor < len(allThemes)-1 {
-			m.ThemeCursor++
+		if m.ThemeModalTab == 0 {
+			if m.ThemeCursor < len(allThemes)-1 {
+				m.ThemeCursor++
+			}
+			if m.IsPreviewingTheme && m.ThemeCursor < len(allThemes) {
+				m.Theme = allThemes[m.ThemeCursor]
+			}
+		} else {
+			if m.ThemeRegistryCursor < len(filteredReg)-1 {
+				m.ThemeRegistryCursor++
+			}
+			if m.IsPreviewingTheme && len(filteredReg) > 0 && m.ThemeRegistryCursor < len(filteredReg) {
+				m.Theme = filteredReg[m.ThemeRegistryCursor].ToTheme()
+			}
 		}
 		return m, nil
 
 	case "k", "up":
-		if m.ThemeCursor > 0 {
-			m.ThemeCursor--
+		if m.ThemeModalTab == 0 {
+			if m.ThemeCursor > 0 {
+				m.ThemeCursor--
+			}
+			if m.IsPreviewingTheme && m.ThemeCursor < len(allThemes) {
+				m.Theme = allThemes[m.ThemeCursor]
+			}
+		} else {
+			if m.ThemeRegistryCursor > 0 {
+				m.ThemeRegistryCursor--
+			}
+			if m.IsPreviewingTheme && len(filteredReg) > 0 && m.ThemeRegistryCursor < len(filteredReg) {
+				m.Theme = filteredReg[m.ThemeRegistryCursor].ToTheme()
+			}
 		}
 		return m, nil
 
 	case "g", "home":
-		m.ThemeCursor = 0
+		if m.ThemeModalTab == 0 {
+			m.ThemeCursor = 0
+			if m.IsPreviewingTheme && len(allThemes) > 0 {
+				m.Theme = allThemes[0]
+			}
+		} else {
+			m.ThemeRegistryCursor = 0
+			if m.IsPreviewingTheme && len(filteredReg) > 0 {
+				m.Theme = filteredReg[0].ToTheme()
+			}
+		}
 		return m, nil
 
 	case "G", "end":
-		if len(allThemes) > 0 {
-			m.ThemeCursor = len(allThemes) - 1
+		if m.ThemeModalTab == 0 {
+			if len(allThemes) > 0 {
+				m.ThemeCursor = len(allThemes) - 1
+			}
+			if m.IsPreviewingTheme && len(allThemes) > 0 {
+				m.Theme = allThemes[m.ThemeCursor]
+			}
+		} else {
+			if len(filteredReg) > 0 {
+				m.ThemeRegistryCursor = len(filteredReg) - 1
+			}
+			if m.IsPreviewingTheme && len(filteredReg) > 0 {
+				m.Theme = filteredReg[m.ThemeRegistryCursor].ToTheme()
+			}
 		}
 		return m, nil
 
 	case "ctrl+u", "pgup":
-		m.ThemeCursor -= 5
-		if m.ThemeCursor < 0 {
-			m.ThemeCursor = 0
+		if m.ThemeModalTab == 0 {
+			m.ThemeCursor -= 5
+			if m.ThemeCursor < 0 {
+				m.ThemeCursor = 0
+			}
+			if m.IsPreviewingTheme && len(allThemes) > 0 {
+				m.Theme = allThemes[m.ThemeCursor]
+			}
+		} else {
+			m.ThemeRegistryCursor -= 5
+			if m.ThemeRegistryCursor < 0 {
+				m.ThemeRegistryCursor = 0
+			}
+			if m.IsPreviewingTheme && len(filteredReg) > 0 {
+				m.Theme = filteredReg[m.ThemeRegistryCursor].ToTheme()
+			}
 		}
 		return m, nil
 
 	case "ctrl+d", "pgdown":
-		m.ThemeCursor += 5
-		if m.ThemeCursor >= len(allThemes) {
-			if len(allThemes) > 0 {
-				m.ThemeCursor = len(allThemes) - 1
-			} else {
-				m.ThemeCursor = 0
+		if m.ThemeModalTab == 0 {
+			m.ThemeCursor += 5
+			if m.ThemeCursor >= len(allThemes) {
+				if len(allThemes) > 0 {
+					m.ThemeCursor = len(allThemes) - 1
+				} else {
+					m.ThemeCursor = 0
+				}
+			}
+			if m.IsPreviewingTheme && len(allThemes) > 0 {
+				m.Theme = allThemes[m.ThemeCursor]
+			}
+		} else {
+			m.ThemeRegistryCursor += 5
+			if m.ThemeRegistryCursor >= len(filteredReg) {
+				if len(filteredReg) > 0 {
+					m.ThemeRegistryCursor = len(filteredReg) - 1
+				} else {
+					m.ThemeRegistryCursor = 0
+				}
+			}
+			if m.IsPreviewingTheme && len(filteredReg) > 0 {
+				m.Theme = filteredReg[m.ThemeRegistryCursor].ToTheme()
 			}
 		}
 		return m, nil
 
 	case "enter", " ":
-		if len(allThemes) > 0 && m.ThemeCursor < len(allThemes) {
-			m.applyTheme(allThemes[m.ThemeCursor].ID)
+		if m.ThemeModalTab == 0 {
+			if len(allThemes) > 0 && m.ThemeCursor < len(allThemes) {
+				m.IsPreviewingTheme = false
+				m.applyTheme(allThemes[m.ThemeCursor].ID)
+			}
+			return m, nil
+		}
+		// In Community Hub, Enter downloads and applies
+		if len(filteredReg) > 0 && m.ThemeRegistryCursor < len(filteredReg) {
+			target := filteredReg[m.ThemeRegistryCursor]
+			m.IsPreviewingTheme = false
+			m.ThemeStatusMsg = fmt.Sprintf("Downloading %s...", target.Name)
+			return m, m.installThemeCmd(target)
+		}
+		return m, nil
+
+	case "i", "I":
+		if m.ThemeModalTab == 1 {
+			if len(filteredReg) > 0 && m.ThemeRegistryCursor < len(filteredReg) {
+				target := filteredReg[m.ThemeRegistryCursor]
+				m.IsPreviewingTheme = false
+				m.ThemeStatusMsg = fmt.Sprintf("Downloading %s...", target.Name)
+				return m, m.installThemeCmd(target)
+			}
+		} else {
+			if len(allThemes) > 0 && m.ThemeCursor < len(allThemes) {
+				m.IsPreviewingTheme = false
+				m.applyTheme(allThemes[m.ThemeCursor].ID)
+			}
+		}
+		return m, nil
+
+	case "/":
+		if m.ThemeModalTab == 1 {
+			m.ThemeIsSearching = true
+			return m, nil
+		}
+
+	case "r", "R":
+		if m.ThemeModalTab == 1 {
+			m.ThemeStatusMsg = "Refreshing community themes from repository..."
+			return m, m.fetchThemeRegistryCmd()
+		}
+
+	case "d", "D":
+		if m.ThemeModalTab == 0 {
+			if len(allThemes) > 0 && m.ThemeCursor < len(allThemes) {
+				target := allThemes[m.ThemeCursor]
+				if target.IsCustom {
+					m.ThemeStatusMsg = fmt.Sprintf("Deleting %s...", target.Name)
+					return m, m.deleteThemeCmd(target.ID)
+				}
+				m.ThemeStatusMsg = "Cannot delete built-in theme"
+			}
+		} else {
+			if len(filteredReg) > 0 && m.ThemeRegistryCursor < len(filteredReg) {
+				target := filteredReg[m.ThemeRegistryCursor]
+				m.ThemeStatusMsg = fmt.Sprintf("Deleting %s...", target.Name)
+				return m, m.deleteThemeCmd(target.ID)
+			}
 		}
 		return m, nil
 
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-		idx := int(msg.String()[0] - '1')
-		if idx >= 0 && idx < len(allThemes) {
-			m.ThemeCursor = idx
-			m.applyTheme(allThemes[idx].ID)
+		if m.ThemeModalTab == 0 {
+			idx := int(msg.String()[0] - '1')
+			if idx >= 0 && idx < len(allThemes) {
+				m.ThemeCursor = idx
+				m.IsPreviewingTheme = false
+				m.applyTheme(allThemes[idx].ID)
+			}
+			return m, nil
 		}
-		return m, nil
+		if msg.String() == "1" {
+			m.ThemeModalTab = 0
+			return m, nil
+		}
 
 	case "e", "E":
 		exportPath, err := theme.ExportActiveTheme(util.GetThemesDir(), m.Theme)
 		if err == nil {
 			m.StatusMessage = fmt.Sprintf("✓ Exported theme to %s", exportPath)
+			m.ThemeStatusMsg = fmt.Sprintf("✓ Exported to %s", filepath.Base(exportPath))
 			_, _ = theme.LoadCustomThemes(util.GetThemesDir())
 		} else {
 			m.StatusMessage = fmt.Sprintf("Error exporting theme: %v", err)
+			m.ThemeStatusMsg = fmt.Sprintf("Export error: %v", err)
 		}
 		return m, nil
 	}

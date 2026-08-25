@@ -13,15 +13,8 @@ import (
 
 // RunVolume handles `halpradio volume [value] [--json]`.
 func RunVolume(args []string, out io.Writer) (bool, error) {
-	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
-		fmt.Fprintln(out, "Usage: halpradio volume [value] [--json]")
-		fmt.Fprintln(out, "")
-		fmt.Fprintln(out, "Arguments:")
-		fmt.Fprintln(out, "  (none)      Query current volume level")
-		fmt.Fprintln(out, "  <0-100>     Set absolute volume level (e.g. halpradio volume 60)")
-		fmt.Fprintln(out, "  +<N>        Increase volume by N% (e.g. halpradio volume +5)")
-		fmt.Fprintln(out, "  -<N>        Decrease volume by N% (e.g. halpradio volume -10)")
-		fmt.Fprintln(out, "  mute        Toggle mute on/off")
+	if len(args) > 0 && IsHelpArg(args[0]) {
+		PrintVolumeHelp(out)
 		return true, nil
 	}
 

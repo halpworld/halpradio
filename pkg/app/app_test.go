@@ -94,7 +94,7 @@ func TestRunRemoteHelp(t *testing.T) {
 	if !done {
 		t.Errorf("expected done to be true")
 	}
-	if !strings.Contains(buf.String(), "Usage: halpradio remote") {
+	if !strings.Contains(buf.String(), "halpradio remote") || !strings.Contains(buf.String(), "Usage:") {
 		t.Errorf("expected usage help message, got %s", buf.String())
 	}
 }
@@ -384,7 +384,7 @@ func TestRunCurrentAndStatusEdgeCases(t *testing.T) {
 	// 1. Current help
 	var buf bytes.Buffer
 	done, err := RunCurrent([]string{"--help"}, &buf)
-	if err != nil || !done || !strings.Contains(buf.String(), "Usage: halpradio current") {
+	if err != nil || !done || !strings.Contains(buf.String(), "halpradio current") || !strings.Contains(buf.String(), "Usage:") {
 		t.Errorf("expected help output for current, got %s", buf.String())
 	}
 

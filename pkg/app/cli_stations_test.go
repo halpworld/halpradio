@@ -40,7 +40,7 @@ func TestRunStationsHelp(t *testing.T) {
 	if err != nil || !done {
 		t.Fatalf("RunStations help failed: %v", err)
 	}
-	if !strings.Contains(buf.String(), "Discover, search, and manage radio station catalog") {
+	if !strings.Contains(buf.String(), "halpradio stations") || !strings.Contains(buf.String(), "Usage:") {
 		t.Errorf("Expected stations help text, got: %s", buf.String())
 	}
 }

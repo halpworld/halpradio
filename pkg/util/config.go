@@ -32,6 +32,7 @@ type Config struct {
 	DiscordClientID      string `yaml:"discord_client_id,omitempty"`
 	PluginsEnabled       bool   `yaml:"plugins_enabled"`
 	PluginRegistryURL    string `yaml:"plugin_registry_url,omitempty"`
+	ThemeRegistryURL     string `yaml:"theme_registry_url,omitempty"`
 	CatalogAutoUpdate    bool   `yaml:"catalog_auto_update"`
 	CatalogUpdateURL     string `yaml:"catalog_update_url,omitempty"`
 	CatalogCacheTTLHours int    `yaml:"catalog_cache_ttl_hours,omitempty"`
@@ -63,6 +64,7 @@ func DefaultConfig() Config {
 		DiscordClientID:      "1340000000000000000",
 		PluginsEnabled:       true,
 		PluginRegistryURL:    "https://raw.githubusercontent.com/halpworld/halpradio-plugins/main/registry.json",
+		ThemeRegistryURL:     "https://raw.githubusercontent.com/halpworld/halpradio-themes/main/themes.json",
 		CatalogAutoUpdate:    true,
 		CatalogUpdateURL:     "https://raw.githubusercontent.com/halpworld/halpradio/main/stations.yaml",
 		CatalogCacheTTLHours: 24,

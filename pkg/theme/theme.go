@@ -217,6 +217,23 @@ func RegisterTheme(id string, th Theme) {
 	}
 }
 
+// UnregisterTheme removes a theme from the active runtime registry.
+func UnregisterTheme(id string) {
+	themeMutex.Lock()
+	defer themeMutex.Unlock()
+
+	normID := normalizeID(id)
+	delete(Themes, normID)
+
+	var newCustom []string
+	for _, cid := range customThemeIDs {
+		if cid != normID {
+			newCustom = append(newCustom, cid)
+		}
+	}
+	customThemeIDs = newCustom
+}
+
 // GetTheme retrieves a theme by ID or Name (case-insensitive), falling back to Tokyo Night.
 func GetTheme(name string) Theme {
 	themeMutex.RLock()

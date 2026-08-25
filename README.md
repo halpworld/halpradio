@@ -360,7 +360,7 @@ halpradio plugin update --all          # Update plugins to latest version
 
 ---
 
-## 🎨 Themes & Custom Themes Engine
+## 🎨 Themes & Community Themes Hub
 
 Switch themes on the fly by pressing `t` or pass `-theme <name>` via CLI:
 
@@ -371,8 +371,20 @@ Switch themes on the fly by pressing `t` or pass `-theme <name>` via CLI:
 - 🪵 **Gruvbox Dark** (`gruvbox`) — Warm retro terminal tones
 - 🧛 **Dracula** (`dracula`) — High-contrast gothic vampire theme
 
-### 🛠️ Custom User Themes (`~/.config/halpradio/themes/*.yaml`)
-Drop any YAML theme file into `~/.config/halpradio/themes/` (e.g. `rose-pine.yaml`, `everforest.yaml`) and it will automatically appear in the theme picker (`t`) and CLI. Press `E` inside the Theme Picker to export the active theme as a starter template!
+### 🌐 In-App Community Hub & Live Preview (`t` -> `Tab`)
+- **Discover & Download**: Press `t` then `Tab` to enter the **Community Hub** (`[2] 🌐 Community Hub`). Browse dozens of online community palettes (Rosé Pine, Everforest, Kanagawa, Monokai Pro, One Dark Pro, Cyberpunk 2077, Cyberdream, etc.) and press `i` or `Enter` to download & apply instantly.
+- **👁️ Live Preview**: Press `p` on any theme to preview it live in your full terminal interface before downloading or saving! Press `p` or `Esc` to revert.
+- **Filter & Search**: Press `/` in the Community Hub to filter themes by name, style, or author.
+
+### ⌨️ CLI Theme Commands
+```bash
+halpradio theme list                  # List installed and community hub themes
+halpradio theme preview rose-pine     # Preview color swatches & mockup in terminal
+halpradio theme install rose-pine     # Download and install from themes repo
+halpradio theme info everforest       # Inspect semantic color tokens
+halpradio theme export my-theme       # Export active palette as YAML starter
+halpradio theme remove my-theme       # Uninstall custom theme
+```
 
 Explore and contribute community themes in the official **[halpradio-themes](https://github.com/halpworld/halpradio-themes)** repository.
 

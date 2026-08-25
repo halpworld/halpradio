@@ -31,8 +31,8 @@ type StationJSONEntry struct {
 
 // RunStations handles `halpradio stations [list|search|fav|add] [flags]`.
 func RunStations(args []string, embeddedCatalog []byte, out io.Writer) (bool, error) {
-	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
-		printStationsHelp(out)
+	if len(args) > 0 && IsHelpArg(args[0]) {
+		PrintStationsHelp(out)
 		return true, nil
 	}
 
@@ -55,6 +55,10 @@ func RunStations(args []string, embeddedCatalog []byte, out io.Writer) (bool, er
 	case "add":
 		return runStationsAdd(subargs, store, out)
 	default:
+		if IsHelpArg(subcmd) {
+			PrintStationsHelp(out)
+			return true, nil
+		}
 		// If unknown subcommand, treat first arg as search term or list filter
 		return runStationsSearch(args, store, out)
 	}
@@ -68,8 +72,16 @@ func loadStore(embeddedCatalog []byte) *radio.Store {
 }
 
 func runStationsList(args []string, store *radio.Store, out io.Writer) (bool, error) {
+	if len(args) > 0 && IsHelpArg(args[0]) {
+		PrintStationsListHelp(out)
+		return true, nil
+	}
+
 	fs := flag.NewFlagSet("stations list", flag.ContinueOnError)
 	fs.SetOutput(out)
+	fs.Usage = func() {
+		PrintStationsListHelp(out)
+	}
 
 	var genre, country, tag string
 	var favorites, plain, isJSON bool
@@ -124,8 +136,16 @@ func runStationsList(args []string, store *radio.Store, out io.Writer) (bool, er
 }
 
 func runStationsSearch(args []string, store *radio.Store, out io.Writer) (bool, error) {
+	if len(args) > 0 && IsHelpArg(args[0]) {
+		PrintStationsSearchHelp(out)
+		return true, nil
+	}
+
 	fs := flag.NewFlagSet("stations search", flag.ContinueOnError)
 	fs.SetOutput(out)
+	fs.Usage = func() {
+		PrintStationsSearchHelp(out)
+	}
 
 	var genre, country, tag string
 	var plain, isJSON, online bool
@@ -153,6 +173,9 @@ func runStationsSearch(args []string, store *radio.Store, out io.Writer) (bool, 
 		"limit": true, "n": true,
 	}
 	if err := fs.Parse(reorderFlagsFirst(args, searchFlagsWithVal)); err != nil {
+		if err == flag.ErrHelp {
+			return true, nil
+		}
 		return false, err
 	}
 
@@ -202,6 +225,11 @@ func runStationsSearch(args []string, store *radio.Store, out io.Writer) (bool, 
 }
 
 func runStationsFav(args []string, store *radio.Store, out io.Writer) (bool, error) {
+	if len(args) > 0 && IsHelpArg(args[0]) {
+		PrintStationsFavHelp(out)
+		return true, nil
+	}
+
 	if len(args) == 0 || args[0] == "list" || args[0] == "ls" {
 		favs := store.GetFavorites()
 		if len(favs) == 0 {
@@ -212,7 +240,7 @@ func runStationsFav(args []string, store *radio.Store, out io.Writer) (bool, err
 	}
 
 	action := args[0]
-	if len(args) < 2 {
+	if len(args) < 2 || IsHelpArg(args[1]) {
 		fmt.Fprintf(out, "Usage: halpradio stations fav %s <station-id>\n", action)
 		return false, fmt.Errorf("station ID required for fav %s", action)
 	}
@@ -267,8 +295,16 @@ func runStationsFav(args []string, store *radio.Store, out io.Writer) (bool, err
 }
 
 func runStationsAdd(args []string, store *radio.Store, out io.Writer) (bool, error) {
+	if len(args) > 0 && IsHelpArg(args[0]) {
+		PrintStationsAddHelp(out)
+		return true, nil
+	}
+
 	fs := flag.NewFlagSet("stations add", flag.ContinueOnError)
 	fs.SetOutput(out)
+	fs.Usage = func() {
+		PrintStationsAddHelp(out)
+	}
 
 	var name, urlStr, genre, country, idStr, codec string
 	var bitrate int
@@ -282,6 +318,9 @@ func runStationsAdd(args []string, store *radio.Store, out io.Writer) (bool, err
 	fs.IntVar(&bitrate, "bitrate", 128, "Audio bitrate in kbps (e.g. 128, 192, 320)")
 
 	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return true, nil
+		}
 		return false, err
 	}
 
@@ -414,27 +453,5 @@ func renderStationsTable(stations []radio.Station, out io.Writer, header string)
 }
 
 func printStationsHelp(out io.Writer) {
-	fmt.Fprintln(out, "halpradio stations - Discover, search, and manage radio station catalog")
-	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "Usage:")
-	fmt.Fprintln(out, "  halpradio stations [list] [flags]     List stations with optional filters")
-	fmt.Fprintln(out, "  halpradio stations search <query>     Search stations (local & online)")
-	fmt.Fprintln(out, "  halpradio stations fav [list|add|rm]  Manage favorite stations")
-	fmt.Fprintln(out, "  halpradio stations add [flags]        Add custom station to local catalog")
-	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "List & Search Flags:")
-	fmt.Fprintln(out, "  -g, --genre <genre>       Filter by genre (e.g. ambient, lofi, jazz, synthwave)")
-	fmt.Fprintln(out, "  -c, --country <country>   Filter by ISO country code or name (e.g. US, GB, JP)")
-	fmt.Fprintln(out, "  -t, --tag <tag>           Filter by activity tag (e.g. coding, study, focus)")
-	fmt.Fprintln(out, "  -f, --favorites           Show only favorited stations")
-	fmt.Fprintln(out, "  -n, --limit <n>           Limit number of stations shown")
-	fmt.Fprintln(out, "  -q, --plain               Output tab-separated TSV for fzf / rofi / piping")
-	fmt.Fprintln(out, "  -j, --json                Output structured JSON array for jq / scripting")
-	fmt.Fprintln(out, "  -o, --online              (search only) Query 40,000+ RadioBrowser stations")
-	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "Examples:")
-	fmt.Fprintln(out, "  halpradio stations list --genre ambient --limit 10")
-	fmt.Fprintln(out, "  halpradio stations search \"lofi\" --online")
-	fmt.Fprintln(out, "  halpradio stations list --plain | fzf | awk '{print $2}' | xargs halpradio play")
-	fmt.Fprintln(out, "  halpradio stations fav add somafm_groovesalad")
+	PrintStationsHelp(out)
 }

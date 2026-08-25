@@ -68,10 +68,25 @@ func RenderPRExportModal(st radio.Station, width int, height int, th theme.Theme
 	return PlaceOverlay(modalBox, width, height)
 }
 
-func RenderThemePickerModal(currentTheme string, cursor int, width int, height int, th theme.Theme) string {
-	boxWidth := 56
-	if width < 60 {
+func RenderThemePickerModal(
+	installed []theme.Theme,
+	registry []theme.RegistryTheme,
+	activeTab int, // 0: Installed, 1: Community Hub
+	cursor int,
+	currentTheme string,
+	isPreviewActive bool,
+	statusMsg string,
+	searchQuery string,
+	width int,
+	height int,
+	th theme.Theme,
+) string {
+	boxWidth := 76
+	if width < 80 {
 		boxWidth = width - 4
+	}
+	if boxWidth < 46 {
+		boxWidth = 46
 	}
 
 	titleStyle := lipgloss.NewStyle().
@@ -79,111 +94,393 @@ func RenderThemePickerModal(currentTheme string, cursor int, width int, height i
 		Foreground(th.Primary).
 		Align(lipgloss.Center)
 
-	allThemes := theme.GetAllThemes()
-	if len(allThemes) == 0 {
-		allThemes = []theme.Theme{th}
+	if len(installed) == 0 {
+		installed = theme.GetAllThemes()
 	}
 
-	if cursor < 0 {
-		cursor = 0
-	}
-	if cursor >= len(allThemes) {
-		cursor = len(allThemes) - 1
+	// Tab header
+	tab1Style := lipgloss.NewStyle().Padding(0, 1)
+	tab2Style := lipgloss.NewStyle().Padding(0, 1)
+
+	if activeTab == 0 {
+		tab1Style = tab1Style.Background(th.Primary).Foreground(th.BadgeText).Bold(true)
+		tab2Style = tab2Style.Foreground(th.Foreground)
+	} else {
+		tab1Style = tab1Style.Foreground(th.Foreground)
+		tab2Style = tab2Style.Background(th.Primary).Foreground(th.BadgeText).Bold(true)
 	}
 
-	// Calculate scrolling window
-	maxVisible := height - 10
-	if maxVisible < 5 {
-		maxVisible = 5
-	}
-	if maxVisible > 12 {
-		maxVisible = 12
-	}
+	tabBar := lipgloss.JoinHorizontal(
+		lipgloss.Center,
+		tab1Style.Render(fmt.Sprintf("[1] 🎨 Installed Themes (%d)", len(installed))),
+		"  ",
+		tab2Style.Render(fmt.Sprintf("[2] 🌐 Community Hub (%d)", len(registry))),
+	)
 
-	startIdx := 0
-	endIdx := len(allThemes)
-	if len(allThemes) > maxVisible {
-		if cursor >= maxVisible {
-			startIdx = cursor - maxVisible + 1
+	var listRows []string
+	var previewTarget theme.Theme
+	hasPreviewTarget := false
+
+	if activeTab == 0 {
+		// Tab 0: Installed themes
+		if cursor < 0 {
+			cursor = 0
 		}
-		endIdx = startIdx + maxVisible
-		if endIdx > len(allThemes) {
-			endIdx = len(allThemes)
-			startIdx = endIdx - maxVisible
-			if startIdx < 0 {
-				startIdx = 0
+		if cursor >= len(installed) {
+			cursor = len(installed) - 1
+		}
+
+		maxVisible := 4
+		if height >= 34 {
+			maxVisible = 6
+		}
+
+		startIdx := 0
+		endIdx := len(installed)
+		if len(installed) > maxVisible {
+			if cursor >= maxVisible {
+				startIdx = cursor - maxVisible + 1
+			}
+			endIdx = startIdx + maxVisible
+			if endIdx > len(installed) {
+				endIdx = len(installed)
+				startIdx = endIdx - maxVisible
+				if startIdx < 0 {
+					startIdx = 0
+				}
+			}
+		}
+
+		if startIdx > 0 {
+			listRows = append(listRows, lipgloss.NewStyle().Foreground(th.Muted).Italic(true).Render(fmt.Sprintf("    ▲ ... (%d more above)", startIdx)))
+		}
+
+		for i := startIdx; i < endIdx; i++ {
+			t := installed[i]
+			isCurrent := (t.ID == currentTheme || strings.EqualFold(t.Name, currentTheme) || strings.EqualFold(t.ID, currentTheme))
+			isCursor := (i == cursor)
+
+			if isCursor {
+				previewTarget = t
+				hasPreviewTarget = true
+			}
+
+			var keyPrefix string
+			if i < 9 {
+				keyPrefix = fmt.Sprintf("[%d]", i+1)
+			} else {
+				keyPrefix = "   "
+			}
+
+			cursorSym := "  "
+			if isCursor {
+				cursorSym = "❯ "
+			}
+
+			colorSample := lipgloss.NewStyle().
+				Background(t.Primary).
+				Foreground(t.BadgeText).
+				Bold(true).
+				Render(" " + t.Name + " ")
+
+			customTag := ""
+			if t.IsCustom {
+				customTag = lipgloss.NewStyle().Foreground(th.Secondary).Italic(true).Render(" (Custom)")
+			}
+
+			activeMarker := ""
+			if isCurrent {
+				activeMarker = lipgloss.NewStyle().Foreground(th.Playing).Bold(true).Render(" ●")
+			}
+
+			row := fmt.Sprintf("%s %s%s%s%s", keyPrefix, cursorSym, colorSample, customTag, activeMarker)
+			if isCursor {
+				row = lipgloss.NewStyle().Bold(true).Render(row)
+			}
+			listRows = append(listRows, row)
+		}
+
+		if endIdx < len(installed) {
+			listRows = append(listRows, lipgloss.NewStyle().Foreground(th.Muted).Italic(true).Render(fmt.Sprintf("    ▼ ... (%d more below)", len(installed)-endIdx)))
+		}
+
+	} else {
+		// Tab 1: Community Hub (Registry themes)
+		var filtered []theme.RegistryTheme
+		q := strings.ToLower(strings.TrimSpace(searchQuery))
+		for _, rt := range registry {
+			if q == "" ||
+				strings.Contains(strings.ToLower(rt.Name), q) ||
+				strings.Contains(strings.ToLower(rt.Author), q) ||
+				strings.Contains(strings.ToLower(rt.Description), q) ||
+				strings.Contains(strings.ToLower(rt.Category), q) ||
+				strings.Contains(strings.ToLower(rt.ID), q) {
+				filtered = append(filtered, rt)
+			}
+		}
+
+		if len(filtered) == 0 {
+			if len(registry) == 0 {
+				listRows = append(listRows, lipgloss.NewStyle().Foreground(th.Muted).Italic(true).Render("  Loading community themes from repository..."))
+			} else {
+				listRows = append(listRows, lipgloss.NewStyle().Foreground(th.Muted).Italic(true).Render(fmt.Sprintf("  No themes match filter %q", searchQuery)))
+			}
+		} else {
+			if cursor < 0 {
+				cursor = 0
+			}
+			if cursor >= len(filtered) {
+				cursor = len(filtered) - 1
+			}
+
+			maxVisible := 4
+			if height >= 34 {
+				maxVisible = 6
+			}
+
+			startIdx := 0
+			endIdx := len(filtered)
+			if len(filtered) > maxVisible {
+				if cursor >= maxVisible {
+					startIdx = cursor - maxVisible + 1
+				}
+				endIdx = startIdx + maxVisible
+				if endIdx > len(filtered) {
+					endIdx = len(filtered)
+					startIdx = endIdx - maxVisible
+					if startIdx < 0 {
+						startIdx = 0
+					}
+				}
+			}
+
+			if startIdx > 0 {
+				listRows = append(listRows, lipgloss.NewStyle().Foreground(th.Muted).Italic(true).Render(fmt.Sprintf("    ▲ ... (%d more above)", startIdx)))
+			}
+
+			for i := startIdx; i < endIdx; i++ {
+				rt := filtered[i]
+				isCursor := (i == cursor)
+
+				if isCursor {
+					previewTarget = rt.ToTheme()
+					hasPreviewTarget = true
+				}
+
+				cursorSym := "  "
+				if isCursor {
+					cursorSym = "❯ "
+				}
+
+				// Check if installed
+				isInstalled := false
+				for _, inst := range installed {
+					if inst.ID == rt.ID || strings.EqualFold(inst.Name, rt.Name) {
+						isInstalled = true
+						break
+					}
+				}
+
+				statusBadge := lipgloss.NewStyle().Foreground(th.Highlight).Render("[Available]")
+				if isInstalled {
+					statusBadge = lipgloss.NewStyle().Foreground(th.Playing).Bold(true).Render("[Installed]")
+				}
+
+				colorSample := lipgloss.NewStyle().
+					Background(rt.Primary).
+					Foreground(rt.BadgeText).
+					Bold(true).
+					Render(" " + truncate(rt.Name, 18) + " ")
+
+				catStr := ""
+				if rt.Category != "" {
+					catStr = lipgloss.NewStyle().Foreground(th.Muted).Render(" (" + rt.Category + ")")
+				}
+
+				authorStr := ""
+				if rt.Author != "" {
+					authorStr = lipgloss.NewStyle().Foreground(th.Secondary).Render(" by " + rt.Author)
+				}
+
+				row := fmt.Sprintf("%s%s %s%s%s", cursorSym, colorSample, statusBadge, catStr, authorStr)
+				if isCursor {
+					row = lipgloss.NewStyle().Bold(true).Render(row)
+				}
+				listRows = append(listRows, row)
+			}
+
+			if endIdx < len(filtered) {
+				listRows = append(listRows, lipgloss.NewStyle().Foreground(th.Muted).Italic(true).Render(fmt.Sprintf("    ▼ ... (%d more below)", len(filtered)-endIdx)))
 			}
 		}
 	}
 
-	var rows []string
-
-	if startIdx > 0 {
-		rows = append(rows, lipgloss.NewStyle().Foreground(th.Muted).Italic(true).Render(fmt.Sprintf("    ▲ ... (%d more above)", startIdx)))
+	var elements []string
+	elements = append(elements, titleStyle.Render("🎨 COLOR THEMES & COMMUNITY HUB"))
+	if height > 22 {
+		elements = append(elements, "")
+	}
+	elements = append(elements, tabBar)
+	if height > 22 {
+		elements = append(elements, "")
 	}
 
-	for i := startIdx; i < endIdx; i++ {
-		t := allThemes[i]
-		isCurrent := (t.ID == currentTheme || strings.EqualFold(t.Name, currentTheme) || strings.EqualFold(t.ID, currentTheme))
-		isCursor := (i == cursor)
-
-		var keyPrefix string
-		if i < 9 {
-			keyPrefix = fmt.Sprintf("[%d]", i+1)
-		} else {
-			keyPrefix = "   "
-		}
-
-		cursorSym := "  "
-		if isCursor {
-			cursorSym = "❯ "
-		}
-
-		colorSample := lipgloss.NewStyle().
-			Background(t.Primary).
-			Foreground(t.BadgeText).
-			Bold(true).
-			Render(" " + t.Name + " ")
-
-		customTag := ""
-		if t.IsCustom {
-			customTag = lipgloss.NewStyle().Foreground(th.Secondary).Italic(true).Render(" (Custom)")
-		}
-
-		activeMarker := ""
-		if isCurrent {
-			activeMarker = lipgloss.NewStyle().Foreground(th.Playing).Bold(true).Render(" ●")
-		}
-
-		row := fmt.Sprintf("%s %s%s%s%s", keyPrefix, cursorSym, colorSample, customTag, activeMarker)
-		if isCursor {
-			row = lipgloss.NewStyle().Bold(true).Render(row)
-		}
-		rows = append(rows, row)
+	if activeTab == 1 && searchQuery != "" {
+		elements = append(elements, lipgloss.NewStyle().Foreground(th.Secondary).Bold(true).Render(fmt.Sprintf("🔍 Filter: %s", searchQuery)))
 	}
 
-	if endIdx < len(allThemes) {
-		rows = append(rows, lipgloss.NewStyle().Foreground(th.Muted).Italic(true).Render(fmt.Sprintf("    ▼ ... (%d more below)", len(allThemes)-endIdx)))
+	elements = append(elements, strings.Join(listRows, "\n"))
+	if height > 22 {
+		elements = append(elements, "")
 	}
 
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		titleStyle.Render("🎨 SELECT COLOR THEME"),
-		"",
-		strings.Join(rows, "\n"),
-		"",
-		lipgloss.NewStyle().Foreground(th.Muted).Render("Press [ 1-9 ] or [ j/k / ↑↓ ] and [ Enter ] to apply"),
-		lipgloss.NewStyle().Foreground(th.Muted).Render("Press [ E ] to export active theme | [ Esc ] to close"),
-	)
+	// Render Preview Card
+	if hasPreviewTarget {
+		previewCard := renderThemePreviewCard(previewTarget, isPreviewActive, boxWidth, height)
+		elements = append(elements, previewCard)
+		if height > 22 {
+			elements = append(elements, "")
+		}
+	}
+
+	if statusMsg != "" {
+		elements = append(elements, lipgloss.NewStyle().Foreground(th.Playing).Bold(true).Render(statusMsg))
+		if height > 24 {
+			elements = append(elements, "")
+		}
+	}
+
+	var helpText string
+	if activeTab == 0 {
+		helpText = "[Tab/1/2] Tab  [j/k] Move  [p] Live Preview  [Enter/1-9] Apply  [E] Export  [d] Delete  [Esc] Close"
+		if boxWidth < 70 {
+			helpText = "[Tab] Tab  [p] Preview  [Enter] Apply  [E] Export  [Esc] Close"
+		}
+	} else {
+		helpText = "[Tab/1/2] Tab  [j/k] Move  [p] Live Preview  [i/Enter] Download & Apply  [/] Filter  [d] Delete  [Esc] Close"
+		if boxWidth < 70 {
+			helpText = "[Tab] Tab  [p] Preview  [i] Download  [/] Filter  [Esc] Close"
+		}
+	}
+	elements = append(elements, lipgloss.NewStyle().Foreground(th.Muted).Render(helpText))
+
+	content := lipgloss.JoinVertical(lipgloss.Left, elements...)
+
+	padY := 1
+	if height <= 26 {
+		padY = 0
+	}
 
 	modalBox := lipgloss.NewStyle().
 		Border(lipgloss.DoubleBorder()).
 		BorderForeground(th.Primary).
-		Padding(1, 2).
+		Padding(padY, 1).
 		Width(boxWidth).
 		Render(content)
 
 	return PlaceOverlay(modalBox, width, height)
+}
+
+func renderThemePreviewCard(targetTh theme.Theme, isPreviewActive bool, boxWidth int, height int) string {
+	cardW := boxWidth - 6
+	if cardW < 36 {
+		cardW = 36
+	}
+
+	// 1. Swatches row
+	swatchStyle := func(bg, fg lipgloss.Color, label string) string {
+		return lipgloss.NewStyle().
+			Background(bg).
+			Foreground(fg).
+			Bold(true).
+			Padding(0, 1).
+			Render(label)
+	}
+
+	swatches := lipgloss.JoinHorizontal(
+		lipgloss.Center,
+		swatchStyle(targetTh.Primary, targetTh.BadgeText, "PRI"),
+		" ",
+		swatchStyle(targetTh.Secondary, targetTh.Background, "SEC"),
+		" ",
+		swatchStyle(targetTh.Highlight, targetTh.Background, "HI"),
+		" ",
+		swatchStyle(targetTh.Playing, targetTh.Background, "PLAY"),
+		" ",
+		swatchStyle(targetTh.Badge, targetTh.BadgeText, "BADGE"),
+		" ",
+		swatchStyle(targetTh.Favorite, targetTh.Background, "FAV"),
+		" ",
+		swatchStyle(targetTh.Border, targetTh.Foreground, "BORDER"),
+	)
+
+	var lines []string
+	headerText := lipgloss.NewStyle().Bold(true).Foreground(targetTh.Primary).Render("Preview: " + targetTh.Name)
+	if targetTh.Author != "" && cardW > 40 {
+		headerText += lipgloss.NewStyle().Foreground(targetTh.Secondary).Render(" by " + targetTh.Author)
+	}
+	lines = append(lines, headerText)
+
+	if height > 24 && targetTh.Description != "" {
+		lines = append(lines, lipgloss.NewStyle().Foreground(targetTh.Foreground).Italic(true).Render(truncate(targetTh.Description, cardW-4)))
+	}
+
+	lines = append(lines, swatches)
+
+	if height >= 36 {
+		miniHeader := lipgloss.JoinHorizontal(
+			lipgloss.Center,
+			lipgloss.NewStyle().Foreground(targetTh.HeaderAscii).Bold(true).Render("📻 HALPRADIO"),
+			" ",
+			lipgloss.NewStyle().Background(targetTh.Badge).Foreground(targetTh.BadgeText).Bold(true).Padding(0, 1).Render("LOFI"),
+			" ",
+			lipgloss.NewStyle().Foreground(targetTh.Secondary).Render("● LIVE 128k"),
+		)
+
+		miniPlayer := lipgloss.JoinHorizontal(
+			lipgloss.Center,
+			lipgloss.NewStyle().Foreground(targetTh.Playing).Bold(true).Render("▶ "),
+			lipgloss.NewStyle().Foreground(targetTh.Foreground).Bold(true).Render("Tycho - A Walk"),
+			"  ",
+			lipgloss.NewStyle().Foreground(targetTh.Playing).Render("♫ ▂▃▅▆▇█"),
+		)
+
+		miniStation := lipgloss.NewStyle().
+			Background(targetTh.Border).
+			Foreground(targetTh.Highlight).
+			Bold(true).
+			Padding(0, 1).
+			Render("❯ ★ 1. SomaFM Groove Salad")
+
+		mockupBox := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(targetTh.Border).
+			Background(targetTh.Background).
+			Padding(0, 1).
+			Width(cardW - 2).
+			Render(lipgloss.JoinVertical(
+				lipgloss.Left,
+				miniHeader,
+				miniPlayer,
+				miniStation,
+			))
+		lines = append(lines, mockupBox)
+	}
+
+	if isPreviewActive && height > 22 {
+		lines = append(lines, lipgloss.NewStyle().
+			Foreground(targetTh.Playing).
+			Bold(true).
+			Render("👁️ Live Preview Active! Press [Esc/p] to revert, [Enter/i] to apply."))
+	}
+
+	cardStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(targetTh.Primary).
+		Padding(0, 1).
+		Width(cardW)
+
+	return cardStyle.Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 }
 
 func RenderAddStationModal(

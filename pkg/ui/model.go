@@ -44,6 +44,20 @@ type PluginNotificationMsg struct {
 	Message string
 }
 
+type ThemeRegistryLoadedMsg struct {
+	Themes []theme.RegistryTheme
+	Err    error
+}
+type ThemeInstalledMsg struct {
+	ThemeID string
+	Err     error
+}
+type ThemeDeletedMsg struct {
+	ThemeID string
+	Err     error
+}
+type ThemeFlashMsg string
+
 type CatalogUpdatedMsg struct {
 	Updated       bool
 	StationsCount int
@@ -106,12 +120,21 @@ type Model struct {
 	IsSearching   bool
 	StatusMessage string
 
-	ShowWhichKey    bool
-	ShowThemePicker bool
-	ThemeCursor     int
-	ShowPRExport    bool
-	ShowAddModal    bool
-	ShowTimerModal  bool
+	ShowWhichKey         bool
+	ShowThemePicker      bool
+	ThemeModalTab        int // 0: Installed Themes, 1: Community Hub
+	ThemeCursor          int // Cursor in installed list
+	ThemeRegistryCursor  int // Cursor in community hub list
+	ThemeRegistryList    []theme.RegistryTheme
+	ThemeStatusMsg       string
+	ThemeSearchQuery     string
+	ThemeIsSearching     bool
+	IsPreviewingTheme    bool
+	PreviewOriginalTheme theme.Theme
+	ThemeClient          *theme.RegistryClient
+	ShowPRExport         bool
+	ShowAddModal         bool
+	ShowTimerModal       bool
 
 	ShowPluginModal        bool
 	PluginModalTab         int // 0: Installed, 1: Registry
@@ -196,6 +219,7 @@ func NewModel(
 		TimerPomodoroNotifyDesktop: cfg.EventNotifyDesktop,
 		TimerPomodoroNotifyBell:    cfg.EventTerminalBell,
 		LastTickTime:               time.Now(),
+		ThemeClient:                theme.NewRegistryClient(cfg.ThemeRegistryURL),
 	}
 
 	allThemes := theme.GetAllThemes()

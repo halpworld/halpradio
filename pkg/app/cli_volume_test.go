@@ -16,7 +16,7 @@ func TestRunVolumeHelp(t *testing.T) {
 	if err != nil || !done {
 		t.Fatalf("RunVolume help failed: %v", err)
 	}
-	if !strings.Contains(buf.String(), "Usage: halpradio volume") {
+	if !strings.Contains(buf.String(), "halpradio volume") || !strings.Contains(buf.String(), "Usage:") {
 		t.Errorf("Expected volume help text, got: %s", buf.String())
 	}
 }

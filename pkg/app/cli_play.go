@@ -30,8 +30,8 @@ type TrackChangeJSONEvent struct {
 
 // RunPlay handles `halpradio play [target] [flags]`.
 func RunPlay(args []string, embeddedCatalog []byte, out io.Writer) (bool, error) {
-	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
-		printPlayHelp(out)
+	if len(args) > 0 && IsHelpArg(args[0]) {
+		PrintPlayHelp(out)
 		return true, nil
 	}
 
@@ -46,6 +46,9 @@ func RunPlay(args []string, embeddedCatalog []byte, out io.Writer) (bool, error)
 
 	fs := flag.NewFlagSet("play", flag.ContinueOnError)
 	fs.SetOutput(out)
+	fs.Usage = func() {
+		PrintPlayHelp(out)
+	}
 
 	cfg, _ := util.LoadConfig()
 
@@ -79,6 +82,9 @@ func RunPlay(args []string, embeddedCatalog []byte, out io.Writer) (bool, error)
 	reorderedArgs := reorderFlagsFirst(args, flagsWithVal)
 
 	if err := fs.Parse(reorderedArgs); err != nil {
+		if err == flag.ErrHelp {
+			return true, nil
+		}
 		return false, err
 	}
 
@@ -301,32 +307,7 @@ func executeHeadlessPlay(st radio.Station, vol int, backend string, duration tim
 }
 
 func printPlayHelp(out io.Writer) {
-	fmt.Fprintln(out, "halpradio play - Stream internet radio directly from the CLI")
-	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "Usage:")
-	fmt.Fprintln(out, "  halpradio play [station|index|url|random] [flags]")
-	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "Arguments:")
-	fmt.Fprintln(out, "  <number>        Play station by catalog index (e.g. halpradio play 1)")
-	fmt.Fprintln(out, "  <station-id>    Play station by exact ID (e.g. halpradio play somafm_groovesalad)")
-	fmt.Fprintln(out, "  <name>          Play station by fuzzy name (e.g. halpradio play \"lofi girl\")")
-	fmt.Fprintln(out, "  <url>           Play direct HTTP/HTTPS audio stream URL")
-	fmt.Fprintln(out, "  random          Play a random station (e.g. halpradio play random)")
-	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "Flags:")
-	fmt.Fprintln(out, "  -v, --volume <0-100>      Playback volume (default: saved config or 80)")
-	fmt.Fprintln(out, "  -b, --backend <engine>    Audio backend: auto, native, mpv, vlc, ffplay, mplayer, mpg123")
-	fmt.Fprintln(out, "  -d, --duration <time>     Sleep/focus timer duration (e.g. 45m, 1h, 30s)")
-	fmt.Fprintln(out, "  -g, --genre <genre>       Filter random station by genre (e.g. jazz, ambient, lofi)")
-	fmt.Fprintln(out, "  -r, --random              Pick a random station")
-	fmt.Fprintln(out, "  -j, --json                Output track changes and playback events in JSON")
-	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "Examples:")
-	fmt.Fprintln(out, "  halpradio play 2 --volume 3")
-	fmt.Fprintln(out, "  halpradio play somafm_groovesalad -v 50 --duration 45m")
-	fmt.Fprintln(out, "  halpradio play \"BBC Radio 1\"")
-	fmt.Fprintln(out, "  halpradio play random --genre synthwave")
-	fmt.Fprintln(out, "  halpradio play https://ice1.somafm.com/groovesalad-128-mp3")
+	PrintPlayHelp(out)
 }
 
 // reorderFlagsFirst reorganizes arguments so flags and their values appear before positional arguments.

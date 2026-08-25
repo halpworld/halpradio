@@ -103,68 +103,77 @@ header_ascii: "#c4a7e7"   # Radio ASCII logo & decorative banners
 
 ## 🔁 Changing & Exporting Themes
 
-### 1. Interactive Theme Picker Modal (`t`)
+### 1. Interactive Theme Picker & Community Hub (`t`)
 
-Press `t` from anywhere in `halpradio` to open the Theme Picker Modal:
+Press `t` from anywhere in `halpradio` to open the Theme Picker & Community Hub:
 
 ```text
-╭────────────────── 🎨 SELECT COLOR THEME ──────────────────╮
-│                                                          │
-│  [1]   Tokyo Night                                       │
-│  [2]   Catppuccin Mocha                                  │
-│  [3]   Synthwave '84                                     │
-│  [4]   Nord                                              │
-│  [5]   Gruvbox Dark                                      │
-│  [6]   Dracula                                           │
-│  [7] ❯ Rosé Pine (Custom) ●                              │
-│  [8]   Everforest Dark (Custom)                          │
-│                                                          │
-│  Press [ 1-9 ] or [ j/k / ↑↓ ] and [ Enter ] to apply    │
-│  Press [ E ] to export active theme | [ Esc ] to close   │
-╰──────────────────────────────────────────────────────────╯
+╭────────────────── 🎨 COLOR THEMES & COMMUNITY HUB ──────────────────╮
+│                                                                     │
+│  [1] 🎨 Installed Themes (6)      [2] 🌐 Community Hub (18)         │
+│                                                                     │
+│  [1]   Tokyo Night                                                  │
+│  [2]   Catppuccin Mocha                                             │
+│  [3] ❯ Rosé Pine (Custom) ●                                         │
+│  [4]   Nord                                                         │
+│                                                                     │
+│  ╭──────────────────────── Preview: Rosé Pine ────────────────────╮ │
+│  │ All natural pine, faux fur and delicate warmth                 │ │
+│  │ [ PRI ] [ SEC ] [ HI ] [ PLAY ] [ BADGE ] [ FAV ] [ BORDER ]   │ │
+│  │ 📻 HALPRADIO  [LOFI]  ● LIVE 128k                              │ │
+│  │ ▶ Tycho - A Walk  ♫ ▂▃▅▆▇█                                     │ │
+│  │ ❯ ★ 1. SomaFM Groove Salad                                     │ │
+│  ╰────────────────────────────────────────────────────────────────╯ │
+│                                                                     │
+│  [Tab/1/2] Tab  [p] Live Preview  [Enter/i] Apply/Download  [Esc]   │
+╰─────────────────────────────────────────────────────────────────────╯
 ```
 
-- **Quick Select**: Press `1` through `9` to instantly apply a theme.
-- **Keyboard Navigation**: Use `j` / `k` (or `↓` / `↑`), `g` / `G`, and `Ctrl+u` / `Ctrl+d` to scroll through themes, then press `Enter` or `Space` to apply.
-- **In-App Export (`E`)**: Press `E` while in the Theme Picker to export the currently active theme into `~/.config/halpradio/themes/<name>.yaml`. This generates a fully commented starter template ready for editing!
+- **Two Tabs**:
+  - `[1] 🎨 Installed Themes`: Instant access to built-in and local custom themes.
+  - `[2] 🌐 Community Hub`: Discover, filter, preview, and download dozens of community-crafted themes directly from the official themes repository (`halpradio-themes`)!
+- **👁️ Live Interactive Preview (`p`)**: Press `p` on any theme (installed or online repository) to temporarily render the entire terminal UI in that theme before downloading or saving! Press `p` or `Esc` to revert, or `Enter`/`i` to confirm and apply.
+- **In-App Download (`i` / `Enter`)**: In the Community Hub tab, press `i` or `Enter` on any theme to download it to `~/.config/halpradio/themes/<id>.yaml` and immediately apply it.
+- **Search & Filter (`/`)**: In Community Hub, press `/` to instantly filter themes by name, author, style, or category.
+- **Delete (`d`)**: Press `d` to remove a downloaded custom theme from your configuration.
+- **In-App Export (`E`)**: Press `E` while in the Theme Picker to export the currently active theme into `~/.config/halpradio/themes/<name>.yaml`.
 - **Auto-Persistence**: Changing a theme automatically updates `~/.config/halpradio/config.yaml` so your preference persists across restarts.
 
-### 2. Command Line Interface (CLI)
+---
 
-Launch `halpradio` with your preferred built-in or custom theme:
+## 💻 CLI Theme Management (`halpradio theme`)
+
+Manage, preview, and install themes directly from the command line:
 
 ```bash
-# Built-in themes
-halpradio -theme catppuccin
-halpradio -theme synthwave
+# Browse installed and discoverable community themes from repo
+halpradio theme list
 
-# Custom themes (matches filename without .yaml or theme name)
-halpradio -theme rose-pine
-halpradio -theme everforest
-```
+# Preview theme color swatches and mini UI mockup in terminal
+halpradio theme preview rose-pine
+halpradio theme preview everforest
 
-### 3. Config File (`config.yaml`)
+# Download and install theme from official repository
+halpradio theme install rose-pine
+halpradio theme install kanagawa
 
-Specify default theme in `~/.config/halpradio/config.yaml`:
+# Inspect detailed theme tokens and color definitions
+halpradio theme info nord
 
-```yaml
-theme: "rose-pine"
+# Export active theme to a starter YAML template
+halpradio theme export my-custom-theme
+
+# Remove a custom theme
+halpradio theme remove my-custom-theme
 ```
 
 ---
 
 ## 🌐 Official Themes Repository (`halpradio-themes`)
 
-Explore, share, and download dozens of community-crafted palettes in the official repository:
+Explore, share, and contribute community-crafted palettes in the official repository:
 
 👉 **[https://github.com/halpworld/halpradio-themes](https://github.com/halpworld/halpradio-themes)**
-
-### Quick Install Community Themes:
-
-```bash
-# Clone all community themes directly into your config directory
-git clone https://github.com/halpworld/halpradio-themes.git ~/.config/halpradio/themes/community
-```
 
 ---
 
