@@ -50,6 +50,8 @@ type Player interface {
 	CurrentTrack() string
 	ActiveBackend() string
 	Error() string
+	SetTunerMode(enabled bool, signalStrength float64, freq float64, band string)
+	UpdateTunerSignal(signalStrength float64, freq float64, band string)
 }
 
 type TrackInfo struct {
@@ -69,6 +71,7 @@ type Manager struct {
 	lastError      string
 
 	cmd        *exec.Cmd
+	extStdin   io.WriteCloser
 	cancelFn   context.CancelFunc
 	icyCancel  context.CancelFunc
 	icyStream  io.Closer
@@ -78,6 +81,11 @@ type Manager struct {
 	otoSampleRate int
 	nativePlayer  NativeAudioPlayer
 	nativeStream  io.Closer
+
+	staticSynth   *StaticSynthesizer
+	staticPlayer  NativeAudioPlayer
+	tunerMode     bool
+	lastTunerRSSI float64
 
 	onAutoPause   func()
 	autoPauseStop func()
@@ -92,6 +100,7 @@ func NewManager(preferredBackend string, initialVolume int, onTrackUpd func(Trac
 		volume:        initialVolume,
 		onTrackUpd:    onTrackUpd,
 		activeBackend: detectBackend(preferredBackend),
+		staticSynth:   NewStaticSynthesizer(44100),
 	}
 	return m
 }
@@ -140,6 +149,13 @@ func (m *Manager) autoPauseOnDeviceLoss() {
 // Close releases all player resources, including system audio device listeners.
 func (m *Manager) Close() error {
 	m.SetAutoPause(false)
+	m.SetTunerMode(false, 1.0, 0, "")
+	m.mu.Lock()
+	if m.staticPlayer != nil {
+		_ = m.staticPlayer.Close()
+		m.staticPlayer = nil
+	}
+	m.mu.Unlock()
 	return m.Stop()
 }
 
@@ -220,10 +236,33 @@ func (m *Manager) SetVolume(vol int) int {
 	m.isMuted = false
 	currVol := m.volume
 	np := m.nativePlayer
+	synth := m.staticSynth
+	backend := m.activeBackend
+	extStdin := m.extStdin
+	inTuner := m.tunerMode
+	rssi := m.lastTunerRSSI
 	m.mu.Unlock()
 
 	if np != nil {
-		np.SetVolume(float64(currVol) / 100.0)
+		if inTuner {
+			np.SetVolume((float64(currVol) / 100.0) * rssi)
+		} else {
+			np.SetVolume(float64(currVol) / 100.0)
+		}
+	}
+	if synth != nil {
+		synth.SetVolume(float64(currVol)/100.0, false)
+	}
+	if extStdin != nil {
+		effVol := currVol
+		if inTuner {
+			effVol = int(float64(currVol) * rssi)
+		}
+		if backend == "mpv" {
+			_, _ = fmt.Fprintf(extStdin, "set volume %d\n", effVol)
+		} else if backend == "mplayer" {
+			_, _ = fmt.Fprintf(extStdin, "volume %d 1\n", effVol)
+		}
 	}
 
 	return currVol
@@ -235,13 +274,38 @@ func (m *Manager) ToggleMute() bool {
 	muted := m.isMuted
 	vol := m.volume
 	np := m.nativePlayer
+	synth := m.staticSynth
+	backend := m.activeBackend
+	extStdin := m.extStdin
+	inTuner := m.tunerMode
+	rssi := m.lastTunerRSSI
 	m.mu.Unlock()
 
 	if np != nil {
 		if muted {
 			np.SetVolume(0.0)
+		} else if inTuner {
+			np.SetVolume((float64(vol) / 100.0) * rssi)
 		} else {
 			np.SetVolume(float64(vol) / 100.0)
+		}
+	}
+	if synth != nil {
+		synth.SetVolume(float64(vol)/100.0, muted)
+	}
+	if extStdin != nil {
+		if backend == "mpv" {
+			if muted {
+				_, _ = fmt.Fprintf(extStdin, "set mute yes\n")
+			} else {
+				_, _ = fmt.Fprintf(extStdin, "set mute no\n")
+			}
+		} else if backend == "mplayer" {
+			if muted {
+				_, _ = fmt.Fprintf(extStdin, "mute 1\n")
+			} else {
+				_, _ = fmt.Fprintf(extStdin, "mute 0\n")
+			}
 		}
 	}
 	return muted
@@ -260,6 +324,10 @@ func (m *Manager) Stop() error {
 	if m.icyStream != nil {
 		_ = m.icyStream.Close()
 		m.icyStream = nil
+	}
+	if m.extStdin != nil {
+		_ = m.extStdin.Close()
+		m.extStdin = nil
 	}
 	if m.cmd != nil && m.cmd.Process != nil {
 		_ = m.cmd.Process.Kill()
@@ -299,8 +367,13 @@ func (m *Manager) Pause() error {
 		if m.nativePlayer != nil {
 			m.nativePlayer.Pause()
 		}
+		if m.extStdin != nil {
+			_ = m.extStdin.Close()
+			m.extStdin = nil
+		}
 		if m.cmd != nil && m.cmd.Process != nil {
 			_ = m.cmd.Process.Kill()
+			m.cmd = nil
 		}
 		m.status = StatusPaused
 	}
@@ -370,6 +443,13 @@ func (m *Manager) Play(st radio.Station) error {
 	vol := m.volume
 	if m.isMuted {
 		vol = 0
+	} else if m.tunerMode && m.lastTunerRSSI >= 0 {
+		vol = int(float64(vol) * m.lastTunerRSSI)
+		if vol < 0 {
+			vol = 0
+		} else if vol > 100 {
+			vol = 100
+		}
 	}
 	m.mu.Unlock()
 
@@ -404,7 +484,7 @@ func (m *Manager) playExternal(ctx context.Context, backend string, st radio.Sta
 	switch backend {
 	case "mpv":
 		volArg := fmt.Sprintf("--volume=%d", vol)
-		cmd = exec.CommandContext(ctx, "mpv", "--no-video", "--quiet", volArg, "--", st.URL)
+		cmd = exec.CommandContext(ctx, "mpv", "--no-video", "--quiet", "--input-terminal=no", volArg, "--", st.URL)
 
 	case "vlc", "cvlc":
 		gainArg := fmt.Sprintf("--gain=%.2f", float64(vol)/100.0)
@@ -427,8 +507,17 @@ func (m *Manager) playExternal(ctx context.Context, backend string, st radio.Sta
 		return
 	}
 
+	var stdinPipe io.WriteCloser
+	if backend == "mpv" || backend == "mplayer" {
+		p, err := cmd.StdinPipe()
+		if err == nil {
+			stdinPipe = p
+		}
+	}
+
 	m.mu.Lock()
 	m.cmd = cmd
+	m.extStdin = stdinPipe
 	m.mu.Unlock()
 
 	err := cmd.Start()
@@ -446,6 +535,13 @@ func (m *Manager) playExternal(ctx context.Context, backend string, st radio.Sta
 	err = cmd.Wait()
 
 	m.mu.Lock()
+	if m.cmd == cmd {
+		if m.extStdin != nil {
+			_ = m.extStdin.Close()
+			m.extStdin = nil
+		}
+		m.cmd = nil
+	}
 	if ctx.Err() == nil {
 		if err != nil {
 			m.status = StatusError
@@ -608,4 +704,85 @@ func ioReadFull(r *bufio.Reader, buf []byte) (int, error) {
 		}
 	}
 	return n, nil
+}
+
+// SetTunerMode enables or disables analog tuner static noise synthesis.
+func (m *Manager) SetTunerMode(enabled bool, signalStrength float64, freq float64, band string) {
+	m.mu.Lock()
+	m.tunerMode = enabled
+	m.lastTunerRSSI = signalStrength
+	vol := m.volume
+	isMuted := m.isMuted
+	synth := m.staticSynth
+	np := m.nativePlayer
+	backend := m.activeBackend
+	extStdin := m.extStdin
+	status := m.status
+	m.mu.Unlock()
+
+	if synth != nil {
+		synth.SetParams(signalStrength, freq, band, float64(vol)/100.0, isMuted)
+		synth.SetEnabled(enabled)
+	}
+	m.startOrStopStaticPlayer(enabled)
+
+	// When leaving tuner mode, restore full master volume on station
+	if !enabled && status == StatusPlaying && !isMuted {
+		if np != nil {
+			np.SetVolume(float64(vol) / 100.0)
+		}
+		if extStdin != nil {
+			if backend == "mpv" {
+				_, _ = fmt.Fprintf(extStdin, "set volume %d\n", vol)
+			} else if backend == "mplayer" {
+				_, _ = fmt.Fprintf(extStdin, "volume %d 1\n", vol)
+			}
+		}
+	}
+}
+
+// UpdateTunerSignal updates the current tuner reception parameters and adjusts static volume.
+func (m *Manager) UpdateTunerSignal(signalStrength float64, freq float64, band string) {
+	m.mu.Lock()
+	m.lastTunerRSSI = signalStrength
+	vol := m.volume
+	isMuted := m.isMuted
+	synth := m.staticSynth
+	np := m.nativePlayer
+	backend := m.activeBackend
+	extStdin := m.extStdin
+	status := m.status
+	m.mu.Unlock()
+
+	if synth != nil {
+		synth.SetParams(signalStrength, freq, band, float64(vol)/100.0, isMuted)
+	}
+
+	// Dynamic volume crossfade: station volume scales with signal strength on both native and external players
+	if status == StatusPlaying && !isMuted {
+		stationVol := (float64(vol) / 100.0) * signalStrength
+		if np != nil {
+			np.SetVolume(stationVol)
+		}
+		if extStdin != nil {
+			intVol := int(stationVol * 100.0)
+			if intVol < 0 {
+				intVol = 0
+			} else if intVol > 100 {
+				intVol = 100
+			}
+			if backend == "mpv" {
+				_, _ = fmt.Fprintf(extStdin, "set volume %d\n", intVol)
+			} else if backend == "mplayer" {
+				_, _ = fmt.Fprintf(extStdin, "volume %d 1\n", intVol)
+			}
+		}
+	}
+}
+
+// IsTunerActive reports whether tuner mode is currently active.
+func (m *Manager) IsTunerActive() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.tunerMode
 }

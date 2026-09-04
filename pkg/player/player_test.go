@@ -551,4 +551,14 @@ func TestPlayerManagerVolumeAndResumeEdgeCases(t *testing.T) {
 
 	// Should not error
 	_ = pm.Resume()
+
+	// Test Pause and Resume when status is StatusPaused
+	pm.mu.Lock()
+	pm.status = StatusPaused
+	pm.mu.Unlock()
+	_ = pm.Resume()
+
+	// Test Stop when playing vs stopped
+	_ = pm.Stop()
+	_ = pm.Stop() // repeat stop when already stopped
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/theme"
 	"github.com/halpworld/halpradio/pkg/timer"
 	"github.com/halpworld/halpradio/pkg/ui/components"
+	"github.com/halpworld/halpradio/pkg/ui/components/tuner"
 	"github.com/halpworld/halpradio/pkg/util"
 )
 
@@ -159,6 +160,16 @@ type Model struct {
 	AddErrMsg        string
 	EditingStationID string
 	ExportStation    radio.Station
+
+	// Globe & Frequency Tuner State
+	GlobeLat          float64
+	GlobeLon          float64
+	GlobeZoom         float64
+	GlobeStationIndex int
+	GlobeClusters     []radio.StationCluster
+	ActiveTuner       bool
+	TunerFreq         float64
+	TunerBand         string // "FM", "AM", "SW"
 }
 
 func NewModel(
@@ -220,6 +231,13 @@ func NewModel(
 		TimerPomodoroNotifyBell:    cfg.EventTerminalBell,
 		LastTickTime:               time.Now(),
 		ThemeClient:                theme.NewRegistryClient(cfg.ThemeRegistryURL),
+		GlobeLat:                   35.6762, // Tokyo / East Asia default view
+		GlobeLon:                   139.6503,
+		GlobeZoom:                  1.0,
+		GlobeStationIndex:          0,
+		ActiveTuner:                false,
+		TunerFreq:                  93.9,
+		TunerBand:                  "FM",
 	}
 
 	allThemes := theme.GetAllThemes()
@@ -237,12 +255,19 @@ func NewModel(
 func (m *Model) SwitchTab(tabIndex int) {
 	if tabIndex < 0 {
 		tabIndex = 0
-	} else if tabIndex > 7 {
-		tabIndex = 7
+	} else if tabIndex > 8 {
+		tabIndex = 8
+	}
+	if tabIndex != 8 && m.ActiveTuner {
+		m.ActiveTuner = false
+		if m.Player != nil {
+			m.Player.SetTunerMode(false, 1.0, m.TunerFreq, m.TunerBand)
+		}
 	}
 	m.ActiveTab = tabIndex
 	m.SelectedIndex = 0
 	m.HistoryIndex = 0
+	m.GlobeStationIndex = 0
 	if m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3 {
 		m.ActiveFocus = FocusSidebar
 	} else {
@@ -271,6 +296,8 @@ func (m *Model) RefreshStations() {
 		baseList = m.Store.Local
 	case 7:
 		baseList = nil
+	case 8:
+		baseList = m.Store.GetAllStations()
 	default:
 		baseList = m.Store.GetAllStations()
 	}
@@ -293,6 +320,10 @@ func (m *Model) RefreshStations() {
 	m.Countries = m.Store.GetCountries()
 	m.Genres = m.Store.GetCategories()
 
+	// Update Globe spatial clusters
+	allStations := m.Store.GetAllStations()
+	m.GlobeClusters = radio.BuildStationClusters(allStations)
+
 	m.Stations = radio.FilterWithLocation(baseList, m.SearchQuery, selectedGenre, selectedActivity, selectedCountry)
 	if m.SelectedIndex < 0 {
 		m.SelectedIndex = 0
@@ -312,13 +343,24 @@ func (m Model) WindowTitle() string {
 		timerPrefix = m.Timer.WindowTitleBadge()
 	}
 
-	tabNames := []string{"Activities", "Catalog", "Countries", "Genres", "Favorites", "RadioBrowser", "Custom", "History"}
+	tabNames := []string{"Activities", "Catalog", "Countries", "Genres", "Favorites", "RadioBrowser", "Custom", "History", "Globe"}
 	tabName := "Activities"
 	if m.ActiveTab >= 0 && m.ActiveTab < len(tabNames) {
 		tabName = tabNames[m.ActiveTab]
 	}
 
 	st := m.Player.CurrentStation()
+
+	if m.ActiveTab == 8 && m.Config.ExperimentalTuner && m.ActiveTuner {
+		cfg := tuner.Bands[m.TunerBand]
+		if st != nil && m.Player.Status() == player.StatusPlaying {
+			return fmt.Sprintf("%s▶ %s [0: Tuner %.1f %s]", timerPrefix, st.Name, m.TunerFreq, cfg.Unit)
+		}
+		if st != nil && m.Player.Status() == player.StatusPaused {
+			return fmt.Sprintf("%s⏸ %s [0: Tuner %.1f %s]", timerPrefix, st.Name, m.TunerFreq, cfg.Unit)
+		}
+		return fmt.Sprintf("%shalpradio - 0: Tuner (%.1f %s %s)", timerPrefix, m.TunerFreq, cfg.Unit, m.TunerBand)
+	}
 	if st != nil && m.Player.Status() == player.StatusPlaying {
 		track := m.Player.CurrentTrack()
 		if track != "" {

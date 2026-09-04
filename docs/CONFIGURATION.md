@@ -63,6 +63,9 @@ sleep_fade_seconds: 10      # Duration of smooth volume fade-out before stopping
 event_notify_desktop: true  # Send native OS desktop notifications (macOS / Linux / Windows)
 event_terminal_bell: true   # Emit terminal bell (\a) chime on interval transitions
 event_command_hook: ""      # Path to shell script / command to run on timer transitions
+
+# Experimental Features (On Hold)
+experimental_tuner: false   # Enable experimental Analog Frequency Tuner on Tab 9 (see docs/TUNER.md)
 ```
 
 ---

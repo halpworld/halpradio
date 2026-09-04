@@ -37,4 +37,16 @@ func TestRenderStatusBar(t *testing.T) {
 			t.Errorf("Expected Yank key in history statusbar at width %d, got: %s", w, histOut)
 		}
 	}
+
+	// 5. Globe tab status bar
+	globeOut := RenderStatusBar("", "", 8, 100, th, false)
+	if !strings.Contains(globeOut, "Spin/Tilt") && !strings.Contains(globeOut, "Zoom") {
+		t.Errorf("Expected Globe controls in Globe statusbar, got: %s", globeOut)
+	}
+
+	// 6. Tuner tab status bar
+	tunerOut := RenderStatusBar("", "", 8, 100, th, true)
+	if !strings.Contains(tunerOut, "Sweep") || !strings.Contains(tunerOut, "Band") {
+		t.Errorf("Expected Sweep/Band keys in Tuner statusbar, got: %s", tunerOut)
+	}
 }

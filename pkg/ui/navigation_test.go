@@ -268,3 +268,102 @@ func TestStationNavigationHelpersDirect(t *testing.T) {
 	emptyModel.PlayPrevStation()
 	emptyModel.TogglePlayPause()
 }
+
+func TestGlobeAndTunerNavigation(t *testing.T) {
+	m := createTestModel()
+
+	// Switch to Tab 8 (Globe) via '9' key
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'9'}})
+	m = updatedModel.(Model)
+
+	if m.ActiveTab != 8 {
+		t.Fatalf("expected ActiveTab=8 after pressing '9', got %d", m.ActiveTab)
+	}
+	if m.ActiveTuner {
+		t.Errorf("expected ActiveTuner=false on initial Globe tab")
+	}
+
+	// Rotate globe: 'l' (East), 'h' (West), 'k' (North), 'j' (South)
+	initialLon := m.GlobeLon
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	m = updatedModel.(Model)
+	if m.GlobeLon != initialLon+6.0 {
+		t.Errorf("expected Lon to increase by 6, got %f", m.GlobeLon)
+	}
+
+	initialLat := m.GlobeLat
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	m = updatedModel.(Model)
+	if m.GlobeLat != initialLat+5.0 {
+		t.Errorf("expected Lat to increase by 5, got %f", m.GlobeLat)
+	}
+
+	// Zoom in with '+' and zoom out with '-'
+	initialZoom := m.GlobeZoom
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'+'}})
+	m = updatedModel.(Model)
+	if m.GlobeZoom != initialZoom+0.25 {
+		t.Errorf("expected Zoom to increase, got %f", m.GlobeZoom)
+	}
+
+	// When ExperimentalTuner is false (default), 'F' and '0' do NOT activate tuner
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
+	m = updatedModel.(Model)
+	if m.ActiveTuner {
+		t.Errorf("expected ActiveTuner=false when ExperimentalTuner is false")
+	}
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
+	m = updatedModel.(Model)
+	if m.ActiveTuner {
+		t.Errorf("expected ActiveTuner=false when ExperimentalTuner is false")
+	}
+
+	// Enable ExperimentalTuner to test experimental tuner navigation
+	m.Config.ExperimentalTuner = true
+
+	// Switch to Analog Tuner via 'F'
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
+	m = updatedModel.(Model)
+	if !m.ActiveTuner {
+		t.Fatalf("expected ActiveTuner=true after pressing 'F'")
+	}
+
+	// Sweep needle: 'l' (right/up), 'h' (left/down)
+	initialFreq := m.TunerFreq
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	m = updatedModel.(Model)
+	if m.TunerFreq <= initialFreq {
+		t.Errorf("expected TunerFreq to increase on 'l', got %f vs %f", m.TunerFreq, initialFreq)
+	}
+
+	// Switch Band via 'b'
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+	m = updatedModel.(Model)
+	if m.TunerBand != "AM" {
+		t.Errorf("expected band to switch to AM, got %s", m.TunerBand)
+	}
+
+	// Toggle back to Globe via 'tab'
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'M'}})
+	m = updatedModel.(Model)
+	if m.ActiveTuner {
+		t.Errorf("expected ActiveTuner=false after pressing 'M'")
+	}
+
+	// Switch to Tuner via '0' key
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
+	m = updatedModel.(Model)
+	if !m.ActiveTuner {
+		t.Errorf("expected ActiveTuner=true after pressing '0'")
+	}
+
+	// Switch to Tab 1 (Catalog) via '2' key - should cleanly deactivate tuner mode
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
+	m = updatedModel.(Model)
+	if m.ActiveTuner {
+		t.Errorf("expected ActiveTuner=false after switching to Catalog")
+	}
+	if m.ActiveTab != 1 {
+		t.Errorf("expected ActiveTab=1, got %d", m.ActiveTab)
+	}
+}

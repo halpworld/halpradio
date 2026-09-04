@@ -9,7 +9,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/theme"
 )
 
-func RenderHeader(width int, activeTab int, status player.PlayStatus, backend string, th theme.Theme) string {
+func RenderHeader(width int, activeTab int, status player.PlayStatus, backend string, th theme.Theme, activeTuner ...bool) string {
 	halpStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(th.Primary)
@@ -59,51 +59,163 @@ func RenderHeader(width int, activeTab int, status player.PlayStatus, backend st
 		Foreground(th.Muted).
 		Italic(true)
 
+	isTuner := len(activeTuner) > 0 && activeTuner[0]
+
 	// Tabs
 	var tabs []string
 	padX := 1
-	if width >= 112 {
-		tabs = []string{
-			"1: Activities",
-			"2: Catalog",
-			"3: Countries",
-			"4: Genres",
-			"5: Favorites",
-			"6: RadioBrowser",
-			"7: Custom",
-			"8: History",
-		}
-	} else if width >= 86 {
-		tabs = []string{
-			"1:Activities",
-			"2:Catalog",
-			"3:Countries",
-			"4:Genres",
-			"5:Favs",
-			"6:Online",
-			"7:Custom",
-			"8:History",
-		}
-		if width < 94 {
+	if isTuner {
+		if width >= 136 {
+			tabs = []string{
+				"1: Activities",
+				"2: Catalog",
+				"3: Countries",
+				"4: Genres",
+				"5: Favorites",
+				"6: RadioBrowser",
+				"7: Custom",
+				"8: History",
+				"9: Globe",
+				"0: Tuner",
+			}
+		} else if width >= 116 {
 			padX = 0
+			tabs = []string{
+				"1: Activities",
+				"2: Catalog",
+				"3: Countries",
+				"4: Genres",
+				"5: Favorites",
+				"6: RadioBrowser",
+				"7: Custom",
+				"8: History",
+				"9: Globe",
+				"0: Tuner",
+			}
+		} else if width >= 95 {
+			tabs = []string{
+				"1:Activities",
+				"2:Catalog",
+				"3:Countries",
+				"4:Genres",
+				"5:Favs",
+				"6:Online",
+				"7:Custom",
+				"8:History",
+				"9:Globe",
+				"0:Tuner",
+			}
+			if width < 115 {
+				padX = 0
+			}
+		} else if width >= 65 {
+			padX = 0
+			tabs = []string{
+				"1:Act",
+				"2:Cat",
+				"3:Cntry",
+				"4:Gen",
+				"5:Fav",
+				"6:Web",
+				"7:Add",
+				"8:Hist",
+				"9:Glb",
+				"0:Tune",
+			}
+		} else {
+			padX = 0
+			tabs = []string{
+				"1:A",
+				"2:C",
+				"3:F",
+				"4:G",
+				"5:★",
+				"6:W",
+				"7:+",
+				"8:H",
+				"9:🌍",
+				"0:📻",
+			}
 		}
 	} else {
-		padX = 0
-		tabs = []string{
-			"1:Act",
-			"2:Cat",
-			"3:Cntry",
-			"4:Gen",
-			"5:Fav",
-			"6:Web",
-			"7:Add",
-			"8:Hist",
+		// Standard 9 tabs (Tuner feature on hold / feature-flagged)
+		if width >= 125 {
+			tabs = []string{
+				"1: Activities",
+				"2: Catalog",
+				"3: Countries",
+				"4: Genres",
+				"5: Favorites",
+				"6: RadioBrowser",
+				"7: Custom",
+				"8: History",
+				"9: Globe",
+			}
+		} else if width >= 115 {
+			padX = 0
+			tabs = []string{
+				"1: Activities",
+				"2: Catalog",
+				"3: Countries",
+				"4: Genres",
+				"5: Favorites",
+				"6: RadioBrowser",
+				"7: Custom",
+				"8: History",
+				"9: Globe",
+			}
+		} else if width >= 86 {
+			tabs = []string{
+				"1:Activities",
+				"2:Catalog",
+				"3:Countries",
+				"4:Genres",
+				"5:Favs",
+				"6:Online",
+				"7:Custom",
+				"8:History",
+				"9:Globe",
+			}
+			if width < 105 {
+				padX = 0
+			}
+		} else if width >= 57 {
+			padX = 0
+			tabs = []string{
+				"1:Act",
+				"2:Cat",
+				"3:Cntry",
+				"4:Gen",
+				"5:Fav",
+				"6:Web",
+				"7:Add",
+				"8:Hist",
+				"9:Glb",
+			}
+		} else {
+			padX = 0
+			tabs = []string{
+				"1:A",
+				"2:C",
+				"3:F",
+				"4:G",
+				"5:★",
+				"6:W",
+				"7:+",
+				"8:H",
+				"9:🌍",
+			}
 		}
+	}
+
+	highlightTab := activeTab
+	if activeTab == 8 && isTuner {
+		highlightTab = 9
 	}
 
 	var tabViews []string
 	for i, t := range tabs {
-		if i == activeTab {
+		if i == highlightTab {
 			style := lipgloss.NewStyle().
 				Background(th.Primary).
 				Foreground(th.BadgeText).

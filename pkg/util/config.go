@@ -36,6 +36,7 @@ type Config struct {
 	CatalogAutoUpdate    bool   `yaml:"catalog_auto_update"`
 	CatalogUpdateURL     string `yaml:"catalog_update_url,omitempty"`
 	CatalogCacheTTLHours int    `yaml:"catalog_cache_ttl_hours,omitempty"`
+	ExperimentalTuner    bool   `yaml:"experimental_tuner,omitempty"`
 }
 
 func DefaultConfig() Config {
@@ -68,6 +69,7 @@ func DefaultConfig() Config {
 		CatalogAutoUpdate:    true,
 		CatalogUpdateURL:     "https://raw.githubusercontent.com/halpworld/halpradio/main/stations.yaml",
 		CatalogCacheTTLHours: 24,
+		ExperimentalTuner:    false,
 	}
 }
 

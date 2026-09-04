@@ -578,3 +578,175 @@ func TestThemePickerNavigationAndExport(t *testing.T) {
 		t.Errorf("Expected Nord theme, got %s", m.Theme.Name)
 	}
 }
+
+func TestGlobeAndTunerPlaybackAndInteraction(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	m := createTestModel()
+
+	// Switch to Tab 8 (Globe)
+	mModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'9'}})
+	m = mModel.(Model)
+
+	// Set globe coordinates near US cluster (Washington DC / US fallback)
+	m.GlobeLat = 38.8951
+	m.GlobeLon = -77.0364
+	m.GlobeStationIndex = 0
+
+	// Play station at target via Enter
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mModel.(Model)
+	if m.PlayingID == "" {
+		t.Errorf("expected station to play after pressing Enter on Globe")
+	}
+
+	// Toggle pause on same station
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mModel.(Model)
+	if m.PlayingID != "" {
+		t.Errorf("expected station to pause on repeat Enter")
+	}
+
+	// Cycle stations in cluster
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = mModel.(Model)
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
+	m = mModel.(Model)
+
+	// By default (ExperimentalTuner == false), 'F' should NOT activate tuner
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
+	m = mModel.(Model)
+	if m.ActiveTuner {
+		t.Errorf("expected ActiveTuner=false when ExperimentalTuner is disabled")
+	}
+
+	// Enable ExperimentalTuner to test experimental tuner playback and interaction
+	m.Config.ExperimentalTuner = true
+
+	// Switch to Tuner mode (F)
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
+	m = mModel.(Model)
+	if !m.ActiveTuner {
+		t.Fatalf("expected ActiveTuner=true")
+	}
+
+	// Sweep to exact frequency and tune in
+	m.TunerFreq = 90.3
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mModel.(Model)
+
+	// Test sweeping dial with 'l' and 'h'
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	m = mModel.(Model)
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	m = mModel.(Model)
+
+	// Seek next station on dial (n)
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = mModel.(Model)
+
+	// Seek prev station on dial (N)
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
+	m = mModel.(Model)
+
+	// Switch band (b)
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+	m = mModel.(Model)
+	if m.TunerBand != "AM" {
+		t.Errorf("expected AM band")
+	}
+
+	// Verify auto-play on AM band frequency (720 AM has NPR News)
+	if m.PlayingID == "" {
+		t.Errorf("expected automatic analog playback of station at 720 AM")
+	}
+
+	// Verify WindowTitle reflects Tuner mode
+	title := m.WindowTitle()
+	if !strings.Contains(title, "Tuner") {
+		t.Errorf("expected window title to contain 'Tuner', got %q", title)
+	}
+}
+
+func TestSearchInputAndClearFlow(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	m := createTestModel()
+
+	// Open search bar (/)
+	mModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = mModel.(Model)
+	if !m.IsSearching {
+		t.Fatalf("expected IsSearching=true")
+	}
+
+	// Type query "ambient"
+	for _, r := range "ambient" {
+		mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = mModel.(Model)
+	}
+	if m.SearchQuery != "ambient" {
+		t.Errorf("expected query 'ambient', got %q", m.SearchQuery)
+	}
+
+	// Backspace
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	m = mModel.(Model)
+	if m.SearchQuery != "ambien" {
+		t.Errorf("expected 'ambien' after backspace, got %q", m.SearchQuery)
+	}
+
+	// First Escape exits search input mode
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = mModel.(Model)
+	if m.IsSearching {
+		t.Errorf("expected IsSearching=false after first Esc")
+	}
+
+	// Second Escape clears search query
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = mModel.(Model)
+	if m.SearchQuery != "" {
+		t.Errorf("expected SearchQuery cleared after second Esc")
+	}
+}
+
+func TestAddStationModalFlow(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	m := createTestModel()
+
+	// Open add station modal (a)
+	mModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	m = mModel.(Model)
+	if !m.ShowAddModal {
+		t.Fatalf("expected ShowAddModal=true")
+	}
+
+	// Tab through fields
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = mModel.(Model)
+	if m.AddFocusIdx != 1 {
+		t.Errorf("expected AddFocusIdx=1 after Tab, got %d", m.AddFocusIdx)
+	}
+
+	// Shift+Tab back
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	m = mModel.(Model)
+	if m.AddFocusIdx != 0 {
+		t.Errorf("expected AddFocusIdx=0 after Shift+Tab, got %d", m.AddFocusIdx)
+	}
+
+	// Close modal with Esc
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = mModel.(Model)
+	if m.ShowAddModal {
+		t.Errorf("expected ShowAddModal=false after Esc")
+	}
+}

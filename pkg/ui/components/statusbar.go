@@ -7,7 +7,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/theme"
 )
 
-func RenderStatusBar(searchQuery string, message string, activeTab int, width int, th theme.Theme) string {
+func RenderStatusBar(searchQuery string, message string, activeTab int, width int, th theme.Theme, activeTuner ...bool) string {
 	if searchQuery != "" {
 		searchStyle := lipgloss.NewStyle().
 			Background(th.Highlight).
@@ -33,12 +33,92 @@ func RenderStatusBar(searchQuery string, message string, activeTab int, width in
 	descStyle := lipgloss.NewStyle().
 		Foreground(th.Muted)
 
+	isTuner := len(activeTuner) > 0 && activeTuner[0]
+
 	var items []struct {
 		key  string
 		desc string
 	}
 
-	if activeTab == 7 {
+	if activeTab == 8 && isTuner {
+		// Dedicated Tuner status bar legend
+		if width >= 95 {
+			items = []struct {
+				key  string
+				desc string
+			}{
+				{"h/l", "Sweep"},
+				{"H/L", "Fast"},
+				{"b", "Band"},
+				{"n/N", "Seek"},
+				{"Space", "Mute"},
+				{"9/M", "Globe"},
+				{"+/-", "Vol"},
+				{"?", "Help"},
+				{"q", "Quit"},
+			}
+		} else if width >= 65 {
+			items = []struct {
+				key  string
+				desc string
+			}{
+				{"h/l", "Sweep"},
+				{"b", "Band"},
+				{"n/N", "Seek"},
+				{"Space", "Mute"},
+				{"9", "Globe"},
+				{"+/-", "Vol"},
+				{"?", "Help"},
+				{"q", "Quit"},
+			}
+		} else {
+			items = []struct {
+				key  string
+				desc string
+			}{
+				{"h/l", "Sweep"},
+				{"b", "Band"},
+				{"Space", "Mute"},
+				{"9", "Globe"},
+				{"q", "Quit"},
+			}
+		}
+	} else if activeTab == 8 {
+		// Dedicated Globe status bar legend
+		if width >= 95 {
+			items = []struct {
+				key  string
+				desc string
+			}{
+				{"h/j/k/l", "Spin/Tilt"},
+				{"+/-", "Zoom"},
+				{"n/p", "Cluster"},
+				{"Enter", "Play"},
+				{"?", "Help"},
+				{"q", "Quit"},
+			}
+		} else if width >= 65 {
+			items = []struct {
+				key  string
+				desc string
+			}{
+				{"h/j/k/l", "Spin"},
+				{"+/-", "Zoom"},
+				{"Enter", "Play"},
+				{"?", "Help"},
+				{"q", "Quit"},
+			}
+		} else {
+			items = []struct {
+				key  string
+				desc string
+			}{
+				{"h/j/k/l", "Spin"},
+				{"Enter", "Play"},
+				{"q", "Quit"},
+			}
+		}
+	} else if activeTab == 7 {
 		// History & Song Discovery Hub legend
 		if width >= 95 {
 			items = []struct {
@@ -96,7 +176,6 @@ func RenderStatusBar(searchQuery string, message string, activeTab int, width in
 				{"+/-", "Vol"},
 				{"/", "Search"},
 				{"a", "Add"},
-				{"p", "Export PR"},
 				{"?", "WhichKey"},
 				{"q", "Quit"},
 			}
@@ -109,7 +188,6 @@ func RenderStatusBar(searchQuery string, message string, activeTab int, width in
 				{"Space", "Play"},
 				{"z", "Timer"},
 				{"f", "Fav"},
-				{"y", "Yank"},
 				{"+/-", "Vol"},
 				{"/", "Search"},
 				{"?", "Help"},
@@ -122,7 +200,6 @@ func RenderStatusBar(searchQuery string, message string, activeTab int, width in
 			}{
 				{"j/k", "Nav"},
 				{"Space", "Play"},
-				{"z", "Timer"},
 				{"/", "Search"},
 				{"?", "Help"},
 				{"q", "Quit"},

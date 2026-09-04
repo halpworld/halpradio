@@ -840,3 +840,103 @@ stations:
     homepage: "https://oldpopcafe.net"
     activities: ["relaxing", "reading", "thinking"]
 
+  # Global Terrestrial & Ham Dial Broadcasts
+  - id: wnyc-fm
+    name: "WNYC 93.9 FM New York"
+    url: "https://fm939.wnyc.org/wnycfm"
+    genre: "Public / News / Culture"
+    country: "US"
+    city: "New York"
+    state: "NY"
+    broadcast: "FM"
+    frequency: "93.9 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.wnyc.org"
+    activities: ["news", "thinking", "reading"]
+
+  - id: wfuv-ny
+    name: "WFUV 90.7 FM New York"
+    url: "https://onair.wfuv.org/onair-hi"
+    genre: "Indie / Alternative / Rock"
+    country: "US"
+    city: "New York"
+    state: "NY"
+    broadcast: "FM"
+    frequency: "90.7 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://wfuv.org"
+    activities: ["programming", "relaxing"]
+
+  - id: wbez-chicago
+    name: "WBEZ 91.5 FM Chicago"
+    url: "https://stream.wbez.org/wbez128.mp3"
+    genre: "Public / News / Talk"
+    country: "US"
+    city: "Chicago"
+    state: "IL"
+    broadcast: "FM"
+    frequency: "91.5 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.wbez.org"
+    activities: ["news", "thinking"]
+
+  - id: fip-paris
+    name: "FIP Paris 105.1 FM"
+    url: "https://icecast.radiofrance.fr/fip-midfi.mp3"
+    genre: "Eclectic / Jazz / World / Rock"
+    country: "FR"
+    city: "Paris"
+    broadcast: "FM"
+    frequency: "105.1 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.radiofrance.fr/fip"
+    activities: ["programming", "relaxing", "reading"]
+
+  - id: wqxr-ny
+    name: "WQXR 105.9 FM New York"
+    url: "https://stream.wqxr.org/wqxr"
+    genre: "Classical / Arts"
+    country: "US"
+    city: "New York"
+    state: "NY"
+    broadcast: "FM"
+    frequency: "105.9 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.wqxr.org"
+    activities: ["programming", "thinking", "reading", "relaxing"]
+
+  - id: npr-news-am
+    name: "NPR News Program 720 AM"
+    url: "https://npr-ice.streamguys1.com/live.mp3"
+    genre: "News / Public Radio"
+    country: "US"
+    city: "Washington"
+    state: "DC"
+    broadcast: "AM"
+    frequency: "720 AM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://npr.org"
+    activities: ["news", "thinking"]
+
+  - id: bbc-ws-sw
+    name: "BBC World Service Shortwave"
+    url: "https://stream.live.vc.bbcmedia.co.uk/bbc_world_service"
+    genre: "World News / Speech"
+    country: "GB"
+    city: "London"
+    state: "England"
+    broadcast: "SW"
+    frequency: "10.0 MHz"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.bbc.co.uk/worldservice"
+    activities: ["news", "thinking"]
+
+
+

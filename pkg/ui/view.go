@@ -7,6 +7,8 @@ import (
 	"github.com/halpworld/halpradio/pkg/plugin"
 	"github.com/halpworld/halpradio/pkg/theme"
 	"github.com/halpworld/halpradio/pkg/ui/components"
+	"github.com/halpworld/halpradio/pkg/ui/components/globe"
+	"github.com/halpworld/halpradio/pkg/ui/components/tuner"
 )
 
 func (m Model) View() string {
@@ -88,7 +90,8 @@ func (m Model) View() string {
 		)
 	}
 
-	headerView := components.RenderHeader(width, m.ActiveTab, m.Player.Status(), m.Player.ActiveBackend(), m.Theme)
+	isTunerActive := m.Config.ExperimentalTuner && m.ActiveTuner
+	headerView := components.RenderHeader(width, m.ActiveTab, m.Player.Status(), m.Player.ActiveBackend(), m.Theme, isTunerActive)
 	headerHeight := lipgloss.Height(headerView)
 
 	timerBadge := ""
@@ -109,7 +112,7 @@ func (m Model) View() string {
 	)
 	playerBarHeight := lipgloss.Height(playerBarView)
 
-	statusBarView := components.RenderStatusBar(m.SearchQuery, m.StatusMessage, m.ActiveTab, width, m.Theme)
+	statusBarView := components.RenderStatusBar(m.SearchQuery, m.StatusMessage, m.ActiveTab, width, m.Theme, isTunerActive)
 	statusBarHeight := lipgloss.Height(statusBarView)
 
 	mainContentHeight := height - headerHeight - playerBarHeight - statusBarHeight - 1
@@ -231,6 +234,30 @@ func (m Model) View() string {
 			mainContentHeight,
 			m.Theme,
 		)
+	} else if m.ActiveTab == 8 {
+		if m.Config.ExperimentalTuner && m.ActiveTuner {
+			mainArea = tuner.RenderAnalogTunerView(
+				m.Store.GetAllStations(),
+				m.TunerFreq,
+				m.TunerBand,
+				m.PlayingID,
+				width,
+				mainContentHeight,
+				m.Theme,
+			)
+		} else {
+			mainArea = globe.RenderGlobeView(
+				m.GlobeClusters,
+				m.GlobeLat,
+				m.GlobeLon,
+				m.GlobeZoom,
+				m.GlobeStationIndex,
+				m.PlayingID,
+				width,
+				mainContentHeight,
+				m.Theme,
+			)
+		}
 	} else {
 		mainArea = components.RenderStationList(
 			m.Stations,

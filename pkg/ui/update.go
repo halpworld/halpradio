@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"path/filepath"
 	"strconv"
@@ -16,6 +17,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/theme"
 	"github.com/halpworld/halpradio/pkg/timer"
+	"github.com/halpworld/halpradio/pkg/ui/components/tuner"
 	"github.com/halpworld/halpradio/pkg/util"
 )
 
@@ -426,29 +428,74 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.fetchRegistryCmd()
 
 		case msg.String() == "tab":
-			if m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3 {
+			if m.ActiveTab == 8 && m.Config.ExperimentalTuner {
+				m.ActiveTuner = !m.ActiveTuner
+				if m.ActiveTuner {
+					if st := m.Player.CurrentStation(); st != nil && (m.Player.Status() == player.StatusPlaying || m.Player.Status() == player.StatusConnecting) {
+						m.TunerFreq = radio.ExtractOrAssignFrequency(*st, m.TunerBand)
+					}
+					rssi, _ := tuner.CalculateSignalRSSI(m.Store.GetAllStations(), m.TunerBand, m.TunerFreq)
+					m.Player.SetTunerMode(true, rssi, m.TunerFreq, m.TunerBand)
+					m.onTunerFreqChanged()
+				} else {
+					m.Player.SetTunerMode(false, 1.0, m.TunerFreq, m.TunerBand)
+				}
+			} else if m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3 {
 				if m.ActiveFocus == FocusSidebar {
 					m.ActiveFocus = FocusMainList
 				} else {
 					m.ActiveFocus = FocusSidebar
 				}
 			} else {
-				m.SwitchTab((m.ActiveTab + 1) % 8)
+				m.SwitchTab((m.ActiveTab + 1) % 9)
 			}
 
 		case msg.String() == "shift+tab":
-			if m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3 {
+			if m.ActiveTab == 8 && m.Config.ExperimentalTuner {
+				m.ActiveTuner = !m.ActiveTuner
+				if m.ActiveTuner {
+					if st := m.Player.CurrentStation(); st != nil && (m.Player.Status() == player.StatusPlaying || m.Player.Status() == player.StatusConnecting) {
+						m.TunerFreq = radio.ExtractOrAssignFrequency(*st, m.TunerBand)
+					}
+					rssi, _ := tuner.CalculateSignalRSSI(m.Store.GetAllStations(), m.TunerBand, m.TunerFreq)
+					m.Player.SetTunerMode(true, rssi, m.TunerFreq, m.TunerBand)
+					m.onTunerFreqChanged()
+				} else {
+					m.Player.SetTunerMode(false, 1.0, m.TunerFreq, m.TunerBand)
+				}
+			} else if m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3 {
 				if m.ActiveFocus == FocusSidebar {
 					m.ActiveFocus = FocusMainList
 				} else {
 					m.ActiveFocus = FocusSidebar
 				}
 			} else {
-				m.SwitchTab((m.ActiveTab - 1 + 8) % 8)
+				m.SwitchTab((m.ActiveTab - 1 + 9) % 9)
 			}
 
 		case key.Matches(msg, m.KeyMap.Up):
-			if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
+			if m.ActiveTab == 8 {
+				if m.Config.ExperimentalTuner && m.ActiveTuner {
+					cfg := tuner.Bands[m.TunerBand]
+					step := 0.5
+					if m.TunerBand == "AM" {
+						step = 20.0
+					} else if m.TunerBand == "SW" {
+						step = 0.2
+					}
+					m.TunerFreq = math.Round((m.TunerFreq+step)*100) / 100
+					if m.TunerFreq > cfg.MaxFreq {
+						m.TunerFreq = cfg.MaxFreq
+					}
+					m.onTunerFreqChanged()
+				} else {
+					m.GlobeLat += 5.0
+					if m.GlobeLat > 85.0 {
+						m.GlobeLat = 85.0
+					}
+					m.GlobeStationIndex = 0
+				}
+			} else if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
 				if m.ActiveTab == 0 {
 					if m.ActivityIndex > 0 {
 						m.ActivityIndex--
@@ -491,7 +538,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.Down):
-			if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
+			if m.ActiveTab == 8 {
+				if m.Config.ExperimentalTuner && m.ActiveTuner {
+					cfg := tuner.Bands[m.TunerBand]
+					step := 0.5
+					if m.TunerBand == "AM" {
+						step = 20.0
+					} else if m.TunerBand == "SW" {
+						step = 0.2
+					}
+					m.TunerFreq = math.Round((m.TunerFreq-step)*100) / 100
+					if m.TunerFreq < cfg.MinFreq {
+						m.TunerFreq = cfg.MinFreq
+					}
+					m.onTunerFreqChanged()
+				} else {
+					m.GlobeLat -= 5.0
+					if m.GlobeLat < -85.0 {
+						m.GlobeLat = -85.0
+					}
+					m.GlobeStationIndex = 0
+				}
+			} else if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
 				if m.ActiveTab == 0 {
 					if m.ActivityIndex < len(m.Activities) {
 						m.ActivityIndex++
@@ -522,7 +590,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case key.Matches(msg, m.KeyMap.Left):
-			if m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3 {
+			if m.ActiveTab == 8 {
+				if m.Config.ExperimentalTuner && m.ActiveTuner {
+					cfg := tuner.Bands[m.TunerBand]
+					step := 0.1
+					if m.TunerBand == "AM" {
+						step = 10.0
+					} else if m.TunerBand == "SW" {
+						step = 0.05
+					}
+					m.TunerFreq = math.Round((m.TunerFreq-step)*100) / 100
+					if m.TunerFreq < cfg.MinFreq {
+						m.TunerFreq = cfg.MinFreq
+					}
+					m.onTunerFreqChanged()
+				} else {
+					m.GlobeLon -= 6.0
+					if m.GlobeLon < -180.0 {
+						m.GlobeLon += 360.0
+					}
+					m.GlobeStationIndex = 0
+				}
+			} else if m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3 {
 				if m.ActiveFocus == FocusMainList {
 					m.ActiveFocus = FocusSidebar
 				} else if m.ActiveTab > 0 {
@@ -533,13 +622,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.Right):
-			if m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3 {
+			if m.ActiveTab == 8 {
+				if m.Config.ExperimentalTuner && m.ActiveTuner {
+					cfg := tuner.Bands[m.TunerBand]
+					step := 0.1
+					if m.TunerBand == "AM" {
+						step = 10.0
+					} else if m.TunerBand == "SW" {
+						step = 0.05
+					}
+					m.TunerFreq = math.Round((m.TunerFreq+step)*100) / 100
+					if m.TunerFreq > cfg.MaxFreq {
+						m.TunerFreq = cfg.MaxFreq
+					}
+					m.onTunerFreqChanged()
+				} else {
+					m.GlobeLon += 6.0
+					if m.GlobeLon > 180.0 {
+						m.GlobeLon -= 360.0
+					}
+					m.GlobeStationIndex = 0
+				}
+			} else if m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3 {
 				if m.ActiveFocus == FocusSidebar {
 					m.ActiveFocus = FocusMainList
-				} else if m.ActiveTab < 7 {
+				} else if m.ActiveTab < 8 {
 					m.SwitchTab(m.ActiveTab + 1)
 				}
-			} else if m.ActiveTab < 7 {
+			} else if m.ActiveTab < 8 {
 				m.SwitchTab(m.ActiveTab + 1)
 			}
 
@@ -711,6 +821,91 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.SwitchTab(6)
 		case msg.String() == "8", key.Matches(msg, m.KeyMap.HistoryTab):
 			m.SwitchTab(7)
+		case msg.String() == "9", key.Matches(msg, m.KeyMap.GlobeTab):
+			m.SwitchTab(8)
+			m.ActiveTuner = false
+			m.Player.SetTunerMode(false, 1.0, m.TunerFreq, m.TunerBand)
+		case msg.String() == "0":
+			if m.Config.ExperimentalTuner {
+				m.SwitchTab(8)
+				m.ActiveTuner = true
+				if st := m.Player.CurrentStation(); st != nil && (m.Player.Status() == player.StatusPlaying || m.Player.Status() == player.StatusConnecting) {
+					m.TunerFreq = radio.ExtractOrAssignFrequency(*st, m.TunerBand)
+				}
+				rssi, _ := tuner.CalculateSignalRSSI(m.Store.GetAllStations(), m.TunerBand, m.TunerFreq)
+				m.Player.SetTunerMode(true, rssi, m.TunerFreq, m.TunerBand)
+				m.onTunerFreqChanged()
+			} else {
+				isMuted := m.Player.ToggleMute()
+				if isMuted {
+					m.StatusMessage = "Muted"
+				} else {
+					m.StatusMessage = "Unmuted"
+				}
+				m.SyncDesktop()
+			}
+		case key.Matches(msg, m.KeyMap.FrequencyMode):
+			if m.Config.ExperimentalTuner {
+				if m.ActiveTab != 8 || !m.ActiveTuner {
+					m.SwitchTab(8)
+					m.ActiveTuner = true
+					if st := m.Player.CurrentStation(); st != nil && (m.Player.Status() == player.StatusPlaying || m.Player.Status() == player.StatusConnecting) {
+						m.TunerFreq = radio.ExtractOrAssignFrequency(*st, m.TunerBand)
+					}
+					rssi, _ := tuner.CalculateSignalRSSI(m.Store.GetAllStations(), m.TunerBand, m.TunerFreq)
+					m.Player.SetTunerMode(true, rssi, m.TunerFreq, m.TunerBand)
+					m.onTunerFreqChanged()
+				} else {
+					m.ActiveTuner = false
+					m.Player.SetTunerMode(false, 1.0, m.TunerFreq, m.TunerBand)
+				}
+			}
+		case key.Matches(msg, m.KeyMap.BandSwitch):
+			if m.ActiveTab == 8 && m.Config.ExperimentalTuner && m.ActiveTuner {
+				m.TunerBand = tuner.NextBand(m.TunerBand)
+				if m.TunerBand == "AM" {
+					m.TunerFreq = 720.0
+				} else if m.TunerBand == "SW" {
+					m.TunerFreq = 10.0
+				} else {
+					m.TunerFreq = 93.9
+				}
+				m.onTunerFreqChanged()
+			}
+
+		case key.Matches(msg, m.KeyMap.FastSweepLeft):
+			if m.ActiveTab == 8 && m.Config.ExperimentalTuner && m.ActiveTuner {
+				step := 1.0
+				if m.TunerBand == "AM" {
+					step = 50.0
+				} else if m.TunerBand == "SW" {
+					step = 0.5
+				}
+				m.TunerFreq = math.Round((m.TunerFreq-step)*100) / 100
+				cfg := tuner.Bands[m.TunerBand]
+				if m.TunerFreq < cfg.MinFreq {
+					m.TunerFreq = cfg.MinFreq
+				}
+				m.onTunerFreqChanged()
+			} else {
+				m.SwitchTab(7)
+			}
+
+		case key.Matches(msg, m.KeyMap.FastSweepRight):
+			if m.ActiveTab == 8 && m.Config.ExperimentalTuner && m.ActiveTuner {
+				step := 1.0
+				if m.TunerBand == "AM" {
+					step = 50.0
+				} else if m.TunerBand == "SW" {
+					step = 0.5
+				}
+				m.TunerFreq = math.Round((m.TunerFreq-step)*100) / 100
+				cfg := tuner.Bands[m.TunerBand]
+				if m.TunerFreq > cfg.MaxFreq {
+					m.TunerFreq = cfg.MaxFreq
+				}
+				m.onTunerFreqChanged()
+			}
 
 		case key.Matches(msg, m.KeyMap.Activity):
 			if m.ActiveTab != 0 {
@@ -750,17 +945,74 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.NextStation):
-			if m.ActiveTab != 7 {
+			if m.ActiveTab == 8 {
+				if m.Config.ExperimentalTuner && m.ActiveTuner {
+					m.seekTunerStation(true)
+				} else {
+					m.cycleGlobeStation(true)
+				}
+			} else if m.ActiveTab != 7 {
 				m.PlayNextStation()
 			}
 
 		case key.Matches(msg, m.KeyMap.PrevStation):
-			if m.ActiveTab != 7 {
+			if m.ActiveTab == 8 {
+				if m.Config.ExperimentalTuner && m.ActiveTuner {
+					m.seekTunerStation(false)
+				} else {
+					m.cycleGlobeStation(false)
+				}
+			} else if m.ActiveTab != 7 {
 				m.PlayPrevStation()
 			}
 
 		case key.Matches(msg, m.KeyMap.PlayPause):
-			if m.ActiveTab == 7 {
+			if m.ActiveTab == 8 {
+				if m.Config.ExperimentalTuner && m.ActiveTuner {
+					if m.Player.Status() == player.StatusPlaying || m.Player.Status() == player.StatusConnecting {
+						_ = m.Player.Pause()
+						m.PlayingID = ""
+						m.StatusMessage = "Tuner audio stream muted / paused [Space: Resume]"
+						m.SyncDesktop()
+					} else {
+						rssi, locked := tuner.CalculateSignalRSSI(m.Store.GetAllStations(), m.TunerBand, m.TunerFreq)
+						if locked != nil && rssi >= 0.20 {
+							m.PlayingID = locked.ID
+							_ = m.Player.Play(*locked)
+							m.Player.UpdateTunerSignal(rssi, m.TunerFreq, m.TunerBand)
+							m.StatusMessage = fmt.Sprintf("Resumed %s (Signal: %.0f%%)", locked.Name, rssi*100)
+							m.SyncDesktop()
+						} else {
+							m.StatusMessage = fmt.Sprintf("Dial at %.1f %s - Atmospheric Static (sweep dial to receive)", m.TunerFreq, tuner.Bands[m.TunerBand].Unit)
+						}
+					}
+				} else {
+					nearest, _, distKm := radio.FindNearestCluster(m.GlobeClusters, m.GlobeLat, m.GlobeLon)
+					if nearest != nil && distKm <= 1200 && len(nearest.Stations) > 0 {
+						idx := m.GlobeStationIndex
+						if idx < 0 || idx >= len(nearest.Stations) {
+							idx = 0
+						}
+						st := nearest.Stations[idx]
+						if m.PlayingID == st.ID && m.Player.Status() == player.StatusPlaying {
+							_ = m.Player.Pause()
+							m.PlayingID = ""
+							m.StatusMessage = fmt.Sprintf("Paused %s", st.Name)
+							m.SyncDesktop()
+						} else {
+							_ = m.Player.Play(st)
+							m.PlayingID = st.ID
+							m.StatusMessage = fmt.Sprintf("Playing %s [%s]", st.Name, m.Player.ActiveBackend())
+							m.SyncDesktop()
+							if m.Config.SongNotifications && m.Desktop != nil {
+								m.Desktop.NotifySong(st.Name, st.Name)
+							}
+						}
+					} else {
+						m.StatusMessage = "No broadcast stations near crosshair (rotate globe to explore)"
+					}
+				}
+			} else if m.ActiveTab == 7 {
 				hist := m.Store.GetHistory()
 				if len(hist) > 0 && m.HistoryIndex < len(hist) {
 					entry := hist[m.HistoryIndex]
@@ -893,15 +1145,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-		case key.Matches(msg, m.KeyMap.VolUp):
-			v := m.Player.SetVolume(m.Player.Volume() + 5)
-			m.StatusMessage = fmt.Sprintf("Volume: %d%%", v)
-			m.SyncDesktop()
+		case key.Matches(msg, m.KeyMap.VolUp), key.Matches(msg, m.KeyMap.ZoomIn):
+			if m.ActiveTab == 8 && !(m.Config.ExperimentalTuner && m.ActiveTuner) {
+				m.GlobeZoom += 0.25
+				if m.GlobeZoom > 3.0 {
+					m.GlobeZoom = 3.0
+				}
+				zoomDesc := "Continents"
+				if m.GlobeZoom >= 2.0 {
+					zoomDesc = "Cities / Local"
+				} else if m.GlobeZoom >= 1.25 {
+					zoomDesc = "Countries"
+				} else if m.GlobeZoom >= 0.8 {
+					zoomDesc = "Hemisphere"
+				}
+				m.StatusMessage = fmt.Sprintf("Globe Zoom: %.2fx (%s)", m.GlobeZoom, zoomDesc)
+			} else {
+				v := m.Player.SetVolume(m.Player.Volume() + 5)
+				m.StatusMessage = fmt.Sprintf("Volume: %d%%", v)
+				m.SyncDesktop()
+			}
 
-		case key.Matches(msg, m.KeyMap.VolDown):
-			v := m.Player.SetVolume(m.Player.Volume() - 5)
-			m.StatusMessage = fmt.Sprintf("Volume: %d%%", v)
-			m.SyncDesktop()
+		case key.Matches(msg, m.KeyMap.VolDown), key.Matches(msg, m.KeyMap.ZoomOut):
+			if m.ActiveTab == 8 && !(m.Config.ExperimentalTuner && m.ActiveTuner) {
+				m.GlobeZoom -= 0.25
+				if m.GlobeZoom < 0.5 {
+					m.GlobeZoom = 0.5
+				}
+				zoomDesc := "Continents"
+				if m.GlobeZoom >= 2.0 {
+					zoomDesc = "Cities / Local"
+				} else if m.GlobeZoom >= 1.25 {
+					zoomDesc = "Countries"
+				} else if m.GlobeZoom >= 0.8 {
+					zoomDesc = "Hemisphere"
+				}
+				m.StatusMessage = fmt.Sprintf("Globe Zoom: %.2fx (%s)", m.GlobeZoom, zoomDesc)
+			} else {
+				v := m.Player.SetVolume(m.Player.Volume() - 5)
+				m.StatusMessage = fmt.Sprintf("Volume: %d%%", v)
+				m.SyncDesktop()
+			}
 
 		case key.Matches(msg, m.KeyMap.Mute):
 			isMuted := m.Player.ToggleMute()
@@ -934,7 +1218,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.ExportPR):
-			if len(m.Stations) > 0 && m.SelectedIndex < len(m.Stations) {
+			if m.ActiveTab == 8 {
+				if m.Config.ExperimentalTuner && m.ActiveTuner {
+					m.seekTunerStation(false)
+				} else {
+					m.cycleGlobeStation(false)
+				}
+			} else if len(m.Stations) > 0 && m.SelectedIndex < len(m.Stations) {
 				st := m.Stations[m.SelectedIndex]
 				m.ExportStation = st
 				snippet := st.ToYAMLSnippet()
@@ -1892,5 +2182,115 @@ func (m Model) installPluginCmd(p plugin.RegistryPlugin) tea.Cmd {
 		defer cancel()
 		err := m.PluginMgr.InstallFromRegistry(ctx, p)
 		return PluginInstalledMsg{PluginID: p.ID, Err: err}
+	}
+}
+
+func (m *Model) cycleGlobeStation(forward bool) {
+	nearest, _, distKm := radio.FindNearestCluster(m.GlobeClusters, m.GlobeLat, m.GlobeLon)
+	if nearest != nil && distKm <= 1200 && len(nearest.Stations) > 0 {
+		if forward {
+			m.GlobeStationIndex = (m.GlobeStationIndex + 1) % len(nearest.Stations)
+		} else {
+			m.GlobeStationIndex = (m.GlobeStationIndex - 1 + len(nearest.Stations)) % len(nearest.Stations)
+		}
+		st := nearest.Stations[m.GlobeStationIndex]
+		badge := st.BroadcastBadge()
+		if st.Frequency != "" {
+			badge = st.Frequency
+		}
+		m.StatusMessage = fmt.Sprintf("Cluster [%d/%d]: %s (%s)", m.GlobeStationIndex+1, len(nearest.Stations), st.Name, badge)
+	} else {
+		m.StatusMessage = "No broadcast stations near crosshair (rotate globe to explore)"
+	}
+}
+
+func (m *Model) seekTunerStation(forward bool) {
+	if !m.Config.ExperimentalTuner || !m.ActiveTuner {
+		return
+	}
+	all := m.Store.GetAllStations()
+	if forward {
+		var nextFreq float64
+		found := false
+		minFreq := 99999.0
+		for _, st := range all {
+			f := radio.ExtractOrAssignFrequency(st, m.TunerBand)
+			if f < minFreq {
+				minFreq = f
+			}
+			if f > m.TunerFreq+0.1 && (!found || f < nextFreq) {
+				nextFreq = f
+				found = true
+			}
+		}
+		if found {
+			m.TunerFreq = nextFreq
+		} else if minFreq < 99999.0 {
+			m.TunerFreq = minFreq
+		}
+	} else {
+		var prevFreq float64
+		found := false
+		maxFreq := -1.0
+		for _, st := range all {
+			f := radio.ExtractOrAssignFrequency(st, m.TunerBand)
+			if f > maxFreq {
+				maxFreq = f
+			}
+			if f < m.TunerFreq-0.1 && (!found || f > prevFreq) {
+				prevFreq = f
+				found = true
+			}
+		}
+		if found {
+			m.TunerFreq = prevFreq
+		} else if maxFreq > 0 {
+			m.TunerFreq = maxFreq
+		}
+	}
+	m.onTunerFreqChanged()
+}
+
+func (m *Model) onTunerFreqChanged() {
+	if !m.Config.ExperimentalTuner || !m.ActiveTuner {
+		return
+	}
+	cfg := tuner.Bands[m.TunerBand]
+	all := m.Store.GetAllStations()
+	rssi, locked := tuner.CalculateSignalRSSI(all, m.TunerBand, m.TunerFreq)
+	m.Player.UpdateTunerSignal(rssi, m.TunerFreq, m.TunerBand)
+
+	if locked != nil && rssi >= 0.20 {
+		sMeter := tuner.FormatSMeter(rssi, m.Theme)
+		if rssi >= 0.55 {
+			m.StatusMessage = fmt.Sprintf("Dial locked: %s (%.1f %s) • Signal: %.0f%% • Audio: Broadcast %s", locked.Name, m.TunerFreq, cfg.Unit, rssi*100, sMeter)
+		} else {
+			m.StatusMessage = fmt.Sprintf("Receiving: %s (%.1f %s) • Signal: %.0f%% (Static crossfade) %s", locked.Name, m.TunerFreq, cfg.Unit, rssi*100, sMeter)
+		}
+
+		// Authentic analog radio: continuous sound output without requiring keypresses.
+		// As the dial sweeps into a station carrier frequency, audio begins streaming automatically.
+		if m.PlayingID != locked.ID || (m.Player.Status() != player.StatusPlaying && m.Player.Status() != player.StatusConnecting) {
+			m.PlayingID = locked.ID
+			_ = m.Player.Play(*locked)
+			m.Player.UpdateTunerSignal(rssi, m.TunerFreq, m.TunerBand)
+			m.SyncDesktop()
+		}
+	} else {
+		// Off-frequency / dead air: pause stream so pure atmospheric static is heard
+		if m.PlayingID != "" && (m.Player.Status() == player.StatusPlaying || m.Player.Status() == player.StatusConnecting) {
+			_ = m.Player.Pause()
+			m.PlayingID = ""
+		}
+		nearestSt, delta := tuner.FindNearestStation(all, m.TunerBand, m.TunerFreq)
+		if nearestSt != nil {
+			deltaSign := "+"
+			if delta < 0 {
+				deltaSign = ""
+			}
+			m.StatusMessage = fmt.Sprintf("Atmospheric Static (%.1f %s) • Nearest: %s (%s%.1f %s)", m.TunerFreq, cfg.Unit, nearestSt.Name, deltaSign, delta, cfg.Unit)
+		} else {
+			m.StatusMessage = fmt.Sprintf("Atmospheric Static Noise (%.1f %s)", m.TunerFreq, cfg.Unit)
+		}
 	}
 }

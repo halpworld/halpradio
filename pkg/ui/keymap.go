@@ -38,12 +38,19 @@ type KeyMap struct {
 	Help       key.Binding
 	Quit       key.Binding
 
-	YankTrack  key.Binding
-	OpenSearch key.Binding
-	CountryTab key.Binding
-	HistoryTab key.Binding
-	Timer      key.Binding
-	Plugins    key.Binding
+	YankTrack      key.Binding
+	OpenSearch     key.Binding
+	CountryTab     key.Binding
+	HistoryTab     key.Binding
+	GlobeTab       key.Binding
+	FrequencyMode  key.Binding
+	ZoomIn         key.Binding
+	ZoomOut        key.Binding
+	BandSwitch     key.Binding
+	FastSweepLeft  key.Binding
+	FastSweepRight key.Binding
+	Timer          key.Binding
+	Plugins        key.Binding
 }
 
 func DefaultKeyMap() KeyMap {
@@ -183,6 +190,34 @@ func DefaultKeyMap() KeyMap {
 		HistoryTab: key.NewBinding(
 			key.WithKeys("H"),
 			key.WithHelp("H", "history view"),
+		),
+		GlobeTab: key.NewBinding(
+			key.WithKeys("9", "M"),
+			key.WithHelp("M/9", "3D globe explorer"),
+		),
+		FrequencyMode: key.NewBinding(
+			key.WithKeys("0", "F", "T"),
+			key.WithHelp("0/F", "analog frequency tuner"),
+		),
+		ZoomIn: key.NewBinding(
+			key.WithKeys("+", "="),
+			key.WithHelp("+", "zoom in globe"),
+		),
+		ZoomOut: key.NewBinding(
+			key.WithKeys("-", "_"),
+			key.WithHelp("-", "zoom out globe"),
+		),
+		BandSwitch: key.NewBinding(
+			key.WithKeys("b", "B"),
+			key.WithHelp("b", "switch dial band (FM/AM/SW)"),
+		),
+		FastSweepLeft: key.NewBinding(
+			key.WithKeys("H"),
+			key.WithHelp("H", "fast sweep dial left"),
+		),
+		FastSweepRight: key.NewBinding(
+			key.WithKeys("L"),
+			key.WithHelp("L", "fast sweep dial right"),
 		),
 		Timer: key.NewBinding(
 			key.WithKeys("z", "Z"),

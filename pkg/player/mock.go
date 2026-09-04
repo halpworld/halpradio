@@ -19,6 +19,11 @@ type MockPlayer struct {
 	isMuted        bool
 	lastError      string
 	onTrackUpd     func(TrackInfo)
+
+	tunerActive bool
+	tunerSignal float64
+	tunerFreq   float64
+	tunerBand   string
 }
 
 // NewMockPlayer creates a new MockPlayer with the specified initial volume and callback.
@@ -188,4 +193,37 @@ func (m *MockPlayer) SetStatus(s PlayStatus) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.status = s
+}
+
+// SetTunerMode enables or disables analog tuner static simulation on MockPlayer.
+func (m *MockPlayer) SetTunerMode(enabled bool, signalStrength float64, freq float64, band string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.tunerActive = enabled
+	m.tunerSignal = signalStrength
+	m.tunerFreq = freq
+	m.tunerBand = band
+}
+
+// UpdateTunerSignal updates current tuner signal reception on MockPlayer.
+func (m *MockPlayer) UpdateTunerSignal(signalStrength float64, freq float64, band string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.tunerSignal = signalStrength
+	m.tunerFreq = freq
+	m.tunerBand = band
+}
+
+// IsTunerActive reports whether tuner mode is active on MockPlayer.
+func (m *MockPlayer) IsTunerActive() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.tunerActive
+}
+
+// TunerSignal reports the current simulated tuner signal strength.
+func (m *MockPlayer) TunerSignal() float64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.tunerSignal
 }

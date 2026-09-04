@@ -158,4 +158,29 @@ func TestRenderModals(t *testing.T) {
 	if !strings.Contains(approvalModal, "SECURITY PERMISSION APPROVAL") || !strings.Contains(approvalModal, "Webhook Broadcaster") || !strings.Contains(approvalModal, "discord.com") {
 		t.Errorf("Expected permission approval modal, got: %s", approvalModal)
 	}
+
+	// 6b. Permission Approval with No Special Permissions (Safe sandbox)
+	safePlugin := plugin.PluginInfo{
+		Manifest: plugin.Manifest{
+			ID:          "safe-plugin",
+			Name:        "Safe Plugin",
+			Author:      "author",
+			Description: "Safe",
+		},
+	}
+	safeApprovalModal := RenderPermissionApprovalModal(safePlugin, 80, 24, th)
+	if !strings.Contains(safeApprovalModal, "None (Isolated)") {
+		t.Errorf("Expected isolated network in safe plugin approval modal")
+	}
+
+	// 7. Theme Picker Preview Mode
+	previewModal := RenderThemePickerModal(theme.GetAllThemes(), regThemes, 0, 0, "tokyonight", true, "", "", 100, 30, th)
+	if !strings.Contains(previewModal, "Preview:") {
+		t.Errorf("Expected preview in theme preview mode")
+	}
+
+	previewRegModal := RenderThemePickerModal(theme.GetAllThemes(), regThemes, 1, 0, "tokyonight", true, "", "", 100, 30, th)
+	if !strings.Contains(previewRegModal, "Rosé Pine") {
+		t.Errorf("Expected rose-pine in registry preview mode")
+	}
 }

@@ -232,6 +232,7 @@ func PrintRootHelp(out io.Writer) {
 		{Name: "--discord", Args: "=<bool>", Description: "Enable Discord Rich Presence (RPC)", Default: "true"},
 		{Name: "--mpris", Args: "=<bool>", Description: "Enable Linux MPRIS v2 D-Bus remote interface", Default: "true"},
 		{Name: "--ipc", Args: "=<bool>", Description: "Enable local IPC socket for CLI remote control", Default: "true"},
+		{Name: "--experimental-tuner", Description: "Enable experimental analog frequency tuner (on hold)", Default: "false"},
 		{Short: "-v", Name: "--version", Description: "Show halpradio version"},
 		{Short: "-h", Name: "--help", Description: "Show halpradio help"},
 	})

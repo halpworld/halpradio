@@ -57,6 +57,7 @@ stations:
 		"5: RadioBrowser",
 		"6: Custom",
 		"7: History",
+		"8: Globe",
 	}
 
 	for _, size := range testSizes {
@@ -86,6 +87,34 @@ stations:
 				if w > size.w {
 					t.Errorf("Size %dx%d Tab %s Line %d: Line width (%d) exceeds terminal width (%d):\n%s",
 						size.w, size.h, tabName, lineIdx, w, size.w, line)
+				}
+			}
+
+			// Also test Tuner mode on Tab 8 when experimental tuner is enabled
+			if tabIdx == 8 {
+				cfgTuner := cfg
+				cfgTuner.ExperimentalTuner = true
+				mTuner := NewModel(store, pm, cfgTuner)
+				mTuner.Width = size.w
+				mTuner.Height = size.h
+				mTuner.SwitchTab(8)
+				mTuner.ActiveTuner = true
+
+				tunerView := mTuner.View()
+				tunerHeight := lipgloss.Height(tunerView)
+				if tunerHeight >= size.h {
+					for i, l := range strings.Split(tunerView, "\n") {
+						t.Logf("Tuner line %d: %q", i, l)
+					}
+					t.Errorf("Size %dx%d Tab 8 (Analog Tuner): Rendered height (%d) is >= terminal height (%d)",
+						size.w, size.h, tunerHeight, size.h)
+				}
+				for lineIdx, line := range strings.Split(tunerView, "\n") {
+					w := lipgloss.Width(line)
+					if w > size.w {
+						t.Errorf("Size %dx%d Tab 8 (Analog Tuner) Line %d: Line width (%d) exceeds terminal width (%d)",
+							size.w, size.h, lineIdx, w, size.w)
+					}
 				}
 			}
 		}

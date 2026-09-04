@@ -632,6 +632,7 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 	mprisFlag := fs.Bool("mpris", true, "Enable Linux MPRIS v2 D-Bus remote interface")
 	ipcFlag := fs.Bool("ipc", true, "Enable local IPC socket for CLI remote control")
 	discordFlag := fs.Bool("discord", true, "Enable Discord Rich Presence (RPC)")
+	experimentalTunerFlag := fs.Bool("experimental-tuner", false, "Enable experimental analog frequency tuner (on hold)")
 
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -695,6 +696,9 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 	}
 	if !*discordFlag {
 		cfg.DiscordRPC = false
+	}
+	if *experimentalTunerFlag {
+		cfg.ExperimentalTuner = true
 	}
 
 	store := radio.NewStore()
