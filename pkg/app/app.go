@@ -21,7 +21,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/util"
 )
 
-var Version = "0.3.1"
+var Version = "0.3.2"
 
 type AppInstance struct {
 	Program   *tea.Program
