@@ -7,6 +7,7 @@ import (
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/prop"
+	"github.com/halpworld/halpradio/pkg/debuglog"
 )
 
 const (
@@ -28,11 +29,17 @@ type MPRISHandler struct {
 	OnQuit      func()
 }
 
+// propWriter is the subset of *prop.Properties used to publish server-side
+// property updates. It exists so tests can substitute a fake implementation.
+type propWriter interface {
+	SetMust(iface, property string, v any)
+}
+
 // MPRISServer manages the MPRIS v2 D-Bus daemon.
 type MPRISServer struct {
 	mu           sync.Mutex
 	conn         *dbus.Conn
-	props        *prop.Properties
+	props        propWriter
 	handler      MPRISHandler
 	status       string
 	stationName  string
@@ -227,12 +234,7 @@ func StartMPRISServer(handler MPRISHandler) (*MPRISServer, error) {
 				Emit:     prop.EmitTrue,
 				Callback: func(c *prop.Change) *dbus.Error {
 					if v, ok := c.Value.(float64); ok {
-						s.mu.Lock()
-						s.volume = v
-						s.mu.Unlock()
-						if s.handler.OnVolume != nil {
-							s.handler.OnVolume(v)
-						}
+						s.onRemoteVolume(v)
 					}
 					return nil
 				},
@@ -259,6 +261,40 @@ func StartMPRISServer(handler MPRISHandler) (*MPRISServer, error) {
 	return s, nil
 }
 
+// onRemoteVolume records a volume change requested by a remote MPRIS client
+// (playerctl, GNOME media controls, ...) and forwards it to the UI.
+//
+// This runs on a D-Bus handler goroutine, so it must never be invoked while
+// MPRISServer.mu is already held by the caller.
+func (s *MPRISServer) onRemoteVolume(v float64) {
+	debuglog.Logf("mpris", "remote volume request %.2f", v)
+	s.mu.Lock()
+	s.volume = v
+	s.mu.Unlock()
+	if s.handler.OnVolume != nil {
+		s.handler.OnVolume(v)
+	}
+}
+
+// setProp publishes a property value and emits PropertiesChanged.
+//
+// It deliberately avoids prop.Properties.Set: that method is the entry point for
+// remote D-Bus *clients*, so it rejects the read-only PlaybackStatus/Metadata
+// properties and runs the property Callback while holding the prop package's
+// internal lock. Going through it from here silently dropped every metadata
+// update and, via the Volume callback, re-entered MPRISServer.mu and deadlocked
+// the caller (see issue #26). SetMust writes the value directly and emits the
+// signal without consulting Writable or Callback.
+func setProp(props propWriter, iface, name string, v any) {
+	if props == nil {
+		return
+	}
+	// SetMust panics if the value type does not match the exported property.
+	// A misbehaving D-Bus stack must never take down the TUI.
+	defer func() { _ = recover() }()
+	props.SetMust(iface, name, v)
+}
+
 // UpdatePlaybackState synchronizes state to MPRIS D-Bus properties and emits change signals.
 func (s *MPRISServer) UpdatePlaybackState(status string, stationName, genre, trackTitle, streamURL string, volume float64) {
 	if s == nil {
@@ -266,9 +302,8 @@ func (s *MPRISServer) UpdatePlaybackState(status string, stationName, genre, tra
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if s.closed || s.props == nil {
+		s.mu.Unlock()
 		return
 	}
 
@@ -279,12 +314,16 @@ func (s *MPRISServer) UpdatePlaybackState(status string, stationName, genre, tra
 	s.trackTitle = trackTitle
 	s.streamURL = streamURL
 	s.volume = volume
+	props := s.props
+	s.mu.Unlock()
 
 	meta := BuildMPRISMetadata(stationName, genre, trackTitle, streamURL)
 
-	_ = s.props.Set(playerInterface, "PlaybackStatus", dbus.MakeVariant(mprisStatus))
-	_ = s.props.Set(playerInterface, "Metadata", dbus.MakeVariant(meta))
-	_ = s.props.Set(playerInterface, "Volume", dbus.MakeVariant(volume))
+	// Published without holding s.mu: D-Bus may call back into this server.
+	debuglog.Logf("mpris", "publishing status=%s volume=%.2f", mprisStatus, volume)
+	setProp(props, playerInterface, "PlaybackStatus", mprisStatus)
+	setProp(props, playerInterface, "Metadata", meta)
+	setProp(props, playerInterface, "Volume", volume)
 }
 
 // Close unregisters and disconnects from D-Bus.

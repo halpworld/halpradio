@@ -119,6 +119,12 @@ func GetSavedTracksFile() string {
 	return filepath.Join(GetConfigDir(), "saved_tracks.txt")
 }
 
+// GetDebugLogFile returns the path diagnostic logs are written to when
+// halpradio is started with --debug (or HALPRADIO_DEBUG set).
+func GetDebugLogFile() string {
+	return filepath.Join(GetConfigDir(), "debug.log")
+}
+
 func GetConfigFile() string {
 	return filepath.Join(GetConfigDir(), "config.yaml")
 }

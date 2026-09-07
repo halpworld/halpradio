@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/halpworld/halpradio/pkg/debuglog"
 	"github.com/halpworld/halpradio/pkg/desktop"
 	"github.com/halpworld/halpradio/pkg/player"
 	"github.com/halpworld/halpradio/pkg/plugin"
@@ -29,6 +30,10 @@ type AppInstance struct {
 	Store     *radio.Store
 	Desktop   *desktop.Manager
 	PluginMgr *plugin.Manager
+
+	// DebugLogPath is the diagnostic log file for this run, or "" when
+	// diagnostic logging is off.
+	DebugLogPath string
 }
 
 // RunPluginCLI handles plugin subcommands: list, install, remove, enable, disable, update.
@@ -633,6 +638,8 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 	ipcFlag := fs.Bool("ipc", true, "Enable local IPC socket for CLI remote control")
 	discordFlag := fs.Bool("discord", true, "Enable Discord Rich Presence (RPC)")
 	experimentalTunerFlag := fs.Bool("experimental-tuner", false, "Enable experimental analog frequency tuner (on hold)")
+	debugFlag := fs.Bool("debug", false, "Write a diagnostic log for bug reports (see --debug-log)")
+	debugLogFlag := fs.String("debug-log", "", "Path for the diagnostic log (default ~/.config/halpradio/debug.log)")
 
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -652,6 +659,22 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 	}
 
 	_ = util.EnsureConfigDir()
+
+	debugLogPath := ""
+	if *debugFlag || *debugLogFlag != "" || debuglog.EnvEnabled() {
+		target := *debugLogFlag
+		if target == "" {
+			target = util.GetDebugLogFile()
+		}
+		p, err := debuglog.Init(target)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not open debug log: %v\n", err)
+		} else {
+			debugLogPath = p
+			debuglog.Header(Version, map[string]string{"debug_log": p})
+		}
+	}
+
 	_ = theme.EnsureExampleTheme(util.GetThemesDir())
 	_, _ = theme.LoadCustomThemes(util.GetThemesDir())
 
@@ -781,13 +804,17 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 		tea.WithMouseCellMotion(),
 	)
 
+	debuglog.Logf("session", "config: backend=%s theme=%s notifications=%t autopause=%t mpris=%t ipc=%t discord=%t",
+		cfg.PlayerBackend, cfg.Theme, cfg.SongNotifications, cfg.AutoPause, cfg.MPRISEnabled, cfg.IPCEnabled, cfg.DiscordRPC)
+
 	return &AppInstance{
-		Program:   program,
-		Player:    pm,
-		Config:    cfg,
-		Store:     store,
-		Desktop:   desktopMgr,
-		PluginMgr: pluginMgr,
+		Program:      program,
+		Player:       pm,
+		Config:       cfg,
+		Store:        store,
+		Desktop:      desktopMgr,
+		PluginMgr:    pluginMgr,
+		DebugLogPath: debugLogPath,
 	}, false, nil
 }
 
@@ -800,10 +827,10 @@ func Run(embeddedCatalog []byte) {
 		os.Exit(0)
 	}
 
-	if _, err := appInst.Program.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error running halpradio: %v\n", err)
-		os.Exit(1)
-	}
+	runErr := func() error {
+		_, err := appInst.Program.Run()
+		return err
+	}()
 
 	// Clean up player, desktop, and plugin services on exit
 	_ = appInst.Player.Close()
@@ -812,5 +839,16 @@ func Run(embeddedCatalog []byte) {
 	}
 	if appInst.PluginMgr != nil {
 		_ = appInst.PluginMgr.Close()
+	}
+
+	debuglog.Close()
+	if appInst.DebugLogPath != "" {
+		// Printed after the alternate screen is restored so it survives on screen.
+		fmt.Fprintf(os.Stderr, "Debug log written to %s — attach it to your bug report.\n", appInst.DebugLogPath)
+	}
+
+	if runErr != nil {
+		fmt.Fprintf(os.Stderr, "Error running halpradio: %v\n", runErr)
+		os.Exit(1)
 	}
 }

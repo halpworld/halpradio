@@ -12,6 +12,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/halpworld/halpradio/pkg/debuglog"
 	"github.com/halpworld/halpradio/pkg/player"
 	"github.com/halpworld/halpradio/pkg/plugin"
 	"github.com/halpworld/halpradio/pkg/radio"
@@ -21,8 +22,35 @@ import (
 	"github.com/halpworld/halpradio/pkg/util"
 )
 
+// describeUpdateMsg renders a short, log-safe label for an incoming message and
+// reports whether it is high-frequency enough to keep out of the log unless it
+// misbehaves.
+func describeUpdateMsg(msg tea.Msg) (label string, quiet bool) {
+	switch msg := msg.(type) {
+	case TickMsg:
+		return "TickMsg", true
+	case tea.MouseMsg:
+		return "MouseMsg", true
+	case tea.KeyMsg:
+		return fmt.Sprintf("KeyMsg %q", msg.String()), false
+	case tea.WindowSizeMsg:
+		return fmt.Sprintf("WindowSizeMsg %dx%d", msg.Width, msg.Height), false
+	default:
+		return fmt.Sprintf("%T", msg), false
+	}
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+
+	if debuglog.Enabled() {
+		// The update loop is single-threaded: if a handler blocks here, the
+		// whole TUI stops responding to the keyboard. Bracketing every message
+		// means a frozen session leaves the culprit as the last "→" line in
+		// the log, and the watchdog dumps stacks on top of it (issue #26).
+		label, quiet := describeUpdateMsg(msg)
+		defer debuglog.Watch("Update "+label, quiet)()
+	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:

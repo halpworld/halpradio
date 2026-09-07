@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/halpworld/halpradio/pkg/debuglog"
 	"github.com/halpworld/halpradio/pkg/desktop"
 	"github.com/halpworld/halpradio/pkg/util"
 )
@@ -615,5 +616,100 @@ func TestSetupAppVersionSubcommand(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), Version) {
 		t.Errorf("Expected version in output, got: %s", buf.String())
+	}
+}
+
+func TestSetupAppDebugFlagWritesLog(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	t.Setenv("HALPRADIO_DEBUG", "")
+
+	var buf bytes.Buffer
+	appInst, _, err := SetupApp([]string{"-debug", "-mpris=false", "-ipc=false", "-discord=false"}, []byte{}, &buf)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if appInst == nil {
+		t.Fatal("Expected non-nil AppInstance")
+	}
+	defer func() {
+		if appInst.Desktop != nil {
+			_ = appInst.Desktop.Close()
+		}
+		debuglog.Close()
+	}()
+
+	if appInst.DebugLogPath == "" {
+		t.Fatal("Expected DebugLogPath to be set with -debug")
+	}
+	if appInst.DebugLogPath != util.GetDebugLogFile() {
+		t.Errorf("Expected the default log path %q, got %q", util.GetDebugLogFile(), appInst.DebugLogPath)
+	}
+
+	data, err := os.ReadFile(appInst.DebugLogPath)
+	if err != nil {
+		t.Fatalf("Reading debug log: %v", err)
+	}
+	contents := string(data)
+	for _, want := range []string{"halpradio v" + Version + " starting", "TERM=", "config: backend="} {
+		if !strings.Contains(contents, want) {
+			t.Errorf("Expected %q in the debug log, got:\n%s", want, contents)
+		}
+	}
+}
+
+func TestSetupAppDebugLogCustomPath(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	t.Setenv("HALPRADIO_DEBUG", "")
+	custom := filepath.Join(tempDir, "logs", "halp.log")
+
+	var buf bytes.Buffer
+	appInst, _, err := SetupApp([]string{"-debug-log", custom, "-mpris=false", "-ipc=false", "-discord=false"}, []byte{}, &buf)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	defer func() {
+		if appInst != nil && appInst.Desktop != nil {
+			_ = appInst.Desktop.Close()
+		}
+		debuglog.Close()
+	}()
+
+	if appInst.DebugLogPath != custom {
+		t.Errorf("Expected -debug-log to select %q, got %q", custom, appInst.DebugLogPath)
+	}
+	if _, err := os.Stat(custom); err != nil {
+		t.Errorf("Expected the custom log file to exist: %v", err)
+	}
+}
+
+func TestSetupAppNoDebugLogByDefault(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	t.Setenv("HALPRADIO_DEBUG", "")
+
+	var buf bytes.Buffer
+	appInst, _, err := SetupApp([]string{"-mpris=false", "-ipc=false", "-discord=false"}, []byte{}, &buf)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	defer func() {
+		if appInst != nil && appInst.Desktop != nil {
+			_ = appInst.Desktop.Close()
+		}
+	}()
+
+	if appInst.DebugLogPath != "" {
+		t.Errorf("Expected no debug log without -debug, got %q", appInst.DebugLogPath)
+	}
+	if debuglog.Enabled() {
+		t.Error("Expected diagnostic logging to stay off by default")
+	}
+	if _, err := os.Stat(util.GetDebugLogFile()); !os.IsNotExist(err) {
+		t.Errorf("Expected no debug.log to be created, stat err = %v", err)
 	}
 }

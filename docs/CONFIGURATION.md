@@ -14,6 +14,7 @@ All user state and settings are stored in your platform's standard configuration
 ```
 ~/.config/halpradio/
 ├── config.yaml       # Persistent user preferences, timers & system hooks
+├── debug.log         # Diagnostic log, only when started with --debug
 ├── stations.yaml     # Custom user-added radio stations
 ├── favorites.json    # Favorited stations list
 ├── saved_tracks.txt  # Bookmarked tracks from history
@@ -154,7 +155,54 @@ halpradio plugin remove webhook-broadcaster
 
 # Print version and system diagnostic report
 halpradio --version
+
+# Diagnostics for a bug report (see "Debug Logging" below)
+halpradio --debug
+halpradio --debug-log /tmp/halpradio.log
 ```
+
+---
+
+## 🐛 Debug Logging
+
+halpradio draws in the alternate screen buffer, so anything printed to stdout or stderr is invisible while the
+TUI runs. Diagnostics go to a file instead, and are **off by default**:
+
+| Trigger | Effect |
+|---|---|
+| `halpradio --debug` | Log to `~/.config/halpradio/debug.log` |
+| `halpradio --debug-log <path>` | Log to a specific file (implies `--debug`) |
+| `HALPRADIO_DEBUG=1 halpradio` | Same as `--debug` |
+
+The log captures:
+
+- **Session header** — halpradio version, Go version, OS/arch, `TERM`, `COLORTERM`, session type, whether a
+  D-Bus session bus is present.
+- **Player** — the detected backend, the exact external command line, stream URLs, exit codes and errors.
+- **Desktop integrations** — MPRIS / IPC startup results and every published playback state change.
+- **Update loop** — one line per message the TUI handled, plus a `SLOW` marker for anything over 250 ms.
+
+### Freeze diagnosis
+
+The Bubble Tea update loop is single-threaded, so anything that blocks in it stops the whole TUI from
+responding to the keyboard. A watchdog goroutine notices an update that has been running for more than
+`5s` and appends every goroutine's stack to the log:
+
+```
+14:02:11.884 [update] → Update KeyMsg "enter"
+14:02:16.885 [watchdog] STALLED: Update KeyMsg "enter" (stuck 5.001s)
+14:02:16.885 [watchdog] goroutine dump (stalled operation):
+goroutine 1 [semacquire]:
+sync.(*Mutex).Lock(...)
+	github.com/halpworld/halpradio/pkg/desktop.(*MPRISServer).UpdatePlaybackState(...)
+...
+```
+
+If the UI locks up, wait ~10 seconds before killing halpradio so the dump lands in the file.
+
+The log is created with `0600` permissions and rotated to `debug.log.old` once it passes 2 MiB. It contains
+station stream URLs and local paths but no credentials — still worth skimming before pasting into a public
+issue.
 
 ---
 

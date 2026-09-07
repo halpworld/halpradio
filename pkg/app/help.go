@@ -233,6 +233,8 @@ func PrintRootHelp(out io.Writer) {
 		{Name: "--mpris", Args: "=<bool>", Description: "Enable Linux MPRIS v2 D-Bus remote interface", Default: "true"},
 		{Name: "--ipc", Args: "=<bool>", Description: "Enable local IPC socket for CLI remote control", Default: "true"},
 		{Name: "--experimental-tuner", Description: "Enable experimental analog frequency tuner (on hold)", Default: "false"},
+		{Name: "--debug", Description: "Write a diagnostic log to attach to bug reports", Default: "false"},
+		{Name: "--debug-log", Args: "<path>", Description: "Diagnostic log path (default ~/.config/halpradio/debug.log)"},
 		{Short: "-v", Name: "--version", Description: "Show halpradio version"},
 		{Short: "-h", Name: "--help", Description: "Show halpradio help"},
 	})
@@ -247,6 +249,7 @@ func PrintRootHelp(out io.Writer) {
 		{Command: "halpradio stations list --plain | fzf | awk '{print $2}' | xargs halpradio play", Description: "Interactive fuzzy finder stream"},
 		{Command: "halpradio current --format \"[%p] %s - %t\"", Description: "Status bar ticker for tmux or Waybar"},
 		{Command: "halpradio volume +5", Description: "Increase playback volume by 5%"},
+		{Command: "halpradio --debug", Description: "Reproduce a bug, then attach ~/.config/halpradio/debug.log"},
 	})
 
 	RenderHelpFooter(out,
