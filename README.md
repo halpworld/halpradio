@@ -402,6 +402,37 @@ Explore hundreds of curated streams across diverse activity moods and global gen
 
 ---
 
+## 🐛 Troubleshooting & Debug Logs
+
+If halpradio misbehaves — a freeze, silent playback, a station that never connects — run it with `--debug`:
+
+```bash
+halpradio --debug
+```
+
+Diagnostics are written to `~/.config/halpradio/debug.log` (override with `--debug-log <path>`, or set
+`HALPRADIO_DEBUG=1`). The log records the halpradio version, OS, terminal, selected audio backend, the exact
+player command line, every keystroke the UI handled, and the state of the desktop integrations (MPRIS, IPC,
+Discord).
+
+Because the TUI runs a single-threaded update loop, a freeze is almost always something blocking inside it.
+A built-in watchdog notices when the loop has been stuck for more than five seconds and appends a full
+goroutine dump to the log, which usually names the culprit outright:
+
+```
+14:02:11.884 [update] → Update KeyMsg "enter"
+14:02:16.885 [watchdog] STALLED: Update KeyMsg "enter" (stuck 5.001s)
+14:02:16.885 [watchdog] goroutine dump (stalled operation): ...
+```
+
+So if the UI locks up, **wait about ten seconds before killing halpradio** (from another terminal:
+`pkill halpradio`), then attach `debug.log` to your [bug report](https://github.com/halpworld/halpradio/issues/new?template=bug_report.yml).
+
+The log contains station stream URLs and local file paths; it is written with `0600` permissions, and it never
+records credentials. Skim it before pasting it into a public issue.
+
+---
+
 ## 📚 Technical Documentation
 
 Explore detailed technical documentation in the [`docs/`](./docs) folder:

@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/halpworld/halpradio/pkg/debuglog"
 	"github.com/halpworld/halpradio/pkg/radio"
 )
 
@@ -102,6 +103,7 @@ func NewManager(preferredBackend string, initialVolume int, onTrackUpd func(Trac
 		activeBackend: detectBackend(preferredBackend),
 		staticSynth:   NewStaticSynthesizer(44100),
 	}
+	debuglog.Logf("player", "backend %q selected (preferred %q), volume %d", m.activeBackend, preferredBackend, initialVolume)
 	return m
 }
 
@@ -458,6 +460,8 @@ func (m *Manager) Play(st radio.Station) error {
 	m.cancelFn = cancel
 	m.mu.Unlock()
 
+	debuglog.Logf("player", "play station=%q backend=%s vol=%d url=%s", st.Name, backend, vol, st.URL)
+
 	if backend == "native" {
 		go m.playNative(ctx, st, vol)
 	} else {
@@ -520,6 +524,8 @@ func (m *Manager) playExternal(ctx context.Context, backend string, st radio.Sta
 	m.extStdin = stdinPipe
 	m.mu.Unlock()
 
+	debuglog.Logf("player", "exec %v", cmd.Args)
+
 	err := cmd.Start()
 	if err != nil {
 		if ctx.Err() == nil {
@@ -533,6 +539,7 @@ func (m *Manager) playExternal(ctx context.Context, backend string, st radio.Sta
 	m.mu.Unlock()
 
 	err = cmd.Wait()
+	debuglog.Logf("player", "%s exited: err=%v ctxErr=%v", backend, err, ctx.Err())
 
 	m.mu.Lock()
 	if m.cmd == cmd {
@@ -554,6 +561,7 @@ func (m *Manager) playExternal(ctx context.Context, backend string, st radio.Sta
 }
 
 func (m *Manager) setError(errMsg string) {
+	debuglog.Logf("player", "error: %s", errMsg)
 	m.mu.Lock()
 	m.status = StatusError
 	m.lastError = errMsg

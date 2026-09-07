@@ -1,7 +1,9 @@
 package desktop
 
 import (
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/godbus/dbus/v5"
 )
@@ -152,4 +154,117 @@ func TestMPRISServerNilSafe(t *testing.T) {
 	var s *MPRISServer
 	s.UpdatePlaybackState("PLAYING", "Station", "Genre", "Track", "URL", 0.8)
 	_ = s.Close()
+}
+
+// fakeProps mimics the parts of *prop.Properties that MPRISServer relies on.
+// onSet reproduces godbus' behaviour of invoking a property Callback
+// synchronously, from inside the setter, while its own lock is held.
+type fakeProps struct {
+	mu    sync.Mutex
+	set   map[string]any
+	onSet func(iface, property string, v any)
+}
+
+func newFakeProps() *fakeProps {
+	return &fakeProps{set: map[string]any{}}
+}
+
+func (f *fakeProps) SetMust(iface, property string, v any) {
+	f.mu.Lock()
+	f.set[iface+"."+property] = v
+	cb := f.onSet
+	f.mu.Unlock()
+	if cb != nil {
+		cb(iface, property, v)
+	}
+}
+
+func (f *fakeProps) value(key string) any {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.set[key]
+}
+
+// TestUpdatePlaybackStateDoesNotDeadlockOnPropertyCallback is a regression test
+// for issue #26: publishing playback state while holding MPRISServer.mu let the
+// D-Bus Volume callback re-enter the same non-reentrant mutex, wedging the
+// Bubble Tea update loop and freezing the whole TUI on Linux.
+func TestUpdatePlaybackStateDoesNotDeadlockOnPropertyCallback(t *testing.T) {
+	props := newFakeProps()
+	var gotVolume float64
+	server := &MPRISServer{
+		props:   props,
+		handler: MPRISHandler{OnVolume: func(v float64) { gotVolume = v }},
+	}
+	props.onSet = func(_, property string, v any) {
+		if property == "Volume" {
+			// godbus runs the property Callback inline; the callback in turn
+			// touches MPRISServer state.
+			server.onRemoteVolume(v.(float64))
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		server.UpdatePlaybackState("PLAYING", "Radio Paradise", "Eclectic", "Some Song", "http://example.com/stream", 0.75)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("UpdatePlaybackState deadlocked while publishing D-Bus properties")
+	}
+
+	if gotVolume != 0.75 {
+		t.Errorf("expected volume callback to receive 0.75, got %v", gotVolume)
+	}
+}
+
+// TestUpdatePlaybackStatePublishesReadOnlyProperties guards the second half of
+// issue #26: PlaybackStatus and Metadata are exported read-only, so routing
+// them through prop.Properties.Set silently dropped every update.
+func TestUpdatePlaybackStatePublishesReadOnlyProperties(t *testing.T) {
+	props := newFakeProps()
+	server := &MPRISServer{props: props}
+
+	server.UpdatePlaybackState("PAUSED", "Radio Paradise", "Eclectic", "Some Song", "http://example.com/stream", 0.4)
+
+	if got := props.value(playerInterface + ".PlaybackStatus"); got != "Paused" {
+		t.Errorf("expected PlaybackStatus %q, got %v", "Paused", got)
+	}
+	meta, ok := props.value(playerInterface + ".Metadata").(map[string]any)
+	if !ok {
+		t.Fatalf("expected Metadata to be published as map[string]any, got %T", props.value(playerInterface+".Metadata"))
+	}
+	if meta["xesam:title"] != "Some Song" {
+		t.Errorf("expected xesam:title %q, got %v", "Some Song", meta["xesam:title"])
+	}
+	if got := props.value(playerInterface + ".Volume"); got != 0.4 {
+		t.Errorf("expected Volume 0.4, got %v", got)
+	}
+}
+
+// TestSetPropSurvivesPanickingWriter ensures a misbehaving D-Bus stack cannot
+// take down the TUI: prop.Properties.SetMust panics on a type mismatch.
+func TestSetPropSurvivesPanickingWriter(t *testing.T) {
+	setProp(panicProps{}, playerInterface, "Volume", 0.5)
+	setProp(nil, playerInterface, "Volume", 0.5)
+}
+
+type panicProps struct{}
+
+func (panicProps) SetMust(string, string, any) { panic("boom") }
+
+// TestMPRISMetadataIsStorable verifies the metadata map round-trips through
+// dbus.Store, which is what prop.Properties.SetMust uses internally.
+func TestMPRISMetadataIsStorable(t *testing.T) {
+	meta := BuildMPRISMetadata("Radio Paradise", "Eclectic", "Some Song", "http://example.com/stream")
+	dest := map[string]any{}
+	if err := dbus.Store([]any{meta}, &dest); err != nil {
+		t.Fatalf("metadata is not storable into the exported property: %v", err)
+	}
+	if dest["xesam:title"] != "Some Song" {
+		t.Errorf("expected xesam:title to survive the round-trip, got %v", dest["xesam:title"])
+	}
 }

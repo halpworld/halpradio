@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/halpworld/halpradio/pkg/debuglog"
 )
 
 // DesktopConfig configures the desktop integration subsystem.
@@ -82,12 +84,17 @@ func NewManager(cfg DesktopConfig, onAction func(MediaAction)) *Manager {
 
 			return m.GetPlaybackInfo(), nil
 		})
-		if err == nil {
+		if err != nil {
+			debuglog.Logf("desktop", "IPC server disabled: %v", err)
+		} else {
 			m.ipc = ipcServer
 		}
 	}
 
 	// Start MPRIS Server on Linux (or any platform where D-Bus is available and enabled)
+	if !cfg.MPRISEnabled || runtime.GOOS != "linux" {
+		debuglog.Logf("desktop", "MPRIS not started (enabled=%t, goos=%s)", cfg.MPRISEnabled, runtime.GOOS)
+	}
 	if cfg.MPRISEnabled && runtime.GOOS == "linux" {
 		mprisServer, err := StartMPRISServer(MPRISHandler{
 			OnPlayPause: func() {
@@ -135,8 +142,11 @@ func NewManager(cfg DesktopConfig, onAction func(MediaAction)) *Manager {
 				}
 			},
 		})
-		if err == nil {
+		if err != nil {
+			debuglog.Logf("desktop", "MPRIS server disabled: %v", err)
+		} else {
 			m.mpris = mprisServer
+			debuglog.Logf("desktop", "MPRIS server registered on the session bus")
 		}
 	}
 
@@ -187,6 +197,9 @@ func (m *Manager) UpdatePlaybackFull(status, stationID, stationName, genre, trac
 	playbackStart := m.playbackStart
 	currViz := m.visualizer
 	m.mu.Unlock()
+
+	debuglog.Logf("desktop", "playback %s station=%q track=%q vol=%d muted=%t backend=%s",
+		status, stationName, trackTitle, volume, isMuted, backend)
 
 	// Update MPRIS
 	if mpris != nil {

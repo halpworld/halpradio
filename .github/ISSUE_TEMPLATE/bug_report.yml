@@ -8,6 +8,11 @@ body:
       value: |
         Thanks for taking the time to report a problem in **halpradio**!
         Please verify if the issue persists when running with different audio backends (`halpradio -backend mpv` vs `halpradio -backend native`).
+
+        **Please attach a debug log.** Re-run with `halpradio --debug`, reproduce the problem, quit, and attach
+        `~/.config/halpradio/debug.log`. If the UI freezes and you cannot quit, wait ~10 seconds before killing
+        halpradio (`Ctrl+C`, or `pkill halpradio` from another terminal) — the built-in watchdog writes a
+        goroutine dump to the log that usually pinpoints the cause on its own.
   - type: input
     id: version
     attributes:
@@ -77,6 +82,16 @@ body:
     attributes:
       label: "Logs or Terminal Output"
       description: "Paste any relevant terminal error logs or stack traces."
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: debug_log
+    attributes:
+      label: "Debug Log"
+      description: |
+        Contents of `~/.config/halpradio/debug.log` after reproducing with `halpradio --debug`
+        (or attach the file). This is by far the most useful thing you can include.
       render: shell
     validations:
       required: false
