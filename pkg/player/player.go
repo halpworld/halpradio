@@ -72,7 +72,7 @@ type Manager struct {
 	lastError      string
 
 	cmd        *exec.Cmd
-	extStdin   io.WriteCloser
+	extCtrl    extControl
 	cancelFn   context.CancelFunc
 	icyCancel  context.CancelFunc
 	icyStream  io.Closer
@@ -239,8 +239,7 @@ func (m *Manager) SetVolume(vol int) int {
 	currVol := m.volume
 	np := m.nativePlayer
 	synth := m.staticSynth
-	backend := m.activeBackend
-	extStdin := m.extStdin
+	ctrl := m.extCtrl
 	inTuner := m.tunerMode
 	rssi := m.lastTunerRSSI
 	m.mu.Unlock()
@@ -255,16 +254,12 @@ func (m *Manager) SetVolume(vol int) int {
 	if synth != nil {
 		synth.SetVolume(float64(currVol)/100.0, false)
 	}
-	if extStdin != nil {
+	if ctrl != nil {
 		effVol := currVol
 		if inTuner {
 			effVol = int(float64(currVol) * rssi)
 		}
-		if backend == "mpv" {
-			_, _ = fmt.Fprintf(extStdin, "set volume %d\n", effVol)
-		} else if backend == "mplayer" {
-			_, _ = fmt.Fprintf(extStdin, "volume %d 1\n", effVol)
-		}
+		ctrl.SetVolume(clampVolume(effVol))
 	}
 
 	return currVol
@@ -277,8 +272,7 @@ func (m *Manager) ToggleMute() bool {
 	vol := m.volume
 	np := m.nativePlayer
 	synth := m.staticSynth
-	backend := m.activeBackend
-	extStdin := m.extStdin
+	ctrl := m.extCtrl
 	inTuner := m.tunerMode
 	rssi := m.lastTunerRSSI
 	m.mu.Unlock()
@@ -295,20 +289,8 @@ func (m *Manager) ToggleMute() bool {
 	if synth != nil {
 		synth.SetVolume(float64(vol)/100.0, muted)
 	}
-	if extStdin != nil {
-		if backend == "mpv" {
-			if muted {
-				_, _ = fmt.Fprintf(extStdin, "set mute yes\n")
-			} else {
-				_, _ = fmt.Fprintf(extStdin, "set mute no\n")
-			}
-		} else if backend == "mplayer" {
-			if muted {
-				_, _ = fmt.Fprintf(extStdin, "mute 1\n")
-			} else {
-				_, _ = fmt.Fprintf(extStdin, "mute 0\n")
-			}
-		}
+	if ctrl != nil {
+		ctrl.SetMute(muted)
 	}
 	return muted
 }
@@ -327,9 +309,9 @@ func (m *Manager) Stop() error {
 		_ = m.icyStream.Close()
 		m.icyStream = nil
 	}
-	if m.extStdin != nil {
-		_ = m.extStdin.Close()
-		m.extStdin = nil
+	if m.extCtrl != nil {
+		_ = m.extCtrl.Close()
+		m.extCtrl = nil
 	}
 	if m.cmd != nil && m.cmd.Process != nil {
 		_ = m.cmd.Process.Kill()
@@ -369,9 +351,9 @@ func (m *Manager) Pause() error {
 		if m.nativePlayer != nil {
 			m.nativePlayer.Pause()
 		}
-		if m.extStdin != nil {
-			_ = m.extStdin.Close()
-			m.extStdin = nil
+		if m.extCtrl != nil {
+			_ = m.extCtrl.Close()
+			m.extCtrl = nil
 		}
 		if m.cmd != nil && m.cmd.Process != nil {
 			_ = m.cmd.Process.Kill()
@@ -478,56 +460,108 @@ func (m *Manager) Play(st radio.Station) error {
 	return nil
 }
 
+// clampVolume constrains a volume level to mpv/mplayer's 0-100 percentage range.
+func clampVolume(vol int) int {
+	if vol < 0 {
+		return 0
+	}
+	if vol > 100 {
+		return 100
+	}
+	return vol
+}
+
+// buildExternalArgs returns the argv used to launch backend on streamURL at the
+// given volume. ipcAddr, when non-empty, is the address mpv should expose its
+// JSON IPC channel on for runtime volume/mute control.
+func buildExternalArgs(backend string, streamURL string, vol int, ipcAddr string) ([]string, error) {
+	switch backend {
+	case "mpv":
+		// --no-terminal detaches mpv from stdin/stdout entirely, so it can never
+		// steal keystrokes from the TUI nor scribble over it. Runtime control
+		// arrives over JSON IPC instead, since mpv ignores stdin commands.
+		args := []string{"mpv", "--no-video", "--no-terminal", fmt.Sprintf("--volume=%d", vol)}
+		if ipcAddr != "" {
+			args = append(args, "--input-ipc-server="+ipcAddr)
+		}
+		return append(args, "--", streamURL), nil
+
+	case "vlc", "cvlc":
+		return []string{backend, "-I", "dummy", "--quiet", fmt.Sprintf("--gain=%.2f", float64(vol)/100.0), "--", streamURL}, nil
+
+	case "ffplay":
+		return []string{"ffplay", "-nodisp", "-loglevel", "quiet", "-volume", strconv.Itoa(vol), "--", streamURL}, nil
+
+	case "mplayer":
+		// -slave turns mplayer's stdin into a real command channel and stops it
+		// interpreting terminal keypresses; without it the volume and mute
+		// commands written to stdin are ignored.
+		return []string{"mplayer", "-quiet", "-slave", "-volume", strconv.Itoa(vol), "--", streamURL}, nil
+
+	case "mpg123":
+		return []string{"mpg123", "-q", "-g", strconv.Itoa(vol), "--", streamURL}, nil
+	}
+	return nil, fmt.Errorf("unknown backend '%s'", backend)
+}
+
 func (m *Manager) playExternal(ctx context.Context, backend string, st radio.Station, vol int) {
 	if !IsValidStreamURL(st.URL) {
 		m.setError(fmt.Sprintf("Invalid or unsupported stream URL '%s'", st.URL))
 		return
 	}
 
-	var cmd *exec.Cmd
-	switch backend {
-	case "mpv":
-		volArg := fmt.Sprintf("--volume=%d", vol)
-		cmd = exec.CommandContext(ctx, "mpv", "--no-video", "--quiet", "--input-terminal=no", volArg, "--", st.URL)
-
-	case "vlc", "cvlc":
-		gainArg := fmt.Sprintf("--gain=%.2f", float64(vol)/100.0)
-		cmd = exec.CommandContext(ctx, backend, "-I", "dummy", "--quiet", gainArg, "--", st.URL)
-
-	case "ffplay":
-		volArg := fmt.Sprintf("%d", vol)
-		cmd = exec.CommandContext(ctx, "ffplay", "-nodisp", "-loglevel", "quiet", "-volume", volArg, "--", st.URL)
-
-	case "mplayer":
-		volArg := fmt.Sprintf("%d", vol)
-		cmd = exec.CommandContext(ctx, "mplayer", "-quiet", "-volume", volArg, "--", st.URL)
-
-	case "mpg123":
-		volArg := fmt.Sprintf("%d", vol)
-		cmd = exec.CommandContext(ctx, "mpg123", "-q", "-g", volArg, "--", st.URL)
-
-	default:
-		m.setError(fmt.Sprintf("Unknown backend '%s'", backend))
-		return
+	// mpv is controlled over JSON IPC; if the endpoint cannot be created we still
+	// play, only losing live volume/mute (--volume still applies the level at launch).
+	var ipc *mpvIPCEndpoint
+	ipcAddr := ""
+	if backend == "mpv" {
+		if endpoint, err := newMPVIPCEndpoint(); err == nil {
+			ipc = endpoint
+			ipcAddr = endpoint.Addr
+		}
 	}
 
-	var stdinPipe io.WriteCloser
-	if backend == "mpv" || backend == "mplayer" {
-		p, err := cmd.StdinPipe()
-		if err == nil {
-			stdinPipe = p
+	argv, err := buildExternalArgs(backend, st.URL, vol, ipcAddr)
+	if err != nil {
+		ipc.Cleanup()
+		m.setError(err.Error())
+		return
+	}
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+
+	var ctrl extControl
+	switch backend {
+	case "mpv":
+		if ipc != nil {
+			ctrl = newMPVControl(ipc)
+		}
+	case "mplayer":
+		if stdinPipe, err := cmd.StdinPipe(); err == nil {
+			ctrl = &mplayerControl{stdin: stdinPipe}
 		}
 	}
 
 	m.mu.Lock()
 	m.cmd = cmd
-	m.extStdin = stdinPipe
+	m.extCtrl = ctrl
 	m.mu.Unlock()
 
 	debuglog.Logf("player", "exec %v", cmd.Args)
 
-	err := cmd.Start()
-	if err != nil {
+	if err := cmd.Start(); err != nil {
+		m.mu.Lock()
+		if m.extCtrl == ctrl {
+			m.extCtrl = nil
+		}
+		if m.cmd == cmd {
+			m.cmd = nil
+		}
+		m.mu.Unlock()
+		if ctrl != nil {
+			_ = ctrl.Close()
+		} else {
+			ipc.Cleanup()
+		}
 		if ctx.Err() == nil {
 			m.setError(fmt.Sprintf("%s start failed: %v", backend, err))
 		}
@@ -543,9 +577,8 @@ func (m *Manager) playExternal(ctx context.Context, backend string, st radio.Sta
 
 	m.mu.Lock()
 	if m.cmd == cmd {
-		if m.extStdin != nil {
-			_ = m.extStdin.Close()
-			m.extStdin = nil
+		if m.extCtrl == ctrl {
+			m.extCtrl = nil
 		}
 		m.cmd = nil
 	}
@@ -558,6 +591,10 @@ func (m *Manager) playExternal(ctx context.Context, backend string, st radio.Sta
 		}
 	}
 	m.mu.Unlock()
+
+	if ctrl != nil {
+		_ = ctrl.Close()
+	}
 }
 
 func (m *Manager) setError(errMsg string) {
@@ -723,8 +760,7 @@ func (m *Manager) SetTunerMode(enabled bool, signalStrength float64, freq float6
 	isMuted := m.isMuted
 	synth := m.staticSynth
 	np := m.nativePlayer
-	backend := m.activeBackend
-	extStdin := m.extStdin
+	ctrl := m.extCtrl
 	status := m.status
 	m.mu.Unlock()
 
@@ -739,12 +775,8 @@ func (m *Manager) SetTunerMode(enabled bool, signalStrength float64, freq float6
 		if np != nil {
 			np.SetVolume(float64(vol) / 100.0)
 		}
-		if extStdin != nil {
-			if backend == "mpv" {
-				_, _ = fmt.Fprintf(extStdin, "set volume %d\n", vol)
-			} else if backend == "mplayer" {
-				_, _ = fmt.Fprintf(extStdin, "volume %d 1\n", vol)
-			}
+		if ctrl != nil {
+			ctrl.SetVolume(clampVolume(vol))
 		}
 	}
 }
@@ -757,8 +789,7 @@ func (m *Manager) UpdateTunerSignal(signalStrength float64, freq float64, band s
 	isMuted := m.isMuted
 	synth := m.staticSynth
 	np := m.nativePlayer
-	backend := m.activeBackend
-	extStdin := m.extStdin
+	ctrl := m.extCtrl
 	status := m.status
 	m.mu.Unlock()
 
@@ -772,18 +803,8 @@ func (m *Manager) UpdateTunerSignal(signalStrength float64, freq float64, band s
 		if np != nil {
 			np.SetVolume(stationVol)
 		}
-		if extStdin != nil {
-			intVol := int(stationVol * 100.0)
-			if intVol < 0 {
-				intVol = 0
-			} else if intVol > 100 {
-				intVol = 100
-			}
-			if backend == "mpv" {
-				_, _ = fmt.Fprintf(extStdin, "set volume %d\n", intVol)
-			} else if backend == "mplayer" {
-				_, _ = fmt.Fprintf(extStdin, "volume %d 1\n", intVol)
-			}
+		if ctrl != nil {
+			ctrl.SetVolume(clampVolume(int(stationVol * 100.0)))
 		}
 	}
 }

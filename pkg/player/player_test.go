@@ -1,10 +1,18 @@
 package player
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -561,4 +569,455 @@ func TestPlayerManagerVolumeAndResumeEdgeCases(t *testing.T) {
 	// Test Stop when playing vs stopped
 	_ = pm.Stop()
 	_ = pm.Stop() // repeat stop when already stopped
+}
+
+// recordingControl is a stand-in external backend command channel that records
+// what the Manager sends to it.
+type recordingControl struct {
+	mu      sync.Mutex
+	volumes []int
+	mutes   []bool
+	closed  bool
+}
+
+func (c *recordingControl) SetVolume(vol int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.volumes = append(c.volumes, vol)
+}
+
+func (c *recordingControl) SetMute(muted bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mutes = append(c.mutes, muted)
+}
+
+func (c *recordingControl) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.closed = true
+	return nil
+}
+
+func (c *recordingControl) snapshot() ([]int, []bool, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]int(nil), c.volumes...), append([]bool(nil), c.mutes...), c.closed
+}
+
+// TestMPVArgsUseIPCNotStdin guards the regression where mpv was launched with
+// --input-terminal=no while volume/mute commands were written to its stdin.
+// mpv discards stdin commands, so those changes silently did nothing.
+func TestMPVArgsUseIPCNotStdin(t *testing.T) {
+	args, err := buildExternalArgs("mpv", "http://stream.example.com/live.mp3", 55, "/tmp/halp/s")
+	if err != nil {
+		t.Fatalf("buildExternalArgs error: %v", err)
+	}
+
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "--input-ipc-server=/tmp/halp/s") {
+		t.Errorf("expected mpv to expose a JSON IPC channel, got %v", args)
+	}
+	// mpv must stay off the user's terminal so it cannot steal TUI keystrokes.
+	if !strings.Contains(joined, "--no-terminal") {
+		t.Errorf("expected mpv to be launched with --no-terminal, got %v", args)
+	}
+	if !strings.Contains(joined, "--volume=55") {
+		t.Errorf("expected initial volume to be applied at launch, got %v", args)
+	}
+	if args[len(args)-2] != "--" || args[len(args)-1] != "http://stream.example.com/live.mp3" {
+		t.Errorf("expected stream URL to be passed after the -- separator, got %v", args)
+	}
+}
+
+// TestMPVArgsWithoutIPCEndpoint covers the degraded path where an IPC endpoint
+// could not be created: playback must still start, just without live control.
+func TestMPVArgsWithoutIPCEndpoint(t *testing.T) {
+	args, err := buildExternalArgs("mpv", "http://stream.example.com/live.mp3", 40, "")
+	if err != nil {
+		t.Fatalf("buildExternalArgs error: %v", err)
+	}
+	for _, a := range args {
+		if strings.HasPrefix(a, "--input-ipc-server") {
+			t.Errorf("expected no IPC flag when endpoint is unavailable, got %v", args)
+		}
+	}
+}
+
+// TestMPlayerArgsUseSlaveMode guards the sibling regression: mplayer only reads
+// commands from stdin when it is started in slave mode.
+func TestMPlayerArgsUseSlaveMode(t *testing.T) {
+	args, err := buildExternalArgs("mplayer", "http://stream.example.com/live.mp3", 55, "")
+	if err != nil {
+		t.Fatalf("buildExternalArgs error: %v", err)
+	}
+	found := false
+	for _, a := range args {
+		if a == "-slave" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected mplayer to be launched with -slave, got %v", args)
+	}
+}
+
+func TestBuildExternalArgsUnknownBackend(t *testing.T) {
+	if _, err := buildExternalArgs("nonexistent", "http://example.com/s", 50, ""); err == nil {
+		t.Errorf("expected an error for an unknown backend")
+	}
+}
+
+func TestBuildExternalArgsKnownBackends(t *testing.T) {
+	for _, backend := range []string{"mpv", "vlc", "cvlc", "ffplay", "mplayer", "mpg123"} {
+		args, err := buildExternalArgs(backend, "http://example.com/s", 50, "")
+		if err != nil {
+			t.Fatalf("backend %s: unexpected error %v", backend, err)
+		}
+		if len(args) == 0 || args[0] != backend {
+			t.Errorf("backend %s: expected argv to start with the binary name, got %v", backend, args)
+		}
+		if args[len(args)-2] != "--" {
+			t.Errorf("backend %s: expected -- before the stream URL, got %v", backend, args)
+		}
+	}
+}
+
+// TestMPVControlSendsJSONIPCCommands verifies the wire format mpv actually
+// accepts: newline-delimited {"command":["set_property",...]} objects.
+func TestMPVControlSendsJSONIPCCommands(t *testing.T) {
+	client, server := net.Pipe()
+	defer server.Close()
+
+	c := &mpvControl{endpoint: &mpvIPCEndpoint{Addr: "test"}}
+	c.attach(client)
+
+	lines := make(chan string, 4)
+	go func() {
+		reader := bufio.NewReader(server)
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				close(lines)
+				return
+			}
+			lines <- strings.TrimSpace(line)
+		}
+	}()
+
+	c.SetVolume(37)
+	c.SetMute(true)
+
+	want := []string{
+		`{"command":["set_property","volume",37]}`,
+		`{"command":["set_property","mute",true]}`,
+	}
+	for _, expected := range want {
+		select {
+		case got := <-lines:
+			if got != expected {
+				t.Errorf("IPC command mismatch:\n got %s\nwant %s", got, expected)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timed out waiting for IPC command %s", expected)
+		}
+	}
+
+	if err := c.Close(); err != nil && !errors.Is(err, io.ErrClosedPipe) {
+		t.Errorf("Close error: %v", err)
+	}
+}
+
+// TestMPVControlFlushesStateOnConnect covers volume changes made in the window
+// between launching mpv and its IPC endpoint becoming connectable.
+func TestMPVControlFlushesStateOnConnect(t *testing.T) {
+	c := &mpvControl{endpoint: &mpvIPCEndpoint{Addr: "test"}}
+
+	// Not connected yet: commands must be remembered, not lost.
+	c.SetVolume(21)
+	c.SetMute(true)
+
+	client, server := net.Pipe()
+	defer server.Close()
+
+	received := make(chan string, 4)
+	go func() {
+		reader := bufio.NewReader(server)
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				return
+			}
+			received <- strings.TrimSpace(line)
+		}
+	}()
+
+	c.attach(client)
+
+	want := []string{
+		`{"command":["set_property","volume",21]}`,
+		`{"command":["set_property","mute",true]}`,
+	}
+	for _, expected := range want {
+		select {
+		case got := <-received:
+			if got != expected {
+				t.Errorf("replayed command mismatch:\n got %s\nwant %s", got, expected)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timed out waiting for replayed command %s", expected)
+		}
+	}
+	_ = c.Close()
+}
+
+func TestMPVControlAfterCloseIsNoOp(t *testing.T) {
+	c := &mpvControl{endpoint: &mpvIPCEndpoint{Addr: "test"}}
+	if err := c.Close(); err != nil {
+		t.Fatalf("Close error: %v", err)
+	}
+	if err := c.Close(); err != nil {
+		t.Errorf("expected Close to be idempotent, got %v", err)
+	}
+	// Must not panic or block once the process is gone.
+	c.SetVolume(50)
+	c.SetMute(true)
+
+	if err := c.setProperty("volume", 10); !errors.Is(err, errMPVNotConnected) {
+		t.Errorf("expected errMPVNotConnected after Close, got %v", err)
+	}
+}
+
+func TestMPVIPCEndpointCleanup(t *testing.T) {
+	endpoint, err := newMPVIPCEndpoint()
+	if err != nil {
+		t.Fatalf("newMPVIPCEndpoint error: %v", err)
+	}
+	if endpoint.Addr == "" {
+		t.Fatalf("expected a non-empty IPC address")
+	}
+	endpoint.Cleanup()
+	endpoint.Cleanup() // idempotent
+
+	var nilEndpoint *mpvIPCEndpoint
+	nilEndpoint.Cleanup() // must not panic
+}
+
+// TestManagerRoutesVolumeAndMuteToExternalControl is the Manager-level
+// regression test: in-app volume and mute changes must actually reach the
+// running external backend rather than being written into a void.
+func TestManagerRoutesVolumeAndMuteToExternalControl(t *testing.T) {
+	pm := NewManager("native", 80, nil)
+	ctrl := &recordingControl{}
+	pm.mu.Lock()
+	pm.extCtrl = ctrl
+	pm.status = StatusPlaying
+	pm.mu.Unlock()
+
+	pm.SetVolume(42)
+	pm.ToggleMute()
+	pm.ToggleMute()
+
+	volumes, mutes, _ := ctrl.snapshot()
+	if len(volumes) != 1 || volumes[0] != 42 {
+		t.Errorf("expected SetVolume(42) to reach the backend, got %v", volumes)
+	}
+	if len(mutes) != 2 || !mutes[0] || mutes[1] {
+		t.Errorf("expected mute then unmute to reach the backend, got %v", mutes)
+	}
+
+	// Volume changes are clamped to the 0-100 range the backends accept.
+	pm.SetVolume(150)
+	pm.SetVolume(-20)
+	volumes, _, _ = ctrl.snapshot()
+	if volumes[len(volumes)-2] != 100 || volumes[len(volumes)-1] != 0 {
+		t.Errorf("expected clamped volumes 100 then 0, got %v", volumes)
+	}
+
+	if err := pm.Stop(); err != nil {
+		t.Fatalf("Stop error: %v", err)
+	}
+	if _, _, closed := ctrl.snapshot(); !closed {
+		t.Errorf("expected Stop to close the external control channel")
+	}
+	pm.mu.Lock()
+	leaked := pm.extCtrl
+	pm.mu.Unlock()
+	if leaked != nil {
+		t.Errorf("expected extCtrl to be cleared after Stop")
+	}
+}
+
+func TestManagerTunerScalingReachesExternalControl(t *testing.T) {
+	pm := NewManager("native", 80, nil)
+	ctrl := &recordingControl{}
+	pm.mu.Lock()
+	pm.extCtrl = ctrl
+	pm.status = StatusPlaying
+	pm.mu.Unlock()
+
+	// Weak reception attenuates the station on the external backend too.
+	pm.UpdateTunerSignal(0.5, 98.5, "FM")
+	volumes, _, _ := ctrl.snapshot()
+	if len(volumes) != 1 || volumes[0] != 40 {
+		t.Errorf("expected tuner signal to scale backend volume to 40, got %v", volumes)
+	}
+
+	// Leaving tuner mode restores the full master volume.
+	pm.mu.Lock()
+	pm.tunerMode = true
+	pm.mu.Unlock()
+	pm.SetTunerMode(false, 1.0, 0, "")
+	volumes, _, _ = ctrl.snapshot()
+	if volumes[len(volumes)-1] != 80 {
+		t.Errorf("expected backend volume restored to 80 on leaving tuner mode, got %v", volumes)
+	}
+
+	if err := pm.Close(); err != nil {
+		t.Fatalf("Close error: %v", err)
+	}
+}
+
+func TestManagerPauseClosesExternalControl(t *testing.T) {
+	pm := NewManager("native", 80, nil)
+	ctrl := &recordingControl{}
+	st := radio.Station{ID: "pause-ctrl", Name: "Pause Ctrl", URL: "http://example.com/s"}
+	pm.mu.Lock()
+	pm.extCtrl = ctrl
+	pm.currentStation = &st
+	pm.status = StatusPlaying
+	pm.mu.Unlock()
+
+	if err := pm.Pause(); err != nil {
+		t.Fatalf("Pause error: %v", err)
+	}
+	if _, _, closed := ctrl.snapshot(); !closed {
+		t.Errorf("expected Pause to close the external control channel")
+	}
+}
+
+// TestMPVIPCVolumeControlIntegration drives a real mpv process end to end and
+// reads the volume property back, proving control commands take effect. This is
+// the check the old stdin channel fails.
+func TestMPVIPCVolumeControlIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping mpv integration test in short mode")
+	}
+	mpvPath, err := exec.LookPath("mpv")
+	if err != nil {
+		t.Skip("mpv not installed; skipping IPC integration test")
+	}
+
+	endpoint, err := newMPVIPCEndpoint()
+	if err != nil {
+		t.Skipf("cannot create mpv IPC endpoint: %v", err)
+	}
+
+	// A synthetic tone with a null audio device keeps the test silent and offline.
+	cmd := exec.Command(mpvPath, "--no-video", "--ao=null", "--no-terminal",
+		"--volume=90", "--input-ipc-server="+endpoint.Addr, "--length=30",
+		"--", "av://lavfi:sine=frequency=440")
+	if err := cmd.Start(); err != nil {
+		t.Skipf("cannot start mpv: %v", err)
+	}
+	defer func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	}()
+
+	ctrl := newMPVControl(endpoint)
+	defer ctrl.Close()
+
+	// Wait for mpv to publish its IPC endpoint before asserting. mpv is kept
+	// alive well past the assertions so a failure reports the wrong volume
+	// rather than a broken pipe.
+	var conn io.ReadWriteCloser
+	connectDeadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(connectDeadline) {
+		if c, err := dialMPVIPC(endpoint.Addr); err == nil {
+			conn = c
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if conn == nil {
+		t.Skip("mpv never exposed its IPC endpoint in this environment")
+	}
+	defer conn.Close()
+	probe := newMPVProbe(conn)
+
+	requestID := 0
+	next := func() int { requestID++; return requestID }
+
+	if got := probe.get(t, "volume", next()); got != float64(90) {
+		t.Fatalf("expected mpv to start at volume 90, got %v", got)
+	}
+
+	ctrl.SetVolume(20)
+	ctrl.SetMute(true)
+
+	// The control channel connects asynchronously, so poll until it lands.
+	var gotVol any
+	pollDeadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(pollDeadline) {
+		gotVol = probe.get(t, "volume", next())
+		if gotVol == float64(20) {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if gotVol != float64(20) {
+		t.Errorf("expected mpv volume to change to 20 via IPC, got %v", gotVol)
+	}
+	if got := probe.get(t, "mute", next()); got != true {
+		t.Errorf("expected mpv to be muted via IPC, got %v", got)
+	}
+}
+
+// mpvProbe is an independent mpv IPC connection used by tests to read back the
+// properties the player's own control channel has changed.
+type mpvProbe struct {
+	conn   io.ReadWriteCloser
+	reader *bufio.Reader
+}
+
+func newMPVProbe(conn io.ReadWriteCloser) *mpvProbe {
+	return &mpvProbe{conn: conn, reader: bufio.NewReader(conn)}
+}
+
+// get issues a get_property request and returns its value. mpv interleaves
+// asynchronous event objects on the same socket, so replies are matched by
+// request_id rather than by simply taking the next line.
+func (p *mpvProbe) get(t *testing.T, name string, requestID int) any {
+	t.Helper()
+	if dl, ok := p.conn.(interface{ SetDeadline(time.Time) error }); ok {
+		_ = dl.SetDeadline(time.Now().Add(5 * time.Second))
+	}
+	req := fmt.Sprintf(`{"command":["get_property","%s"],"request_id":%d}`+"\n", name, requestID)
+	if _, err := io.WriteString(p.conn, req); err != nil {
+		t.Fatalf("mpv IPC write failed: %v", err)
+	}
+
+	for {
+		line, err := p.reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("mpv IPC read failed: %v", err)
+		}
+		var resp struct {
+			Data      any    `json:"data"`
+			Error     string `json:"error"`
+			RequestID *int   `json:"request_id"`
+			Event     string `json:"event"`
+		}
+		if err := json.Unmarshal([]byte(line), &resp); err != nil {
+			t.Fatalf("mpv IPC decode failed for %q: %v", line, err)
+		}
+		if resp.Event != "" || resp.RequestID == nil || *resp.RequestID != requestID {
+			continue // an asynchronous event or a stale reply
+		}
+		if resp.Error != "success" {
+			t.Fatalf("mpv get_property %s returned %q", name, resp.Error)
+		}
+		return resp.Data
+	}
 }
