@@ -11,12 +11,16 @@ import (
 
 // HistoryEntry represents a single played track event recorded from stream metadata.
 type HistoryEntry struct {
-	StationID   string    `json:"station_id" yaml:"station_id"`
-	StationName string    `json:"station_name" yaml:"station_name"`
-	TrackTitle  string    `json:"track_title" yaml:"track_title"`
-	Artist      string    `json:"artist,omitempty" yaml:"artist,omitempty"`
-	Title       string    `json:"title,omitempty" yaml:"title,omitempty"`
-	PlayedAt    time.Time `json:"played_at" yaml:"played_at"`
+	StationID        string    `json:"station_id" yaml:"station_id"`
+	StationName      string    `json:"station_name" yaml:"station_name"`
+	TrackTitle       string    `json:"track_title" yaml:"track_title"`
+	Artist           string    `json:"artist,omitempty" yaml:"artist,omitempty"`
+	Title            string    `json:"title,omitempty" yaml:"title,omitempty"`
+	Album            string    `json:"album,omitempty" yaml:"album,omitempty"`
+	Year             int       `json:"year,omitempty" yaml:"year,omitempty"`
+	IdentifiedSource string    `json:"identified_source,omitempty" yaml:"identified_source,omitempty"`
+	Confidence       float64   `json:"confidence,omitempty" yaml:"confidence,omitempty"`
+	PlayedAt         time.Time `json:"played_at" yaml:"played_at"`
 }
 
 // MaxHistoryEntries defines the ring buffer capacity for track history.
@@ -61,24 +65,81 @@ func ParseArtistAndTitle(raw string) (artist, title string) {
 	return "", raw
 }
 
-// FullDisplay returns a clean "Artist - Title" or just "Title" string.
+// FullDisplay returns a clean "Artist - Title" or just "Title" string, including album if present.
 func (h HistoryEntry) FullDisplay() string {
+	var base string
 	if h.Artist != "" && h.Title != "" {
-		return fmt.Sprintf("%s - %s", h.Artist, h.Title)
+		base = fmt.Sprintf("%s - %s", h.Artist, h.Title)
+	} else if h.TrackTitle != "" {
+		base = h.TrackTitle
+	} else if h.Title != "" {
+		base = h.Title
+	} else {
+		base = h.StationName
 	}
-	if h.TrackTitle != "" {
-		return h.TrackTitle
+	if h.Album != "" && h.Year > 0 {
+		return fmt.Sprintf("%s [%s, %d]", base, h.Album, h.Year)
+	} else if h.Album != "" {
+		return fmt.Sprintf("%s [%s]", base, h.Album)
 	}
-	if h.Title != "" {
-		return h.Title
-	}
-	return h.StationName
+	return base
 }
 
 // FormatBookmarkLine formats the entry for appending to saved_tracks.txt.
 func (h HistoryEntry) FormatBookmarkLine() string {
 	timeStr := h.PlayedAt.Format("2006-01-02 15:04:05")
 	return fmt.Sprintf("[%s] %s | %s\n", timeStr, h.StationName, h.FullDisplay())
+}
+
+// AddIdentifiedHistory appends an acoustically verified track to the store's history ring buffer.
+func (s *Store) AddIdentifiedHistory(stationID, stationName, artist, title, album string, year int, source string, confidence float64) *HistoryEntry {
+	trackTitle := fmt.Sprintf("%s - %s", artist, title)
+	if artist == "" {
+		trackTitle = title
+	}
+	trackTitle = strings.TrimSpace(trackTitle)
+	if trackTitle == "" {
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Deduplicate sequential identical metadata updates
+	if len(s.History) > 0 {
+		top := s.History[0]
+		if (top.StationID == stationID || top.StationName == stationName) &&
+			strings.EqualFold(strings.TrimSpace(top.TrackTitle), trackTitle) {
+			if top.IdentifiedSource == "" && source != "" {
+				s.History[0].Album = album
+				s.History[0].Year = year
+				s.History[0].IdentifiedSource = source
+				s.History[0].Confidence = confidence
+				return &s.History[0]
+			}
+			return nil
+		}
+	}
+
+	entry := HistoryEntry{
+		StationID:        stationID,
+		StationName:      stationName,
+		TrackTitle:       trackTitle,
+		Artist:           artist,
+		Title:            title,
+		Album:            album,
+		Year:             year,
+		IdentifiedSource: source,
+		Confidence:       confidence,
+		PlayedAt:         time.Now(),
+	}
+
+	s.History = append([]HistoryEntry{entry}, s.History...)
+	if len(s.History) > MaxHistoryEntries {
+		s.History = s.History[:MaxHistoryEntries]
+	}
+
+	return &entry
 }
 
 // AddHistory appends a new track entry to the store's history ring buffer if it is not a duplicate.

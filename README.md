@@ -78,6 +78,7 @@ docker run --rm -it --device /dev/snd halpworld/halpradio:latest
 | **Linux MPRIS v2 & Media Keys** | ✅ **Native D-Bus + `playerctl`** | ❌ None | ❌ None | ❌ None | ⚠️ Basic MPRIS |
 | **Song Change Desktop Notifications** | ✅ **Native macOS/Linux/Win + Dedupe** | ❌ None | ❌ None | ❌ None | ❌ None |
 | **CLI & Hotkey Remote (`halpradio remote`)** | ✅ **macOS Shortcuts, Raycast, tmux** | ❌ None | ❌ None | ❌ None | ⚠️ Socket |
+| **Acoustic Fingerprinting (`I`)** | ✅ **Chromaprint / AcoustID + Ad Strip** | ❌ None | ❌ None | ❌ None | ❌ None |
 | **Pomodoro & Sleep Timers (`z`)** | ✅ **Intervals, Station Switch & OS Notify** | ❌ None | ❌ None | ❌ None | ⚠️ Basic sleep |
 | **Beat-Reactive Animated Visualizers** | ✅ **5 Animal DJs + EQ Spectrum** | ❌ None | ❌ None | ❌ None | ⚠️ Basic VU |
 | **Live ICY Metadata (Song / Artist)** | ✅ **Real-time Async Extraction** | ⚠️ Partial | ❌ None | ⚠️ Partial | ⚠️ Track only |
@@ -296,6 +297,30 @@ When the default audio output device leaves Bluetooth — e.g. AirPods taken out
 
 ---
 
+## 🔍 Real-Time Acoustic Stream Fingerprinting & Dirty Metadata Sanitizer
+
+Tired of stations broadcasting mystery tracks with zero metadata, or streams polluted with ads, jingles, station slogans, and website URLs? `halpradio` features an acoustic stream recognition engine and intelligent metadata sanitizer:
+
+### 🎙️ On-Demand Song Identification (`I` key)
+- **Instant Recognition**: Press `I` anywhere during playback to identify what is playing directly from raw audio PCM data.
+- **Chromaprint & AcoustID**: Captures a 5-second sample buffer, computes audio subfingerprints (using `fpcalc` or pure-Go fallback), and queries the [AcoustID](https://acoustid.org/) and [MusicBrainz](https://musicbrainz.org/) databases.
+- **Visual Confidence Score**: Displays the matched artist, song, album, year, and a live confidence bar directly in the playerbar (`[✨ Identified via AcoustID (94%)]` / `████████░ 94%`).
+- **Auto-Identify Mode**: Set `auto_identify: true` in `config.yaml` or launch with `--auto-identify` to automatically fingerprint songs on streams that lack ICY metadata after 20 seconds.
+- **Clipboard & Search Integration**: Yanking (`y`) copies the verified track title to your clipboard. Searching (`o`) immediately opens Spotify, Apple Music, or YouTube with clean metadata.
+- **Persistent History (`H`)**: Identified tracks are automatically recorded to the History tab with a `✨` star badge.
+- **Graceful Offline Fallback**: If offline or if the database cannot find a match, the player falls back cleanly without interrupting playback.
+
+### 🧼 Dirty Metadata Sanitizer
+Internet radio ICY streams often emit dirty titles like:
+`LIVE NOW: Tycho - A Walk (Buy on Somafm.com) // Best Chill Music! - 128kbps`
+
+`halpradio` continuously cleans ICY stream titles with built-in regex sanitizers:
+- Strips advertisements, sponsors, promotional URLs, and "Buy on ..." text.
+- Removes radio jingles, slogans, frequencies (`104.5 FM`), and station station identifiers.
+- Cleans composite delimiters, extra brackets, and bitrate tags while preserving genuine artist and song titles.
+
+---
+
 ## ⌨️ Navigation & Keybindings (Vim & Media Style)
 
 Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Overlay**.
@@ -306,11 +331,15 @@ Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Over
 | | `n` / `]` | Jump and play **Next station** in active list |
 | | `N` / `[` | Jump and play **Previous station** in active list |
 | | `h` / `l` or `←` / `→` | Focus sidebar / main list or prev/next tab |
-| | `1` - `7` | Direct jump to Tab (1: Activities, 2: Catalog, 3: Genres, 4: Favorites, 5: Online, 6: Custom, 7: History) |
+| | `1` - `9` (`0`) | Direct jump to Tab (1: Activities, 2: Catalog, 3: Countries, 4: Genres, 5: Favorites, 6: Online, 7: Custom, 8: History, 9: Globe, 0: Tuner) |
+| | `C` | Jump directly to Countries / FM tab |
 | | `H` | Jump directly to Track History tab |
+| | `9` / `M` | Jump directly to 3D Globe Explorer |
+| | `0` / `F` | Jump directly to Analog Frequency Tuner (experimental) |
 | | `g` / `G` | Jump to top / bottom of list |
 | | `Ctrl+u` / `Ctrl+d` | Half page up / down |
-| **Discovery & Sharing** | `y` | Yank / copy track metadata (`Artist - Title`) to system clipboard |
+| **Discovery & Sharing** | `I` | **Identify playing track** via acoustic stream fingerprinting (Chromaprint / AcoustID) |
+| | `y` | Yank / copy track metadata (`Artist - Title`) or identified song to system clipboard |
 | | `o` | Open streaming search in default web browser (Spotify, YT Music, Apple, DDG, Google) |
 | | `s` | Star / bookmark track to `~/.config/halpradio/saved_tracks.txt` (on History tab) |
 | | `c` | Clear track history log (on History tab) |
@@ -322,6 +351,7 @@ Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Over
 | | `+` / `-` / `=` / `>` | Volume up / down (5% step, supports ANSI, ISO, AZERTY, QWERTZ) |
 | | `m` / `M` / `0` | Mute / unmute |
 | | `v` | Cycle visualizer (`dj-cat`, `dj-dog`, `dj-bear`, `dj-frog`, `dj-bunny`, `bars`, `wave`, `spectrum`, `minimal`) |
+| | `b` | Switch dial band (`FM` / `AM` / `SW`) in frequency tuner mode |
 | **Catalog** | `f` | Toggle Favorite star ⭐ |
 | | `/` | Live fuzzy search / filter stations |
 | | `w` / `c` | Jump & filter by Activity Mode / Genre Category |

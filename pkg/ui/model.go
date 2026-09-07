@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/halpworld/halpradio/pkg/desktop"
 	"github.com/halpworld/halpradio/pkg/player"
+	"github.com/halpworld/halpradio/pkg/player/fingerprint"
 	"github.com/halpworld/halpradio/pkg/plugin"
 	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/theme"
@@ -26,6 +27,12 @@ const (
 
 type TickMsg time.Time
 type TrackUpdatedMsg player.TrackInfo
+type TrackIdentifiedMsg struct {
+	StationID   string
+	StationName string
+	Result      *fingerprint.Result
+	Err         error
+}
 type RadioBrowserResultMsg struct {
 	Stations []radio.Station
 	Err      error
@@ -170,6 +177,13 @@ type Model struct {
 	ActiveTuner       bool
 	TunerFreq         float64
 	TunerBand         string // "FM", "AM", "SW"
+
+	// Acoustic stream fingerprinting state
+	IsIdentifying       bool
+	IdentifiedResult    *fingerprint.Result
+	PlaybackStartTime   time.Time
+	LastFingerprintTime time.Time
+	FingerprintClient   *fingerprint.Client
 }
 
 func NewModel(
@@ -238,6 +252,8 @@ func NewModel(
 		ActiveTuner:                false,
 		TunerFreq:                  93.9,
 		TunerBand:                  "FM",
+		PlaybackStartTime:          time.Now(),
+		FingerprintClient:          fingerprint.NewClient(cfg.AcoustidAPIKey),
 	}
 
 	allThemes := theme.GetAllThemes()
@@ -363,6 +379,9 @@ func (m Model) WindowTitle() string {
 	}
 	if st != nil && m.Player.Status() == player.StatusPlaying {
 		track := m.Player.CurrentTrack()
+		if m.IdentifiedResult != nil {
+			track = m.IdentifiedResult.SimpleTitle()
+		}
 		if track != "" {
 			return fmt.Sprintf("%s▶ %s - %s | halpradio", timerPrefix, track, st.Name)
 		}
@@ -473,6 +492,10 @@ func (m *Model) PlayNextStation() {
 	}
 	m.SelectedIndex = (m.SelectedIndex + 1) % len(m.Stations)
 	st := m.Stations[m.SelectedIndex]
+	m.IdentifiedResult = nil
+	m.IsIdentifying = false
+	m.PlaybackStartTime = time.Now()
+	m.LastFingerprintTime = time.Time{}
 	_ = m.Player.Play(st)
 	m.PlayingID = st.ID
 	m.StatusMessage = fmt.Sprintf("Playing %s [%s]", st.Name, m.Player.ActiveBackend())
@@ -489,6 +512,10 @@ func (m *Model) PlayPrevStation() {
 	}
 	m.SelectedIndex = (m.SelectedIndex - 1 + len(m.Stations)) % len(m.Stations)
 	st := m.Stations[m.SelectedIndex]
+	m.IdentifiedResult = nil
+	m.IsIdentifying = false
+	m.PlaybackStartTime = time.Now()
+	m.LastFingerprintTime = time.Time{}
 	_ = m.Player.Play(st)
 	m.PlayingID = st.ID
 	m.StatusMessage = fmt.Sprintf("Playing %s [%s]", st.Name, m.Player.ActiveBackend())
@@ -512,6 +539,7 @@ func (m *Model) TogglePlayPause() {
 		_ = m.Player.Resume()
 		st := m.Player.CurrentStation()
 		m.PlayingID = st.ID
+		m.PlaybackStartTime = time.Now()
 		m.StatusMessage = fmt.Sprintf("Resumed %s", st.Name)
 		m.SyncDesktop()
 		return
@@ -519,6 +547,10 @@ func (m *Model) TogglePlayPause() {
 
 	if len(m.Stations) > 0 && m.SelectedIndex < len(m.Stations) {
 		st := m.Stations[m.SelectedIndex]
+		m.IdentifiedResult = nil
+		m.IsIdentifying = false
+		m.PlaybackStartTime = time.Now()
+		m.LastFingerprintTime = time.Time{}
 		_ = m.Player.Play(st)
 		m.PlayingID = st.ID
 		m.StatusMessage = fmt.Sprintf("Playing %s [%s]", st.Name, m.Player.ActiveBackend())

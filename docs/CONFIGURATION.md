@@ -65,8 +65,13 @@ event_notify_desktop: true  # Send native OS desktop notifications (macOS / Linu
 event_terminal_bell: true   # Emit terminal bell (\a) chime on interval transitions
 event_command_hook: ""      # Path to shell script / command to run on timer transitions
 
+# Acoustic Stream Fingerprinting & Dirty Metadata Sanitizer
+fingerprint_enabled: true   # Enable on-demand acoustic recognition via 'I' (Chromaprint / AcoustID)
+auto_identify: false        # Automatically identify music when streams lack ICY track metadata
+acoustid_api_key: ""        # AcoustID API key (leave empty to use default halpradio client key)
+
 # Experimental Features (On Hold)
-experimental_tuner: false   # Enable experimental Analog Frequency Tuner on Tab 9 (see docs/TUNER.md)
+experimental_tuner: false   # Enable experimental Analog Frequency Tuner on Tab 0 (see docs/TUNER.md)
 ```
 
 ---
@@ -147,6 +152,10 @@ halpradio remote play-pause
 halpradio remote next
 halpradio remote status
 
+# Acoustic stream fingerprinting
+halpradio --fingerprint=true
+halpradio --auto-identify=true
+
 # Plugin Management CLI
 halpradio plugin list
 halpradio plugin install webhook-broadcaster
@@ -216,8 +225,11 @@ issue.
 | `n` / `]` | Jump and play **Next station** in list |
 | `N` / `[` | Jump and play **Previous station** in list |
 | `h` / `l` or `←` / `→` | Switch focus between sidebar and main list / Prev & next tab |
-| `1` - `7` | Direct jump to Tab (`1: Activities`, `2: Catalog`, `3: Genres`, `4: Favorites`, `5: RadioBrowser`, `6: Custom`, `7: History`) |
+| `1` - `9` (`0`) | Direct jump to Tab (`1: Activities`, `2: Catalog`, `3: Countries`, `4: Genres`, `5: Favorites`, `6: RadioBrowser`, `7: Custom`, `8: History`, `9: Globe`, `0: Tuner`) |
+| `C` | Jump directly to Countries / FM tab |
 | `H` | Jump directly to Track History tab |
+| `9` / `M` | Jump directly to 3D Globe Explorer |
+| `0` / `F` | Jump directly to Analog Frequency Tuner (experimental) |
 | `Tab` / `Shift+Tab` | Cycle focus between sidebar and station list |
 | `g` / `G` | Jump to top / bottom of list |
 | `Ctrl+u` / `Ctrl+d` | Scroll half page up / down |
@@ -234,12 +246,14 @@ issue.
 | `-` / `_` / `<` (or Media VolDown) | Decrease volume (-5%) |
 | `m` / `M` / `0` (or Media Mute) | Toggle Mute / Unmute audio |
 | `v` | Cycle audio visualizer mode (`dj-cat`, `dj-dog`, `dj-bear`, `dj-frog`, `dj-bunny`, `bars`, `wave`, `spectrum`, `minimal`) |
+| `b` | Switch dial band (`FM` / `AM` / `SW`) in frequency tuner mode |
 
 ### ⭐ Discovery, Sharing & History
 
 | Keybinding | Action |
 |---|---|
-| `y` | Yank / copy track metadata (`Artist - Title`) to system clipboard |
+| `I` | **Identify playing track** via acoustic stream fingerprinting (Chromaprint / AcoustID / MusicBrainz) |
+| `y` | Yank / copy track metadata (`Artist - Title`) or identified song to system clipboard |
 | `o` | Open song search in default browser (Spotify, YT Music, Apple, Soundcloud, DDG, Google) |
 | `s` | Bookmark track to `~/.config/halpradio/saved_tracks.txt` (on History tab) |
 | `c` | Clear track history log (on History tab) |

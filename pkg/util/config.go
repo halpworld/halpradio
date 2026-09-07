@@ -37,6 +37,9 @@ type Config struct {
 	CatalogUpdateURL     string `yaml:"catalog_update_url,omitempty"`
 	CatalogCacheTTLHours int    `yaml:"catalog_cache_ttl_hours,omitempty"`
 	ExperimentalTuner    bool   `yaml:"experimental_tuner,omitempty"`
+	FingerprintEnabled   bool   `yaml:"fingerprint_enabled"`
+	AcoustidAPIKey       string `yaml:"acoustid_api_key,omitempty"`
+	AutoIdentify         bool   `yaml:"auto_identify"`
 }
 
 func DefaultConfig() Config {
@@ -70,6 +73,9 @@ func DefaultConfig() Config {
 		CatalogUpdateURL:     "https://raw.githubusercontent.com/halpworld/halpradio/main/stations.yaml",
 		CatalogCacheTTLHours: 24,
 		ExperimentalTuner:    false,
+		FingerprintEnabled:   true,
+		AcoustidAPIKey:       "v8pQ6oyB",
+		AutoIdentify:         true,
 	}
 }
 

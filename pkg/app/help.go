@@ -232,6 +232,8 @@ func PrintRootHelp(out io.Writer) {
 		{Name: "--discord", Args: "=<bool>", Description: "Enable Discord Rich Presence (RPC)", Default: "true"},
 		{Name: "--mpris", Args: "=<bool>", Description: "Enable Linux MPRIS v2 D-Bus remote interface", Default: "true"},
 		{Name: "--ipc", Args: "=<bool>", Description: "Enable local IPC socket for CLI remote control", Default: "true"},
+		{Name: "--fingerprint", Args: "=<bool>", Description: "Enable acoustic stream fingerprinting (AcoustID)", Default: "true"},
+		{Name: "--auto-identify", Args: "=<bool>", Description: "Automatically identify songs when station lacks metadata", Default: "true"},
 		{Name: "--experimental-tuner", Description: "Enable experimental analog frequency tuner (on hold)", Default: "false"},
 		{Name: "--debug", Description: "Write a diagnostic log to attach to bug reports", Default: "false"},
 		{Name: "--debug-log", Args: "<path>", Description: "Diagnostic log path (default ~/.config/halpradio/debug.log)"},

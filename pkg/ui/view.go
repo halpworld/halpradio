@@ -109,6 +109,8 @@ func (m Model) View() string {
 		timerBadge,
 		width,
 		m.Theme,
+		m.IdentifiedResult,
+		m.IsIdentifying,
 	)
 	playerBarHeight := lipgloss.Height(playerBarView)
 

@@ -14,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/halpworld/halpradio/pkg/debuglog"
 	"github.com/halpworld/halpradio/pkg/player"
+	"github.com/halpworld/halpradio/pkg/player/fingerprint"
 	"github.com/halpworld/halpradio/pkg/plugin"
 	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/theme"
@@ -95,7 +96,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		return m, tickCmd()
+		var tickCmds []tea.Cmd
+		tickCmds = append(tickCmds, tickCmd())
+
+		// Background Acoustic Stream Fingerprint Engine (Auto-Identify)
+		if m.Config.FingerprintEnabled && m.Config.AutoIdentify && !m.IsIdentifying {
+			st := m.Player.CurrentStation()
+			if st != nil && m.Player.Status() == player.StatusPlaying {
+				currTrack := m.Player.CurrentTrack()
+				isGeneric := currTrack == "" || radio.IsDirtyOrGeneric(currTrack, st.Name)
+				if isGeneric && m.IdentifiedResult == nil {
+					if !m.PlaybackStartTime.IsZero() && time.Since(m.PlaybackStartTime) >= 20*time.Second &&
+						(m.LastFingerprintTime.IsZero() || time.Since(m.LastFingerprintTime) >= 60*time.Second) {
+						m.IsIdentifying = true
+						m.LastFingerprintTime = time.Now()
+						m.StatusMessage = "🔍 Auto-fingerprinting stream (no metadata broadcast)..."
+						if cmd := m.identifyTrackCmd(); cmd != nil {
+							tickCmds = append(tickCmds, cmd)
+						}
+					}
+				}
+			}
+		}
+
+		return m, tea.Batch(tickCmds...)
 
 	case PluginRegistryLoadedMsg:
 		if msg.Err != nil {
@@ -188,6 +212,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.TrackTitle != "" {
+			if m.IdentifiedResult != nil && !strings.EqualFold(msg.TrackTitle, m.IdentifiedResult.SimpleTitle()) {
+				m.IdentifiedResult = nil
+			}
 			m.Store.AddHistory(msg.StationID, msg.StationName, msg.TrackTitle)
 			if m.Config.SongNotifications && m.Desktop != nil {
 				m.Desktop.NotifySong(msg.StationName, msg.TrackTitle)
@@ -244,6 +271,88 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Player.ActiveBackend(),
 			)
 		}
+		return m, tea.SetWindowTitle(m.WindowTitle())
+
+	case TrackIdentifiedMsg:
+		m.IsIdentifying = false
+		if m.Player.Status() != player.StatusPlaying && m.Player.Status() != player.StatusConnecting {
+			return m, nil
+		}
+		if m.PlayingID == "" || (msg.StationID != "" && m.PlayingID != msg.StationID) {
+			return m, nil
+		}
+		if msg.Err != nil || msg.Result == nil {
+			m.StatusMessage = "No acoustic match found for stream audio"
+			return m, nil
+		}
+
+		m.IdentifiedResult = msg.Result
+		simpleTitle := msg.Result.SimpleTitle()
+		fullDisplay := msg.Result.FullDisplay()
+
+		// Record in store history
+		m.Store.AddIdentifiedHistory(
+			msg.StationID,
+			msg.StationName,
+			msg.Result.Artist,
+			msg.Result.Title,
+			msg.Result.Album,
+			msg.Result.Year,
+			msg.Result.Source,
+			msg.Result.Confidence,
+		)
+
+		// Desktop Notification
+		if m.Config.SongNotifications && m.Desktop != nil {
+			m.Desktop.NotifySong(msg.StationName, "✨ "+simpleTitle)
+		}
+
+		// Dispatch to plugins
+		if m.PluginMgr != nil {
+			bitrate := 0
+			codec := "MP3"
+			if st := m.Player.CurrentStation(); st != nil {
+				bitrate = st.Bitrate
+				if st.Codec != "" {
+					codec = st.Codec
+				}
+			}
+			m.PluginMgr.DispatchTrackChange(plugin.TrackChangePayload{
+				Station:   msg.StationName,
+				Artist:    msg.Result.Artist,
+				Title:     msg.Result.Title,
+				Bitrate:   bitrate,
+				Codec:     codec,
+				Timestamp: time.Now().Format(time.RFC3339),
+			})
+		}
+
+		// Desktop MPRIS / Discord RPC
+		if m.Desktop != nil {
+			st := m.Player.CurrentStation()
+			stName := msg.StationName
+			genre := ""
+			streamURL := ""
+			if st != nil {
+				if stName == "" {
+					stName = st.Name
+				}
+				genre = st.Genre
+				streamURL = st.URL
+			}
+			m.Desktop.UpdatePlayback(
+				string(m.Player.Status()),
+				stName,
+				genre,
+				fullDisplay,
+				streamURL,
+				m.Player.Volume(),
+				m.Player.IsMuted(),
+				m.Player.ActiveBackend(),
+			)
+		}
+
+		m.StatusMessage = fmt.Sprintf("✨ Identified: %s [%s %d%%]", simpleTitle, msg.Result.Source, int(msg.Result.Confidence*100))
 		return m, tea.SetWindowTitle(m.WindowTitle())
 
 	case MediaPlayPauseMsg:
@@ -1101,6 +1210,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				_ = m.Player.Stop()
 				m.PlayingID = ""
+				m.IdentifiedResult = nil
+				m.IsIdentifying = false
 				m.StatusMessage = "Audio playback stopped"
 				m.SyncDesktop()
 			}
@@ -1114,9 +1225,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			} else {
 				if m.Player.Status() == player.StatusPlaying || m.Player.Status() == player.StatusConnecting {
-					trackToCopy = m.Player.CurrentTrack()
-					if trackToCopy == "" && m.Player.CurrentStation() != nil {
-						trackToCopy = m.Player.CurrentStation().Name
+					if m.IdentifiedResult != nil {
+						trackToCopy = m.IdentifiedResult.SimpleTitle()
+					} else {
+						trackToCopy = m.Player.CurrentTrack()
+						if trackToCopy == "" && m.Player.CurrentStation() != nil {
+							trackToCopy = m.Player.CurrentStation().Name
+						}
 					}
 				} else if len(m.Stations) > 0 && m.SelectedIndex < len(m.Stations) {
 					trackToCopy = m.Stations[m.SelectedIndex].Name
@@ -1139,9 +1254,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			} else {
 				if m.Player.Status() == player.StatusPlaying || m.Player.Status() == player.StatusConnecting {
-					trackToSearch = m.Player.CurrentTrack()
-					if trackToSearch == "" && m.Player.CurrentStation() != nil {
-						trackToSearch = m.Player.CurrentStation().Name
+					if m.IdentifiedResult != nil {
+						trackToSearch = m.IdentifiedResult.SimpleTitle()
+					} else {
+						trackToSearch = m.Player.CurrentTrack()
+						if trackToSearch == "" && m.Player.CurrentStation() != nil {
+							trackToSearch = m.Player.CurrentStation().Name
+						}
 					}
 				} else if len(m.Stations) > 0 && m.SelectedIndex < len(m.Stations) {
 					trackToSearch = m.Stations[m.SelectedIndex].Name
@@ -1158,6 +1277,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.StatusMessage = "No track metadata available to search"
 			}
+
+		case key.Matches(msg, m.KeyMap.IdentifyTrack):
+			if m.Player.Status() != player.StatusPlaying && m.Player.Status() != player.StatusConnecting {
+				m.StatusMessage = "Cannot identify track: audio is not playing"
+				return m, nil
+			}
+			st := m.Player.CurrentStation()
+			if st == nil {
+				m.StatusMessage = "No active station to identify"
+				return m, nil
+			}
+			if m.IsIdentifying {
+				m.StatusMessage = "Already identifying stream audio..."
+				return m, nil
+			}
+			m.IsIdentifying = true
+			m.LastFingerprintTime = time.Now()
+			m.StatusMessage = "🔍 Sampling stream & identifying with AcoustID..."
+			return m, m.identifyTrackCmd()
 
 		case key.Matches(msg, m.KeyMap.RandomPlay):
 			if len(m.Stations) > 0 {
@@ -2319,6 +2457,35 @@ func (m *Model) onTunerFreqChanged() {
 			m.StatusMessage = fmt.Sprintf("Atmospheric Static (%.1f %s) • Nearest: %s (%s%.1f %s)", m.TunerFreq, cfg.Unit, nearestSt.Name, deltaSign, delta, cfg.Unit)
 		} else {
 			m.StatusMessage = fmt.Sprintf("Atmospheric Static Noise (%.1f %s)", m.TunerFreq, cfg.Unit)
+		}
+	}
+}
+
+func (m *Model) identifyTrackCmd() tea.Cmd {
+	st := m.Player.CurrentStation()
+	if st == nil {
+		return nil
+	}
+	stID := st.ID
+	stName := st.Name
+	stURL := st.URL
+	cand := m.Player.CurrentTrack()
+	client := m.FingerprintClient
+	if client == nil {
+		client = fingerprint.NewClient(m.Config.AcoustidAPIKey)
+		m.FingerprintClient = client
+	}
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		res, err := client.Identify(ctx, stURL, stID, stName, cand)
+		return TrackIdentifiedMsg{
+			StationID:   stID,
+			StationName: stName,
+			Result:      res,
+			Err:         err,
 		}
 	}
 }

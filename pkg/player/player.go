@@ -714,8 +714,10 @@ func (m *Manager) startICYListener(ctx context.Context, st radio.Station) {
 			if idx := strings.Index(str, "StreamTitle='"); idx != -1 {
 				str = str[idx+len("StreamTitle='"):]
 				if endIdx := strings.Index(str, "';"); endIdx != -1 {
-					title := sanitizeTrackTitle(str[:endIdx])
-					if title != "" {
+					rawCleaned := sanitizeTrackTitle(str[:endIdx])
+					san := radio.SanitizeTrackTitle(rawCleaned, st.Name)
+					if san.IsClean && san.CleanTitle != "" {
+						title := san.CleanTitle
 						m.mu.Lock()
 						if ctx.Err() != nil || (m.status != StatusPlaying && m.status != StatusConnecting) || m.currentStation == nil || m.currentStation.ID != st.ID {
 							m.mu.Unlock()

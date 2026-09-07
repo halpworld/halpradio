@@ -170,6 +170,7 @@ func RenderStatusBar(searchQuery string, message string, activeTab int, width in
 			}{
 				{"j/k", "Nav"},
 				{"Space", "Play/Pause"},
+				{"I", "Identify"},
 				{"z", "Timer/Pomo"},
 				{"f", "Fav"},
 				{"y", "Yank"},

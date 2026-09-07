@@ -21,7 +21,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/util"
 )
 
-var Version = "0.3.2"
+var Version = "0.4.0"
 
 type AppInstance struct {
 	Program   *tea.Program
@@ -638,6 +638,8 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 	ipcFlag := fs.Bool("ipc", true, "Enable local IPC socket for CLI remote control")
 	discordFlag := fs.Bool("discord", true, "Enable Discord Rich Presence (RPC)")
 	experimentalTunerFlag := fs.Bool("experimental-tuner", false, "Enable experimental analog frequency tuner (on hold)")
+	fingerprintFlag := fs.Bool("fingerprint", true, "Enable acoustic stream fingerprinting (AcoustID)")
+	autoIdentifyFlag := fs.Bool("auto-identify", true, "Automatically identify songs when station lacks metadata")
 	debugFlag := fs.Bool("debug", false, "Write a diagnostic log for bug reports (see --debug-log)")
 	debugLogFlag := fs.String("debug-log", "", "Path for the diagnostic log (default ~/.config/halpradio/debug.log)")
 
@@ -722,6 +724,12 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 	}
 	if *experimentalTunerFlag {
 		cfg.ExperimentalTuner = true
+	}
+	if !*fingerprintFlag {
+		cfg.FingerprintEnabled = false
+	}
+	if !*autoIdentifyFlag {
+		cfg.AutoIdentify = false
 	}
 
 	store := radio.NewStore()

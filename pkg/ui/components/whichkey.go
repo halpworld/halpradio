@@ -59,6 +59,7 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 
 		col2 := []string{
 			sectionStyle.Render("⭐ DISCOVERY & SHARING"),
+			formatRow("I", "Identify stream (AcoustID)", 11),
 			formatRow("y", "Yank (copy) track info", 11),
 			formatRow("o", "Open streaming search", 11),
 			formatRow("s", "Bookmark track (in Hist)", 11),
@@ -98,7 +99,8 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 
 		col2 := []string{
 			sectionStyle.Render("⭐ ACTIONS & SEARCH"),
-			formatRow("y/o", "Yank/Search web", 8),
+			formatRow("I/y", "Identify/Yank", 8),
+			formatRow("o", "Search web", 8),
 			formatRow("f/s", "Fav/Bookmark", 8),
 			formatRow("a/e/d", "Add/Edit/Del", 8),
 			formatRow("p/P", "PR/Plugins", 8),

@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/halpworld/halpradio/pkg/player"
+	"github.com/halpworld/halpradio/pkg/player/fingerprint"
 	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/theme"
 )
@@ -20,6 +21,8 @@ func RenderPlayerBar(
 	timerBadge string,
 	width int,
 	th theme.Theme,
+	identResult *fingerprint.Result,
+	isIdentifying bool,
 ) string {
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -118,22 +121,58 @@ func RenderPlayerBar(
 	}
 	line1 := line1Left + strings.Repeat(" ", space1) + line1Right
 
-	trackDisplay := currTrack
-	if trackDisplay == "" {
-		trackDisplay = currStation.Name
+	// Line 2: Track info + Acoustic Identification Badge + Confidence Bar + Visualizer
+	var line2Right string
+	if identResult != nil {
+		badgeStyle := lipgloss.NewStyle().Foreground(th.BadgeText).Background(th.Playing).Bold(true).Padding(0, 1)
+		var badgeText string
+		if width >= 100 {
+			badgeText = identResult.Badge()
+		} else {
+			badgeText = identResult.ShortBadge()
+		}
+		renderedBadge := badgeStyle.Render(badgeText)
+
+		if width >= 115 {
+			confStyle := lipgloss.NewStyle().Foreground(th.Playing).Bold(true)
+			confBar := confStyle.Render(identResult.ConfidenceBar(8))
+			line2Right = fmt.Sprintf("%s  %s  %s", renderedBadge, confBar, vizRendered)
+		} else if width >= 80 {
+			line2Right = fmt.Sprintf("%s  %s", renderedBadge, vizRendered)
+		} else {
+			line2Right = renderedBadge
+		}
+	} else {
+		line2Right = vizRendered
 	}
-	vizW := lipgloss.Width(vizRendered)
-	maxTrackWidth := innerW - vizW - 4
+	right2W := lipgloss.Width(line2Right)
+
+	maxTrackWidth := innerW - right2W - 2
 	if maxTrackWidth < 10 {
 		maxTrackWidth = 10
 	}
-	line2Left := trackStyle.Render("♪ " + truncate(trackDisplay, maxTrackWidth))
 
-	space2 := innerW - lipgloss.Width(line2Left) - vizW
+	var line2Left string
+	if isIdentifying {
+		identStyle := lipgloss.NewStyle().Foreground(th.Highlight).Italic(true)
+		line2Left = identStyle.Render("🔍 Listening & fingerprinting stream... [AcoustID]")
+	} else if identResult != nil {
+		trackDisplay := identResult.FullDisplay()
+		starStyle := lipgloss.NewStyle().Foreground(th.Playing).Bold(true)
+		line2Left = fmt.Sprintf("%s %s", starStyle.Render("✨"), trackStyle.Render(truncate(trackDisplay, maxTrackWidth-3)))
+	} else {
+		trackDisplay := currTrack
+		if trackDisplay == "" {
+			trackDisplay = currStation.Name
+		}
+		line2Left = trackStyle.Render("♪ " + truncate(trackDisplay, maxTrackWidth))
+	}
+
+	space2 := innerW - lipgloss.Width(line2Left) - right2W
 	if space2 < 1 {
 		space2 = 1
 	}
-	line2 := line2Left + strings.Repeat(" ", space2) + vizRendered
+	line2 := line2Left + strings.Repeat(" ", space2) + line2Right
 
 	return boxStyle.Render(lipgloss.JoinVertical(lipgloss.Left, line1, line2))
 }

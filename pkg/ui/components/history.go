@@ -93,6 +93,9 @@ func RenderHistoryList(
 
 		timeStr := entry.PlayedAt.Format("15:04:05")
 		trackText := entry.FullDisplay()
+		if entry.IdentifiedSource != "" {
+			trackText = "✨ " + trackText
+		}
 
 		var cols []string
 		cols = append(cols, padRight(timeStr, timeWidth))

@@ -51,6 +51,7 @@ type KeyMap struct {
 	FastSweepRight key.Binding
 	Timer          key.Binding
 	Plugins        key.Binding
+	IdentifyTrack  key.Binding
 }
 
 func DefaultKeyMap() KeyMap {
@@ -222,6 +223,10 @@ func DefaultKeyMap() KeyMap {
 		Timer: key.NewBinding(
 			key.WithKeys("z", "Z"),
 			key.WithHelp("z", "sleep/pomodoro timer"),
+		),
+		IdentifyTrack: key.NewBinding(
+			key.WithKeys("I"),
+			key.WithHelp("I", "identify track (acoustic fingerprint)"),
 		),
 	}
 }
