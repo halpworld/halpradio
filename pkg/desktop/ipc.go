@@ -67,26 +67,42 @@ func SanitizeString(s string, maxLen int) string {
 	}
 
 	res := b.String()
-	if maxLen > 0 && len(res) > maxLen {
-		res = res[:maxLen]
+	if maxLen > 0 {
+		runes := []rune(res)
+		if len(runes) > maxLen {
+			res = string(runes[:maxLen])
+		}
 	}
 	return strings.TrimSpace(res)
 }
 
+// PartyInfo holds snapshot state for party listening rooms.
+type PartyInfo struct {
+	Active    bool     `json:"active"`
+	RoomCode  string   `json:"room_code,omitempty"`
+	RoomName  string   `json:"room_name,omitempty"`
+	IsHost    bool     `json:"is_host"`
+	Host      string   `json:"host,omitempty"`
+	DJPass    string   `json:"dj_pass,omitempty"`
+	Listeners int      `json:"listeners"`
+	Peers     []string `json:"peers,omitempty"`
+}
+
 // PlaybackInfo holds snapshot state for remote queries.
 type PlaybackInfo struct {
-	Status      string `json:"status"`
-	StationID   string `json:"station_id,omitempty"`
-	StationName string `json:"station_name,omitempty"`
-	Station     string `json:"station,omitempty"` // For backwards compatibility
-	Artist      string `json:"artist,omitempty"`
-	Title       string `json:"title,omitempty"`
-	Track       string `json:"track,omitempty"` // For backwards compatibility
-	Bitrate     int    `json:"bitrate,omitempty"`
-	Volume      int    `json:"volume"`
-	Muted       bool   `json:"muted,omitempty"`
-	Backend     string `json:"backend,omitempty"`
-	Visualizer  string `json:"visualizer,omitempty"`
+	Status      string     `json:"status"`
+	StationID   string     `json:"station_id,omitempty"`
+	StationName string     `json:"station_name,omitempty"`
+	Station     string     `json:"station,omitempty"` // For backwards compatibility
+	Artist      string     `json:"artist,omitempty"`
+	Title       string     `json:"title,omitempty"`
+	Track       string     `json:"track,omitempty"` // For backwards compatibility
+	Bitrate     int        `json:"bitrate,omitempty"`
+	Volume      int        `json:"volume"`
+	Muted       bool       `json:"muted,omitempty"`
+	Backend     string     `json:"backend,omitempty"`
+	Visualizer  string     `json:"visualizer,omitempty"`
+	Party       *PartyInfo `json:"party,omitempty"`
 }
 
 // SplitArtistTitle extracts artist and song title from a standard "Artist - Title" track string.
@@ -114,7 +130,8 @@ func SplitArtistTitle(track string) (artist, title string) {
 
 // IPCRequest represents an incoming command over IPC.
 type IPCRequest struct {
-	Action string `json:"action"`
+	Action  string `json:"action"`
+	Payload string `json:"payload,omitempty"`
 }
 
 // IPCResponse represents the result of an IPC command.
@@ -127,13 +144,17 @@ type IPCResponse struct {
 // ActionHandler processes an action and returns the current playback state.
 type ActionHandler func(action MediaAction) (*PlaybackInfo, error)
 
+// PayloadActionHandler processes an action with optional payload and returns the current playback state.
+type PayloadActionHandler func(action MediaAction, payload string) (*PlaybackInfo, error)
+
 // IPCServer provides local Unix socket IPC for CLI and media key control.
 type IPCServer struct {
-	mu         sync.Mutex
-	listener   net.Listener
-	socketPath string
-	handler    ActionHandler
-	closed     bool
+	mu             sync.Mutex
+	listener       net.Listener
+	socketPath     string
+	handler        ActionHandler
+	payloadHandler PayloadActionHandler
+	closed         bool
 }
 
 // GetDefaultSocketPath returns the standard path for the halpradio IPC socket.
@@ -151,8 +172,8 @@ func GetDefaultSocketPath() string {
 	return filepath.Join(tempDir, "halpradio-ipc.sock")
 }
 
-// StartIPCServer starts listening on the specified socket path or default.
-func StartIPCServer(socketPath string, handler ActionHandler) (*IPCServer, error) {
+// StartIPCServerWithPayload starts listening on the specified socket path with a PayloadActionHandler.
+func StartIPCServerWithPayload(socketPath string, handler PayloadActionHandler) (*IPCServer, error) {
 	if socketPath == "" {
 		socketPath = GetDefaultSocketPath()
 	}
@@ -169,14 +190,24 @@ func StartIPCServer(socketPath string, handler ActionHandler) (*IPCServer, error
 	_ = os.Chmod(socketPath, 0600)
 
 	server := &IPCServer{
-		listener:   listener,
-		socketPath: socketPath,
-		handler:    handler,
+		listener:       listener,
+		socketPath:     socketPath,
+		payloadHandler: handler,
 	}
 
 	go server.serve()
 
 	return server, nil
+}
+
+// StartIPCServer starts listening on the specified socket path or default with standard ActionHandler.
+func StartIPCServer(socketPath string, handler ActionHandler) (*IPCServer, error) {
+	return StartIPCServerWithPayload(socketPath, func(action MediaAction, _ string) (*PlaybackInfo, error) {
+		if handler != nil {
+			return handler(action)
+		}
+		return nil, nil
+	})
 }
 
 func (s *IPCServer) serve() {
@@ -212,7 +243,16 @@ func (s *IPCServer) handleConn(conn net.Conn) {
 		return
 	}
 
-	cleanAction := SanitizeString(req.Action, 64)
+	cleanAction := SanitizeString(req.Action, 128)
+	cleanPayload := SanitizeString(req.Payload, 512)
+
+	// If no payload field was specified, but action has a space (e.g. "party-join 8X2K9P" or "party-chat Hello!"), split it
+	if cleanPayload == "" && strings.Contains(cleanAction, " ") {
+		parts := strings.SplitN(cleanAction, " ", 2)
+		cleanAction = parts[0]
+		cleanPayload = parts[1]
+	}
+
 	action, ok := ParseAction(cleanAction)
 	if !ok {
 		resp := IPCResponse{
@@ -224,12 +264,15 @@ func (s *IPCServer) handleConn(conn net.Conn) {
 	}
 
 	s.mu.Lock()
+	payloadHandler := s.payloadHandler
 	handler := s.handler
 	s.mu.Unlock()
 
 	var pInfo *PlaybackInfo
 	var err error
-	if handler != nil {
+	if payloadHandler != nil {
+		pInfo, err = payloadHandler(action, cleanPayload)
+	} else if handler != nil {
 		pInfo, err = handler(action)
 	}
 
@@ -272,6 +315,11 @@ func (s *IPCServer) Close() error {
 
 // SendIPCCommand sends a command to the running halpradio IPC socket.
 func SendIPCCommand(socketPath string, action string) (*IPCResponse, error) {
+	return SendIPCCommandWithPayload(socketPath, action, "")
+}
+
+// SendIPCCommandWithPayload sends a command with payload to the running halpradio IPC socket.
+func SendIPCCommandWithPayload(socketPath string, action string, payload string) (*IPCResponse, error) {
 	if socketPath == "" {
 		socketPath = GetDefaultSocketPath()
 	}
@@ -302,8 +350,9 @@ func SendIPCCommand(socketPath string, action string) (*IPCResponse, error) {
 
 	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
 
-	cleanAction := SanitizeString(action, 64)
-	req := IPCRequest{Action: cleanAction}
+	cleanAction := SanitizeString(action, 128)
+	cleanPayload := SanitizeString(payload, 512)
+	req := IPCRequest{Action: cleanAction, Payload: cleanPayload}
 	if err := json.NewEncoder(conn).Encode(req); err != nil {
 		return nil, fmt.Errorf("failed to send command: %w", err)
 	}

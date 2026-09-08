@@ -49,6 +49,9 @@ func TestDefaultKeyMap(t *testing.T) {
 	if len(km.Search.Keys()) == 0 {
 		t.Errorf("Expected Search keys defined")
 	}
+	if len(km.Party.Keys()) == 0 {
+		t.Errorf("Expected Party keys defined")
+	}
 }
 
 func TestKeyMapMediaKeyVariations(t *testing.T) {

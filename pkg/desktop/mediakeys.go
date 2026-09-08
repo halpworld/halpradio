@@ -18,6 +18,12 @@ const (
 	ActionRandom      MediaAction = "random"
 	ActionQuit        MediaAction = "quit"
 	ActionStatus      MediaAction = "status"
+	ActionPartyCreate MediaAction = "party-create"
+	ActionPartyJoin   MediaAction = "party-join"
+	ActionPartyLeave  MediaAction = "party-leave"
+	ActionPartyStatus MediaAction = "party-status"
+	ActionPartyReact  MediaAction = "party-react"
+	ActionPartyChat   MediaAction = "party-chat"
 )
 
 // NormalizeKey maps various hardware media keys, terminal escape sequences,
@@ -73,6 +79,18 @@ func ParseAction(str string) (MediaAction, bool) {
 		return ActionQuit, true
 	case "status", "info", "current":
 		return ActionStatus, true
+	case "party-create", "party-new", "partycreate":
+		return ActionPartyCreate, true
+	case "party-join", "party-connect", "partyjoin":
+		return ActionPartyJoin, true
+	case "party-leave", "party-exit", "partyleave":
+		return ActionPartyLeave, true
+	case "party-status", "partystatus":
+		return ActionPartyStatus, true
+	case "party-react", "partyreact":
+		return ActionPartyReact, true
+	case "party-chat", "partychat":
+		return ActionPartyChat, true
 	default:
 		return "", false
 	}

@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/halpworld/halpradio/pkg/debuglog"
 	"github.com/halpworld/halpradio/pkg/desktop"
+	"github.com/halpworld/halpradio/pkg/party"
 	"github.com/halpworld/halpradio/pkg/player"
 	"github.com/halpworld/halpradio/pkg/plugin"
 	"github.com/halpworld/halpradio/pkg/radio"
@@ -24,12 +25,13 @@ import (
 var Version = "0.4.0"
 
 type AppInstance struct {
-	Program   *tea.Program
-	Player    *player.Manager
-	Config    util.Config
-	Store     *radio.Store
-	Desktop   *desktop.Manager
-	PluginMgr *plugin.Manager
+	Program      *tea.Program
+	Player       *player.Manager
+	Config       util.Config
+	Store        *radio.Store
+	Desktop      *desktop.Manager
+	PluginMgr    *plugin.Manager
+	PartySession *party.PartySession
 
 	// DebugLogPath is the diagnostic log file for this run, or "" when
 	// diagnostic logging is off.
@@ -573,6 +575,8 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 			}
 			_, err := RunRemote(args, out)
 			return nil, true, err
+		case args[0] == "party":
+			return RunParty(args[1:], embeddedCatalog, out)
 		case args[0] == "theme" || args[0] == "themes":
 			_, err := RunThemeCLI(args[1:], out)
 			return nil, true, err
@@ -804,6 +808,36 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 		}
 	})
 
+	desktopMgr.SetPartyHandler(func(action desktop.MediaAction, payload string) error {
+		if program == nil {
+			return fmt.Errorf("halpradio program not ready")
+		}
+		switch action {
+		case desktop.ActionPartyCreate:
+			name := strings.TrimSpace(payload)
+			if name == "" {
+				name = "team-focus"
+			}
+			program.Send(ui.PartyCreateRoomMsg{RoomName: name})
+		case desktop.ActionPartyJoin:
+			code := strings.TrimSpace(payload)
+			addr := ""
+			if strings.Contains(code, " ") {
+				parts := strings.SplitN(code, " ", 2)
+				code = parts[0]
+				addr = parts[1]
+			}
+			program.Send(ui.PartyJoinRoomMsg{RoomCode: code, Address: addr})
+		case desktop.ActionPartyLeave:
+			program.Send(ui.PartyLeaveRoomMsg{})
+		case desktop.ActionPartyReact:
+			program.Send(ui.PartySendReactionMsg(payload))
+		case desktop.ActionPartyChat:
+			program.Send(ui.PartySendChatMsg(payload))
+		}
+		return nil
+	})
+
 	model.SetDesktop(desktopMgr)
 
 	program = tea.NewProgram(
@@ -840,13 +874,16 @@ func Run(embeddedCatalog []byte) {
 		return err
 	}()
 
-	// Clean up player, desktop, and plugin services on exit
+	// Clean up player, desktop, party, and plugin services on exit
 	_ = appInst.Player.Close()
 	if appInst.Desktop != nil {
 		_ = appInst.Desktop.Close()
 	}
 	if appInst.PluginMgr != nil {
 		_ = appInst.PluginMgr.Close()
+	}
+	if appInst.PartySession != nil {
+		_ = appInst.PartySession.Close()
 	}
 
 	debuglog.Close()

@@ -69,6 +69,20 @@ func (m Model) View() string {
 		)
 	}
 
+	if m.ShowPartyModal {
+		return components.RenderPartyManagerModal(
+			m.PartySession,
+			m.PartyModalScreen,
+			m.PartyModalCursor,
+			m.PartyInputs,
+			m.PartyInputFocus,
+			m.PartyStatusMsg,
+			width,
+			height,
+			m.Theme,
+		)
+	}
+
 	if m.ShowPermissionApproval {
 		return components.RenderPermissionApprovalModal(m.ApprovalPlugin, width, height, m.Theme)
 	}
@@ -99,19 +113,43 @@ func (m Model) View() string {
 		timerBadge = m.Timer.BadgeText()
 	}
 
-	playerBarView := components.RenderPlayerBar(
-		m.Player.CurrentStation(),
-		m.Player.CurrentTrack(),
-		m.Player.Status(),
-		m.Player.Volume(),
-		m.Player.IsMuted(),
-		m.Visualizer,
-		timerBadge,
-		width,
-		m.Theme,
-		m.IdentifiedResult,
-		m.IsIdentifying,
-	)
+	var playerBarView string
+	if m.PartySession != nil && m.PartySession.IsActive() {
+		playerBarView = components.RenderPartyBar(
+			m.PartySession.RoomCode(),
+			m.PartySession.RoomName(),
+			m.PartySession.HostNickname(),
+			m.PartySession.IsHost(),
+			m.PartySession.DJPass(),
+			m.PartySession.PeerCount(),
+			m.Player.CurrentStation(),
+			m.Player.CurrentTrack(),
+			m.Player.Status(),
+			m.Player.Volume(),
+			m.Player.IsMuted(),
+			m.Visualizer,
+			m.PartySession.ActiveReactions(),
+			m.PartySession.RecentChat(),
+			width,
+			m.Theme,
+			m.IsChatting,
+			m.ChatInput,
+		)
+	} else {
+		playerBarView = components.RenderPlayerBar(
+			m.Player.CurrentStation(),
+			m.Player.CurrentTrack(),
+			m.Player.Status(),
+			m.Player.Volume(),
+			m.Player.IsMuted(),
+			m.Visualizer,
+			timerBadge,
+			width,
+			m.Theme,
+			m.IdentifiedResult,
+			m.IsIdentifying,
+		)
+	}
 	playerBarHeight := lipgloss.Height(playerBarView)
 
 	statusBarView := components.RenderStatusBar(m.SearchQuery, m.StatusMessage, m.ActiveTab, width, m.Theme, isTunerActive)

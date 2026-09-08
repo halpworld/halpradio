@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/halpworld/halpradio/pkg/desktop"
+	"github.com/halpworld/halpradio/pkg/party"
 	"github.com/halpworld/halpradio/pkg/player"
 	"github.com/halpworld/halpradio/pkg/player/fingerprint"
 	"github.com/halpworld/halpradio/pkg/plugin"
@@ -71,6 +72,27 @@ type CatalogUpdatedMsg struct {
 	StationsCount int
 	Err           error
 }
+
+// Party room messages
+type PartyPlaybackSyncMsg party.SyncPayload
+type PartyReactionMsg party.FloatingReaction
+type PartyChatMsg party.ChatMessage
+type PartyPeerChangeMsg []*party.PeerInfo
+type PartyStatusFlashMsg string
+
+type PartyCreateRoomMsg struct {
+	RoomName string
+	Nickname string
+	DJPass   string
+}
+type PartyJoinRoomMsg struct {
+	RoomCode string
+	Nickname string
+	Address  string
+}
+type PartyLeaveRoomMsg struct{}
+type PartySendReactionMsg string
+type PartySendChatMsg string
 
 // Media key and remote control messages
 type MediaPlayPauseMsg struct{}
@@ -184,6 +206,18 @@ type Model struct {
 	PlaybackStartTime   time.Time
 	LastFingerprintTime time.Time
 	FingerprintClient   *fingerprint.Client
+
+	// Terminal Party Room State
+	PartySession     *party.PartySession
+	ShowPartyModal   bool
+	PartyModalScreen int // 0: Menu, 1: Create, 2: Join, 3: Active Dashboard
+	PartyModalCursor int
+	PartyInputs      []string
+	PartyInputFocus  int
+	PartyStatusMsg   string
+	IsChatting       bool
+	ChatInput        string
+	sendMsgFn        func(tea.Msg)
 }
 
 func NewModel(
@@ -254,6 +288,7 @@ func NewModel(
 		TunerBand:                  "FM",
 		PlaybackStartTime:          time.Now(),
 		FingerprintClient:          fingerprint.NewClient(cfg.AcoustidAPIKey),
+		PartyInputs:                make([]string, 3),
 	}
 
 	allThemes := theme.GetAllThemes()
@@ -439,6 +474,71 @@ func (m *Model) SetPluginManager(pm *plugin.Manager) {
 	m.PluginMgr = pm
 }
 
+// SetMsgSender sets the callback for sending messages to Bubble Tea runtime.
+func (m *Model) SetMsgSender(fn func(tea.Msg)) {
+	m.sendMsgFn = fn
+}
+
+// SetPartySession sets an active party session on the model.
+func (m *Model) SetPartySession(sess *party.PartySession) {
+	m.PartySession = sess
+	if sess != nil {
+		m.SetupPartyHandlers(sess)
+	}
+}
+
+// SetupPartyHandlers wires up session callbacks to Bubble Tea messages.
+func (m *Model) SetupPartyHandlers(sess *party.PartySession) {
+	if sess == nil {
+		return
+	}
+	send := m.sendMsgFn
+	sess.SetHandlers(
+		func(sp party.SyncPayload) {
+			if send != nil {
+				send(PartyPlaybackSyncMsg(sp))
+			}
+		},
+		func(r party.FloatingReaction) {
+			if send != nil {
+				send(PartyReactionMsg(r))
+			}
+		},
+		func(c party.ChatMessage) {
+			if send != nil {
+				send(PartyChatMsg(c))
+			}
+		},
+		func(p []*party.PeerInfo) {
+			if send != nil {
+				send(PartyPeerChangeMsg(p))
+			}
+		},
+		func(msg string) {
+			if send != nil {
+				send(PartyStatusFlashMsg(msg))
+			}
+		},
+	)
+}
+
+func (m *Model) openPartyModal() {
+	m.ShowPartyModal = true
+	m.PartyStatusMsg = ""
+	if m.PartySession != nil && m.PartySession.IsActive() {
+		m.PartyModalScreen = 3 // Active Dashboard
+	} else {
+		m.PartyModalScreen = 0 // Menu
+		m.PartyModalCursor = 0
+		defaultNick := m.Config.PartyNickname
+		if defaultNick == "" {
+			defaultNick = "listener"
+		}
+		m.PartyInputs = []string{"team-focus", defaultNick, "host"}
+		m.PartyInputFocus = 0
+	}
+}
+
 func (m *Model) SyncDesktop() {
 	st := m.Player.CurrentStation()
 	stationID := ""
@@ -473,6 +573,27 @@ func (m *Model) SyncDesktop() {
 			m.Player.ActiveBackend(),
 			vizMode,
 		)
+		if m.PartySession != nil && m.PartySession.IsActive() {
+			peers := m.PartySession.PeerRoster()
+			peerNames := make([]string, 0, len(peers))
+			for _, p := range peers {
+				peerNames = append(peerNames, p.Nickname)
+			}
+			m.Desktop.SetPartyInfo(&desktop.PartyInfo{
+				Active:    true,
+				RoomCode:  m.PartySession.RoomCode(),
+				RoomName:  m.PartySession.RoomName(),
+				IsHost:    m.PartySession.IsHost(),
+				Host:      m.PartySession.HostNickname(),
+				DJPass:    string(m.PartySession.DJPass()),
+				Listeners: m.PartySession.PeerCount(),
+				Peers:     peerNames,
+			})
+		} else {
+			m.Desktop.SetPartyInfo(&desktop.PartyInfo{
+				Active: false,
+			})
+		}
 	}
 
 	if m.PluginMgr != nil {

@@ -202,6 +202,7 @@ func PrintRootHelp(out io.Writer) {
 
 	RenderHelpItems(out, "Core Commands", []HelpItem{
 		{Name: "play", Args: "<target> [flags]", Description: "Stream radio directly without TUI (index, ID, name, URL, or random)"},
+		{Name: "party", Args: "<create|join|status|...>", Description: "P2P mesh synchronized radio rooms & live ASCII reactions (E2EE)"},
 		{Name: "stations", Args: "[list|search|fav]", Description: "Discover, search, filter, and manage station catalog"},
 		{Name: "volume", Args: "[value] [flags]", Description: "Query or adjust volume (e.g. halpradio volume +5, 60, mute)"},
 		{Name: "current", Args: "[flags]", Description: "Query currently playing track for status bars (tmux, Waybar)"},
@@ -243,6 +244,8 @@ func PrintRootHelp(out io.Writer) {
 
 	RenderHelpExamples(out, "Top Automation Examples", []HelpExample{
 		{Command: "halpradio", Description: "Launch interactive Bubble Tea TUI"},
+		{Command: "halpradio party create \"team-focus\"", Description: "Create encrypted P2P radio room with teammates"},
+		{Command: "halpradio party join 8X2K9P", Description: "Join synchronized radio room using 6-char code"},
 		{Command: "halpradio play somafm_groovesalad", Description: "Headless stream SomaFM Groove Salad"},
 		{Command: "halpradio play 2 --volume 30", Description: "Headless stream station #2 at 30% volume"},
 		{Command: "halpradio play somafm_groovesalad -d 45m", Description: "45-minute focus session with auto-stop"},
@@ -603,6 +606,48 @@ func PrintPlaybackControlHelp(cmd string, out io.Writer) {
 	})
 }
 
+// PrintPartyHelp renders help for `halpradio party`.
+func PrintPartyHelp(out io.Writer) {
+	RenderHelpHeader(out, "halpradio party", "P2P Mesh Synchronized Radio Rooms & Live Reactions (E2EE)")
+	RenderHelpUsage(out,
+		"halpradio party create [name] [flags]",
+		"halpradio party join <room-code> [flags]",
+		"halpradio party status [--json]",
+		"halpradio party leave",
+		"halpradio party react <1-5|emoji>",
+		"halpradio party chat <message>",
+	)
+	RenderHelpItems(out, "Commands", []HelpItem{
+		{Name: "create", Args: "[name]", Description: "Create and host an encrypted P2P radio room (generates #8X2K9P)"},
+		{Name: "join", Args: "<code|#code>", Description: "Join an active radio room using its 6-character room code"},
+		{Name: "status", Description: "Show party status, active room code, role, and connected listeners"},
+		{Name: "leave", Description: "Leave current party room (triggers host migration if hosting)"},
+		{Name: "react", Args: "<1-5|emoji>", Description: "Broadcast an ASCII reaction (1:🔥, 2:❤️, 3:☕, 4:🚀, 5:👀)"},
+		{Name: "chat", Args: "<message>", Description: "Send a 1-line mini-chat ping to all listeners in the room"},
+	})
+	RenderHelpItems(out, "Flags (create & join)", []HelpItem{
+		{Short: "-d", Name: "--dj-pass", Args: "<host|open>", Description: "DJ tuning permission: host (DJ only) or open (democratic)", Default: "host"},
+		{Short: "-n", Name: "--nickname", Args: "<name>", Description: "Listener handle shown to peers in party room", Default: "$USER"},
+		{Short: "-a", Name: "--address", Args: "<host:port>", Description: "Direct TCP peer address (skips LAN discovery)"},
+		{Name: "--port", Args: "<port>", Description: "TCP port to bind for peer mesh connections", Default: "auto"},
+		{Name: "--headless", Description: "Stream synchronized audio headlessly in terminal (no TUI)"},
+		{Short: "-j", Name: "--json", Description: "Output status and events formatted as JSON"},
+	})
+	RenderHelpExamples(out, "Examples", []HelpExample{
+		{Command: "halpradio party create \"chill-vibes\"", Description: "Create room 'chill-vibes' and launch TUI"},
+		{Command: "halpradio party create --dj-pass=open", Description: "Create room allowing any listener to tune stations"},
+		{Command: "halpradio party create --headless", Description: "Create and host room headlessly in server/tmux"},
+		{Command: "halpradio party join 8X2K9P", Description: "Join radio room #8X2K9P with interactive TUI"},
+		{Command: "halpradio party status", Description: "Inspect current party room, listener count, and host"},
+		{Command: "halpradio party react 1", Description: "Send live 🔥 reaction to current room"},
+		{Command: "halpradio party chat \"loving this track!\"", Description: "Send mini-chat ping to room"},
+		{Command: "halpradio party leave", Description: "Disconnect from current party room"},
+	})
+	RenderHelpFooter(out,
+		`Use "halpradio party create --help" or "halpradio party join --help" for detailed flag options.`,
+	)
+}
+
 // RouteHelp routes `halpradio help <command...>` to the appropriate help renderer.
 func RouteHelp(args []string, embeddedCatalog []byte, out io.Writer) bool {
 	if len(args) == 0 {
@@ -614,6 +659,9 @@ func RouteHelp(args []string, embeddedCatalog []byte, out io.Writer) bool {
 	switch sub {
 	case "play":
 		PrintPlayHelp(out)
+		return true
+	case "party":
+		PrintPartyHelp(out)
 		return true
 	case "stations", "station":
 		if len(args) > 1 {
@@ -684,7 +732,7 @@ func RouteHelp(args []string, embeddedCatalog []byte, out io.Writer) bool {
 
 // RootCommands lists all valid top-level halpradio commands for typo suggestions.
 var RootCommands = []string{
-	"play", "stations", "volume", "current", "status",
+	"play", "party", "stations", "volume", "current", "status",
 	"toggle", "pause", "stop", "next", "prev", "volup", "voldown", "mute", "random", "remote",
 	"theme", "plugin", "update-stations", "update-catalog", "version", "help",
 }

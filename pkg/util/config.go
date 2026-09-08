@@ -40,6 +40,9 @@ type Config struct {
 	FingerprintEnabled   bool   `yaml:"fingerprint_enabled"`
 	AcoustidAPIKey       string `yaml:"acoustid_api_key,omitempty"`
 	AutoIdentify         bool   `yaml:"auto_identify"`
+	PartyNickname        string `yaml:"party_nickname,omitempty"`
+	PartyRelayURL        string `yaml:"party_relay_url,omitempty"`
+	PartyPort            int    `yaml:"party_port,omitempty"`
 }
 
 func DefaultConfig() Config {
@@ -76,6 +79,8 @@ func DefaultConfig() Config {
 		FingerprintEnabled:   true,
 		AcoustidAPIKey:       "v8pQ6oyB",
 		AutoIdentify:         true,
+		PartyNickname:        "",
+		PartyPort:            0,
 	}
 }
 

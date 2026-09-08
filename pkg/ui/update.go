@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/halpworld/halpradio/pkg/debuglog"
+	"github.com/halpworld/halpradio/pkg/party"
 	"github.com/halpworld/halpradio/pkg/player"
 	"github.com/halpworld/halpradio/pkg/player/fingerprint"
 	"github.com/halpworld/halpradio/pkg/plugin"
@@ -119,7 +120,148 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		if m.PartySession != nil && m.PartySession.IsActive() {
+			m.PartySession.Tick()
+		}
+
 		return m, tea.Batch(tickCmds...)
+
+	case PartyPlaybackSyncMsg:
+		sp := party.SyncPayload(msg)
+		st := m.Store.FindStationByID(sp.StationID)
+		if st == nil {
+			st = &radio.Station{
+				ID:      sp.StationID,
+				Name:    sp.StationName,
+				URL:     sp.StreamURL,
+				Genre:   sp.Genre,
+				Country: sp.Country,
+				Bitrate: sp.Bitrate,
+				Codec:   sp.Codec,
+			}
+		}
+		if sp.Status == "playing" {
+			_ = m.Player.Play(*st)
+			m.PlayingID = st.ID
+			m.StatusMessage = fmt.Sprintf("📻 Party sync: %s", st.Name)
+			m.SyncDesktop()
+		} else if sp.Status == "paused" {
+			_ = m.Player.Pause()
+			m.PlayingID = ""
+			m.StatusMessage = fmt.Sprintf("⏸️ Party paused: %s", st.Name)
+			m.SyncDesktop()
+		} else if sp.Status == "stopped" {
+			_ = m.Player.Stop()
+			m.PlayingID = ""
+			m.StatusMessage = "⏹️ Party audio stopped"
+			m.SyncDesktop()
+		}
+		return m, nil
+
+	case PartyReactionMsg:
+		return m, nil
+
+	case PartyChatMsg:
+		return m, nil
+
+	case PartyPeerChangeMsg:
+		m.SyncDesktop()
+		return m, nil
+
+	case PartyCreateRoomMsg:
+		if m.PartySession != nil {
+			_ = m.PartySession.Close()
+		}
+		roomName := msg.RoomName
+		if roomName == "" {
+			roomName = "team-focus"
+		}
+		nick := msg.Nickname
+		if nick == "" {
+			nick = m.Config.PartyNickname
+		}
+		if nick == "" {
+			nick = "host"
+		}
+		djPass := party.DJPassHostOnly
+		if msg.DJPass == "open" {
+			djPass = party.DJPassOpenDemocracy
+		}
+		sess, err := party.NewPartySession(party.SessionConfig{
+			RoomName: roomName,
+			Nickname: nick,
+			IsHost:   true,
+			DJPass:   djPass,
+			Port:     m.Config.PartyPort,
+		})
+		if err == nil {
+			m.PartySession = sess
+			m.SetupPartyHandlers(sess)
+			if curr := m.Player.CurrentStation(); curr != nil {
+				_ = m.PartySession.BroadcastStationChange(curr.ID, curr.Name, curr.URL, curr.Genre, curr.Country, curr.Codec, curr.Bitrate, string(m.Player.Status()))
+			}
+			m.StatusMessage = fmt.Sprintf("✓ Created party room %s!", sess.FormattedCode())
+			m.SyncDesktop()
+		} else {
+			m.StatusMessage = fmt.Sprintf("Party create error: %v", err)
+		}
+		return m, nil
+
+	case PartyJoinRoomMsg:
+		if m.PartySession != nil {
+			_ = m.PartySession.Close()
+		}
+		code := party.NormalizeRoomCode(msg.RoomCode)
+		nick := msg.Nickname
+		if nick == "" {
+			nick = m.Config.PartyNickname
+		}
+		if nick == "" {
+			nick = "listener"
+		}
+		sess, err := party.NewPartySession(party.SessionConfig{
+			RoomCode: code,
+			Nickname: nick,
+			IsHost:   false,
+			Port:     0,
+		})
+		if err == nil {
+			m.PartySession = sess
+			m.SetupPartyHandlers(sess)
+			if msg.Address != "" {
+				_ = sess.ConnectDirect(msg.Address)
+			}
+			m.StatusMessage = fmt.Sprintf("✓ Connected to party room %s!", sess.FormattedCode())
+			m.SyncDesktop()
+		} else {
+			m.StatusMessage = fmt.Sprintf("Party join error: %v", err)
+		}
+		return m, nil
+
+	case PartyLeaveRoomMsg:
+		if m.PartySession != nil {
+			_ = m.PartySession.Close()
+			m.PartySession = nil
+			m.StatusMessage = "Left party room"
+			m.SyncDesktop()
+		}
+		return m, nil
+
+	case PartySendReactionMsg:
+		if m.PartySession != nil && m.PartySession.IsActive() {
+			_, _ = m.PartySession.BroadcastReaction(string(msg))
+		}
+		return m, nil
+
+	case PartySendChatMsg:
+		if m.PartySession != nil && m.PartySession.IsActive() {
+			_, _ = m.PartySession.BroadcastChat(string(msg))
+		}
+		return m, nil
+
+	case PartyStatusFlashMsg:
+		m.StatusMessage = string(msg)
+		return m, nil
 
 	case PluginRegistryLoadedMsg:
 		if msg.Err != nil {
@@ -507,6 +649,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handlePluginModalKey(msg)
 		}
 
+		if m.ShowPartyModal {
+			return m.handlePartyModalKey(msg)
+		}
+
+		if m.IsChatting {
+			return m.handlePartyChatKey(msg)
+		}
+
 		if m.IsSearching {
 			switch msg.String() {
 			case "esc":
@@ -530,6 +680,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Party Mode Live ASCII Reactions (1-5) and Chat Ping (t)
+		if m.PartySession != nil && m.PartySession.IsActive() {
+			switch msg.String() {
+			case "1", "2", "3", "4", "5":
+				r, err := m.PartySession.BroadcastReaction(msg.String())
+				if err == nil {
+					m.StatusMessage = fmt.Sprintf("Reacted %s", r.Emoji)
+				}
+				return m, nil
+			case "t":
+				m.IsChatting = true
+				m.ChatInput = ""
+				return m, nil
+			}
+		}
+
 		switch {
 		case key.Matches(msg, m.KeyMap.Quit):
 			_ = m.Player.Stop()
@@ -538,7 +704,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.KeyMap.Help):
 			m.ShowWhichKey = true
 
-		case key.Matches(msg, m.KeyMap.Theme):
+		case key.Matches(msg, m.KeyMap.Party):
+			m.openPartyModal()
+			return m, nil
+
+		case key.Matches(msg, m.KeyMap.Theme) || msg.String() == "T":
 			m.ShowThemePicker = true
 			m.ThemeModalTab = 0
 			m.IsPreviewingTheme = false
@@ -1180,15 +1350,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if len(m.Stations) > 0 && m.SelectedIndex < len(m.Stations) {
 				st := m.Stations[m.SelectedIndex]
 				if m.PlayingID == st.ID && m.Player.Status() == player.StatusPlaying {
+					if m.PartySession != nil && m.PartySession.IsActive() && !m.PartySession.CanChangeStation() {
+						m.StatusMessage = fmt.Sprintf("🚫 DJ Pass is Host Only (@%s is DJ)", m.PartySession.HostNickname())
+						return m, nil
+					}
 					_ = m.Player.Pause()
 					m.PlayingID = ""
 					m.StatusMessage = fmt.Sprintf("Paused %s", st.Name)
 					m.SyncDesktop()
+					if m.PartySession != nil && m.PartySession.IsActive() {
+						_ = m.PartySession.BroadcastStationChange(st.ID, st.Name, st.URL, st.Genre, st.Country, st.Codec, st.Bitrate, "paused")
+					}
 				} else {
+					if m.PartySession != nil && m.PartySession.IsActive() && !m.PartySession.CanChangeStation() {
+						m.StatusMessage = fmt.Sprintf("🚫 DJ Pass is Host Only (@%s is DJ)", m.PartySession.HostNickname())
+						return m, nil
+					}
 					_ = m.Player.Play(st)
 					m.PlayingID = st.ID
 					m.StatusMessage = fmt.Sprintf("Playing %s [%s]", st.Name, m.Player.ActiveBackend())
 					m.SyncDesktop()
+					if m.PartySession != nil && m.PartySession.IsActive() {
+						_ = m.PartySession.BroadcastStationChange(st.ID, st.Name, st.URL, st.Genre, st.Country, st.Codec, st.Bitrate, "playing")
+					}
 					if m.Config.SongNotifications && m.Desktop != nil {
 						m.Desktop.NotifySong(st.Name, st.Name)
 					}
@@ -2487,5 +2671,206 @@ func (m *Model) identifyTrackCmd() tea.Cmd {
 			Result:      res,
 			Err:         err,
 		}
+	}
+}
+
+func (m Model) handlePartyChatKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.IsChatting = false
+		m.ChatInput = ""
+	case "enter":
+		if m.PartySession != nil && m.PartySession.IsActive() && strings.TrimSpace(m.ChatInput) != "" {
+			_, _ = m.PartySession.BroadcastChat(m.ChatInput)
+		}
+		m.IsChatting = false
+		m.ChatInput = ""
+	case "backspace":
+		if len(m.ChatInput) > 0 {
+			runes := []rune(m.ChatInput)
+			m.ChatInput = string(runes[:len(runes)-1])
+		}
+	default:
+		if len(msg.String()) == 1 {
+			m.ChatInput += msg.String()
+		}
+	}
+	return m, nil
+}
+
+func (m Model) handlePartyModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	if m.PartySession != nil && m.PartySession.IsActive() && m.PartyModalScreen == 3 {
+		// Active Dashboard
+		switch msg.String() {
+		case "esc", "enter", "q":
+			m.ShowPartyModal = false
+		case "c", "y":
+			_ = util.CopyToClipboard(m.PartySession.FormattedCode())
+			m.PartyStatusMsg = "✓ Copied room code to clipboard!"
+		case "d":
+			if m.PartySession.IsHost() {
+				newMode, err := m.PartySession.ToggleDJPass()
+				if err != nil {
+					m.PartyStatusMsg = "Error: " + err.Error()
+				} else {
+					m.PartyStatusMsg = "✓ DJ Pass set to: " + string(newMode)
+				}
+			} else {
+				m.PartyStatusMsg = "Only host can change DJ Pass"
+			}
+		case "l":
+			_ = m.PartySession.Close()
+			m.PartySession = nil
+			m.ShowPartyModal = false
+			m.StatusMessage = "Left party room"
+		}
+		return m, nil
+	}
+
+	switch m.PartyModalScreen {
+	case 1: // Create Room Form
+		switch msg.String() {
+		case "esc":
+			m.PartyModalScreen = 0
+			m.PartyStatusMsg = ""
+		case "tab", "down":
+			m.PartyInputFocus = (m.PartyInputFocus + 1) % 3
+		case "shift+tab", "up":
+			m.PartyInputFocus = (m.PartyInputFocus + 2) % 3
+		case "space":
+			if m.PartyInputFocus == 2 {
+				if len(m.PartyInputs) > 2 && m.PartyInputs[2] == "open" {
+					m.PartyInputs[2] = "host"
+				} else {
+					m.PartyInputs[2] = "open"
+				}
+			} else if m.PartyInputFocus < 2 {
+				m.PartyInputs[m.PartyInputFocus] += " "
+			}
+		case "enter":
+			roomName := "team-focus"
+			if len(m.PartyInputs) > 0 && strings.TrimSpace(m.PartyInputs[0]) != "" {
+				roomName = strings.TrimSpace(m.PartyInputs[0])
+			}
+			nick := m.Config.PartyNickname
+			if len(m.PartyInputs) > 1 && strings.TrimSpace(m.PartyInputs[1]) != "" {
+				nick = strings.TrimSpace(m.PartyInputs[1])
+			}
+			djPass := party.DJPassHostOnly
+			if len(m.PartyInputs) > 2 && m.PartyInputs[2] == "open" {
+				djPass = party.DJPassOpenDemocracy
+			}
+
+			sess, err := party.NewPartySession(party.SessionConfig{
+				RoomName: roomName,
+				Nickname: nick,
+				IsHost:   true,
+				DJPass:   djPass,
+				Port:     m.Config.PartyPort,
+			})
+			if err != nil {
+				m.PartyStatusMsg = "Create error: " + err.Error()
+				return m, nil
+			}
+
+			m.PartySession = sess
+			m.SetupPartyHandlers(sess)
+			if curr := m.Player.CurrentStation(); curr != nil {
+				_ = m.PartySession.BroadcastStationChange(curr.ID, curr.Name, curr.URL, curr.Genre, curr.Country, curr.Codec, curr.Bitrate, string(m.Player.Status()))
+			}
+			m.ShowPartyModal = false
+			m.StatusMessage = fmt.Sprintf("✓ Created party room %s!", sess.FormattedCode())
+
+		case "backspace":
+			if m.PartyInputFocus < 2 && len(m.PartyInputs[m.PartyInputFocus]) > 0 {
+				runes := []rune(m.PartyInputs[m.PartyInputFocus])
+				m.PartyInputs[m.PartyInputFocus] = string(runes[:len(runes)-1])
+			}
+		default:
+			if m.PartyInputFocus < 2 && len(msg.String()) == 1 {
+				m.PartyInputs[m.PartyInputFocus] += msg.String()
+			}
+		}
+		return m, nil
+
+	case 2: // Join Room Form
+		switch msg.String() {
+		case "esc":
+			m.PartyModalScreen = 0
+			m.PartyStatusMsg = ""
+		case "tab", "down":
+			m.PartyInputFocus = (m.PartyInputFocus + 1) % 3
+		case "shift+tab", "up":
+			m.PartyInputFocus = (m.PartyInputFocus + 2) % 3
+		case "enter":
+			code := ""
+			if len(m.PartyInputs) > 0 {
+				code = party.NormalizeRoomCode(m.PartyInputs[0])
+			}
+			if len(code) != 6 {
+				m.PartyStatusMsg = "Room code must be 6 characters (e.g. 8X2K9P)"
+				return m, nil
+			}
+			nick := m.Config.PartyNickname
+			if len(m.PartyInputs) > 1 && strings.TrimSpace(m.PartyInputs[1]) != "" {
+				nick = strings.TrimSpace(m.PartyInputs[1])
+			}
+			sess, err := party.NewPartySession(party.SessionConfig{
+				RoomCode: code,
+				Nickname: nick,
+				IsHost:   false,
+				Port:     0,
+			})
+			if err != nil {
+				m.PartyStatusMsg = "Join error: " + err.Error()
+				return m, nil
+			}
+
+			m.PartySession = sess
+			m.SetupPartyHandlers(sess)
+			if len(m.PartyInputs) > 2 && strings.TrimSpace(m.PartyInputs[2]) != "" {
+				_ = sess.ConnectDirect(strings.TrimSpace(m.PartyInputs[2]))
+			}
+			m.ShowPartyModal = false
+			m.StatusMessage = fmt.Sprintf("✓ Connected to party room %s!", sess.FormattedCode())
+
+		case "backspace":
+			if len(m.PartyInputs[m.PartyInputFocus]) > 0 {
+				runes := []rune(m.PartyInputs[m.PartyInputFocus])
+				m.PartyInputs[m.PartyInputFocus] = string(runes[:len(runes)-1])
+			}
+		default:
+			if len(msg.String()) == 1 {
+				m.PartyInputs[m.PartyInputFocus] += msg.String()
+			}
+		}
+		return m, nil
+
+	default: // Screen 0: Initial Welcome & Selection
+		switch msg.String() {
+		case "esc":
+			m.ShowPartyModal = false
+		case "1":
+			m.PartyModalScreen = 1
+			m.PartyInputFocus = 0
+			m.PartyStatusMsg = ""
+		case "2":
+			m.PartyModalScreen = 2
+			m.PartyInputFocus = 0
+			m.PartyStatusMsg = ""
+		case "j", "down":
+			m.PartyModalCursor = (m.PartyModalCursor + 1) % 2
+		case "k", "up":
+			m.PartyModalCursor = (m.PartyModalCursor + 1) % 2
+		case "enter":
+			if m.PartyModalCursor == 0 {
+				m.PartyModalScreen = 1
+			} else {
+				m.PartyModalScreen = 2
+			}
+			m.PartyInputFocus = 0
+			m.PartyStatusMsg = ""
+		}
+		return m, nil
 	}
 }

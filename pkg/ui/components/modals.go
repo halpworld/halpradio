@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/halpworld/halpradio/pkg/party"
 	"github.com/halpworld/halpradio/pkg/plugin"
 	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/theme"
@@ -1117,6 +1118,266 @@ func RenderPermissionApprovalModal(p plugin.PluginInfo, width int, height int, t
 	modalBox := lipgloss.NewStyle().
 		Border(lipgloss.DoubleBorder()).
 		BorderForeground(th.Secondary).
+		Padding(padY, 2).
+		Width(boxWidth).
+		Render(content)
+
+	return PlaceOverlay(modalBox, width, height)
+}
+
+// RenderPartyManagerModal renders the Party Line management modal overlay.
+func RenderPartyManagerModal(
+	session *party.PartySession,
+	screen int, // 0: Menu/Welcome, 1: Create Room, 2: Join Room, 3: Active Dashboard
+	cursor int,
+	inputs []string,
+	focusIdx int,
+	statusMsg string,
+	width int,
+	height int,
+	th theme.Theme,
+) string {
+	boxWidth := 68
+	if width < 72 {
+		boxWidth = width - 4
+	}
+	if boxWidth < 38 {
+		boxWidth = 38
+	}
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(th.Primary).Align(lipgloss.Center)
+	descStyle := lipgloss.NewStyle().Foreground(th.Muted)
+	activeStyle := lipgloss.NewStyle().Foreground(th.Playing).Bold(true)
+	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(th.Secondary)
+
+	var content string
+
+	if session != nil && session.IsActive() {
+		// Screen 3 / Active Room Dashboard
+		roster := session.PeerRoster()
+		var peerLines []string
+		for _, p := range roster {
+			tag := ""
+			if p.IsHost {
+				tag = " (Host 👑)"
+			}
+			if p.ID == session.PeerID() {
+				tag += " (You)"
+			}
+			pingText := fmt.Sprintf("%dms", p.PingMs)
+			line := fmt.Sprintf("  • @%-16s %-14s %s", p.Nickname, tag, lipgloss.NewStyle().Foreground(th.Muted).Render(pingText))
+			if p.ID == session.PeerID() {
+				line = activeStyle.Render(line)
+			}
+			peerLines = append(peerLines, line)
+		}
+
+		djPassText := "Host Only"
+		if session.DJPass() == party.DJPassOpenDemocracy {
+			djPassText = "Open Democracy (Anyone can tune)"
+		}
+
+		stName := "None"
+		if s := session.CurrentSync(); s != nil && s.StationName != "" {
+			stName = s.StationName
+		}
+
+		statusLine := ""
+		if statusMsg != "" {
+			statusLine = lipgloss.NewStyle().Foreground(th.Highlight).Bold(true).Render(statusMsg) + "\n\n"
+		}
+
+		content = lipgloss.JoinVertical(
+			lipgloss.Left,
+			titleStyle.Render(fmt.Sprintf("👥 TERMINAL PARTY ROOM: %s", session.FormattedCode())),
+			"",
+			statusLine+
+				fmt.Sprintf("  Room Name:   %s", lipgloss.NewStyle().Foreground(th.Foreground).Bold(true).Render(session.RoomName())),
+			fmt.Sprintf("  Host:        @%s", lipgloss.NewStyle().Foreground(th.Secondary).Bold(true).Render(session.HostNickname())),
+			fmt.Sprintf("  DJ Pass:     %s", lipgloss.NewStyle().Foreground(th.Playing).Render(djPassText)),
+			fmt.Sprintf("  Station:     %s", lipgloss.NewStyle().Foreground(th.Foreground).Render(stName)),
+			"",
+			labelStyle.Render(fmt.Sprintf("Connected Listeners (%d):", len(roster))),
+			strings.Join(peerLines, "\n"),
+			"",
+			lipgloss.NewStyle().Foreground(th.Border).Render(strings.Repeat("─", boxWidth-6)),
+			"",
+			lipgloss.NewStyle().Foreground(th.Foreground).Render("  [ c ] Copy Room Code to Clipboard"),
+			lipgloss.NewStyle().Foreground(th.Foreground).Render("  [ d ] Toggle DJ Pass (Host only)"),
+			lipgloss.NewStyle().Foreground(th.Favorite).Render("  [ l ] Leave Party Room"),
+			lipgloss.NewStyle().Foreground(th.Muted).Render("  [ Esc ] Close Manager (Continue Listening)"),
+		)
+	} else if screen == 1 {
+		// Screen 1: Create Room Form
+		inputBox := func(idx int, val string, placeholder string) string {
+			isFocused := (focusIdx == idx)
+			boxSt := lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				Padding(0, 1).
+				Width(boxWidth - 10)
+			if isFocused {
+				boxSt = boxSt.BorderForeground(th.Playing)
+			} else {
+				boxSt = boxSt.BorderForeground(th.Border)
+			}
+			txt := val
+			if txt == "" {
+				txt = lipgloss.NewStyle().Foreground(th.Muted).Italic(true).Render(placeholder)
+			}
+			if isFocused {
+				txt += "█"
+			}
+			return boxSt.Render(txt)
+		}
+
+		djPassDisplay := "[ Host Only ]"
+		if len(inputs) > 2 && inputs[2] == "open" {
+			djPassDisplay = "[ Open Democracy ]"
+		}
+		if focusIdx == 2 {
+			djPassDisplay = activeStyle.Render(djPassDisplay + "  (Press Space/Tab to toggle)")
+		} else {
+			djPassDisplay = lipgloss.NewStyle().Foreground(th.Secondary).Render(djPassDisplay)
+		}
+
+		nameVal := ""
+		if len(inputs) > 0 {
+			nameVal = inputs[0]
+		}
+		nickVal := ""
+		if len(inputs) > 1 {
+			nickVal = inputs[1]
+		}
+
+		statusLine := ""
+		if statusMsg != "" {
+			statusLine = lipgloss.NewStyle().Foreground(th.Highlight).Bold(true).Render(statusMsg) + "\n\n"
+		}
+
+		content = lipgloss.JoinVertical(
+			lipgloss.Left,
+			titleStyle.Render("🎉 CREATE PARTY ROOM"),
+			"",
+			statusLine+
+				labelStyle.Render("Room Name:"),
+			inputBox(0, nameVal, "e.g. team-focus, chill-vibes"),
+			"",
+			labelStyle.Render("Your Nickname:"),
+			inputBox(1, nickVal, "e.g. arkalon76"),
+			"",
+			labelStyle.Render("DJ Pass Mode:"),
+			"  "+djPassDisplay,
+			"",
+			lipgloss.NewStyle().Foreground(th.Border).Render(strings.Repeat("─", boxWidth-6)),
+			"",
+			lipgloss.NewStyle().Foreground(th.Playing).Bold(true).Render("[ Enter ] Create Room & Generate Code"),
+			lipgloss.NewStyle().Foreground(th.Muted).Render("[ Tab / Shift+Tab ] Next field | [ Esc ] Back"),
+		)
+	} else if screen == 2 {
+		// Screen 2: Join Room Form
+		inputBox := func(idx int, val string, placeholder string) string {
+			isFocused := (focusIdx == idx)
+			boxSt := lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				Padding(0, 1).
+				Width(boxWidth - 10)
+			if isFocused {
+				boxSt = boxSt.BorderForeground(th.Playing)
+			} else {
+				boxSt = boxSt.BorderForeground(th.Border)
+			}
+			txt := val
+			if txt == "" {
+				txt = lipgloss.NewStyle().Foreground(th.Muted).Italic(true).Render(placeholder)
+			}
+			if isFocused {
+				txt += "█"
+			}
+			return boxSt.Render(txt)
+		}
+
+		codeVal := ""
+		if len(inputs) > 0 {
+			codeVal = inputs[0]
+		}
+		nickVal := ""
+		if len(inputs) > 1 {
+			nickVal = inputs[1]
+		}
+		addrVal := ""
+		if len(inputs) > 2 {
+			addrVal = inputs[2]
+		}
+
+		statusLine := ""
+		if statusMsg != "" {
+			statusLine = lipgloss.NewStyle().Foreground(th.Favorite).Bold(true).Render(statusMsg) + "\n\n"
+		}
+
+		content = lipgloss.JoinVertical(
+			lipgloss.Left,
+			titleStyle.Render("🔗 JOIN PARTY ROOM"),
+			"",
+			statusLine+
+				labelStyle.Render("6-Character Room Code:"),
+			inputBox(0, codeVal, "e.g. 8X2K9P or #8X2K9P"),
+			"",
+			labelStyle.Render("Your Nickname:"),
+			inputBox(1, nickVal, "e.g. listener"),
+			"",
+			labelStyle.Render("Direct Host Address (optional):"),
+			inputBox(2, addrVal, "leave empty for LAN / auto-discovery"),
+			"",
+			lipgloss.NewStyle().Foreground(th.Border).Render(strings.Repeat("─", boxWidth-6)),
+			"",
+			lipgloss.NewStyle().Foreground(th.Playing).Bold(true).Render("[ Enter ] Connect to Room"),
+			lipgloss.NewStyle().Foreground(th.Muted).Render("[ Tab / Shift+Tab ] Next field | [ Esc ] Back"),
+		)
+	} else {
+		// Screen 0: Initial Welcome & Selection
+		menuItems := []string{
+			"🎉  Create a Party Room (Become DJ)",
+			"🔗  Join a Party Room with Code",
+		}
+		var renderedItems []string
+		for i, item := range menuItems {
+			if cursor == i {
+				renderedItems = append(renderedItems, activeStyle.Render("  ▶ "+item))
+			} else {
+				renderedItems = append(renderedItems, lipgloss.NewStyle().Foreground(th.Foreground).Render("    "+item))
+			}
+		}
+
+		statusLine := ""
+		if statusMsg != "" {
+			statusLine = lipgloss.NewStyle().Foreground(th.Highlight).Bold(true).Render(statusMsg) + "\n\n"
+		}
+
+		content = lipgloss.JoinVertical(
+			lipgloss.Left,
+			titleStyle.Render("👥 TERMINAL PARTY MANAGER"),
+			"",
+			statusLine+
+				descStyle.Render("Synchronized peer-to-peer radio rooms with live ASCII reactions."),
+			descStyle.Render("No third-party audio servers. Fully end-to-end encrypted."),
+			"",
+			strings.Join(renderedItems, "\n\n"),
+			"",
+			lipgloss.NewStyle().Foreground(th.Border).Render(strings.Repeat("─", boxWidth-6)),
+			"",
+			lipgloss.NewStyle().Foreground(th.Playing).Bold(true).Render("[ Enter / 1-2 ] Select"),
+			lipgloss.NewStyle().Foreground(th.Muted).Render("[ j/k / ↑/↓ ] Navigate | [ Esc ] Close"),
+		)
+	}
+
+	padY := 1
+	if height < 24 {
+		padY = 0
+	}
+
+	modalBox := lipgloss.NewStyle().
+		Border(lipgloss.DoubleBorder()).
+		BorderForeground(th.Primary).
 		Padding(padY, 2).
 		Width(boxWidth).
 		Render(content)
