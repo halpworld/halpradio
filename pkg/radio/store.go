@@ -248,6 +248,20 @@ func (s *Store) GetAllStations() []Station {
 	return list
 }
 
+// FindStationByID searches all stations in the store for a matching ID.
+func (s *Store) FindStationByID(id string) *Station {
+	if id == "" {
+		return nil
+	}
+	for _, st := range s.GetAllStations() {
+		if st.ID == id {
+			copy := st
+			return &copy
+		}
+	}
+	return nil
+}
+
 func (s *Store) GetFavorites() []Station {
 	var list []Station
 	for _, st := range s.FavItems {

@@ -51,13 +51,18 @@ type KeyMap struct {
 	FastSweepRight key.Binding
 	Timer          key.Binding
 	Plugins        key.Binding
+	Party          key.Binding
 	IdentifyTrack  key.Binding
 }
 
 func DefaultKeyMap() KeyMap {
 	return KeyMap{
+		Party: key.NewBinding(
+			key.WithKeys("ctrl+p"),
+			key.WithHelp("ctrl+p", "party room manager"),
+		),
 		Plugins: key.NewBinding(
-			key.WithKeys("P", "ctrl+p"),
+			key.WithKeys("P"),
 			key.WithHelp("P", "plugins manager"),
 		),
 		Up: key.NewBinding(
@@ -97,7 +102,7 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("n/]", "next station"),
 		),
 		PrevStation: key.NewBinding(
-			key.WithKeys("N", "[", "ctrl+p", "prev", "previous", "media_prev", "mediaprev", "xf86audioprev"),
+			key.WithKeys("N", "[", "prev", "previous", "media_prev", "mediaprev", "xf86audioprev"),
 			key.WithHelp("N/[", "prev station"),
 		),
 		PlayPause: key.NewBinding(

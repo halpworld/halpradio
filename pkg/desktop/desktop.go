@@ -1,6 +1,7 @@
 package desktop
 
 import (
+	"fmt"
 	"runtime"
 	"strings"
 	"sync"
@@ -30,6 +31,8 @@ type Manager struct {
 	ipc           *IPCServer
 	discord       DiscordClient
 	onAction      func(MediaAction)
+	onPartyAction func(MediaAction, string) error
+	partyInfo     *PartyInfo
 	playbackStart time.Time
 
 	// Cached playback state
@@ -45,6 +48,15 @@ type Manager struct {
 	backend      string
 	visualizer   string
 	closed       bool
+}
+
+func isPartyAction(action MediaAction) bool {
+	switch action {
+	case ActionPartyCreate, ActionPartyJoin, ActionPartyLeave, ActionPartyStatus, ActionPartyReact, ActionPartyChat:
+		return true
+	default:
+		return false
+	}
 }
 
 // NewManager creates and starts the desktop integration services according to config.
@@ -73,9 +85,22 @@ func NewManager(cfg DesktopConfig, onAction func(MediaAction)) *Manager {
 
 	// Start IPC Server if enabled
 	if cfg.IPCEnabled {
-		ipcServer, err := StartIPCServer(cfg.SocketPath, func(action MediaAction) (*PlaybackInfo, error) {
-			if action == ActionStatus {
+		ipcServer, err := StartIPCServerWithPayload(cfg.SocketPath, func(action MediaAction, payload string) (*PlaybackInfo, error) {
+			if action == ActionStatus || action == ActionPartyStatus {
 				return m.GetPlaybackInfo(), nil
+			}
+
+			if isPartyAction(action) {
+				m.mu.Lock()
+				partyHandler := m.onPartyAction
+				m.mu.Unlock()
+				if partyHandler != nil {
+					if err := partyHandler(action, payload); err != nil {
+						return m.GetPlaybackInfo(), err
+					}
+					return m.GetPlaybackInfo(), nil
+				}
+				return m.GetPlaybackInfo(), fmt.Errorf("party mode handler not configured")
 			}
 
 			if onAction != nil {
@@ -317,7 +342,28 @@ func (m *Manager) GetPlaybackInfo() *PlaybackInfo {
 		Muted:       m.isMuted,
 		Backend:     m.backend,
 		Visualizer:  viz,
+		Party:       m.partyInfo,
 	}
+}
+
+// SetPartyHandler registers a callback for party-related IPC actions.
+func (m *Manager) SetPartyHandler(h func(MediaAction, string) error) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.onPartyAction = h
+}
+
+// SetPartyInfo updates the cached party room state snapshot.
+func (m *Manager) SetPartyInfo(info *PartyInfo) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.partyInfo = info
 }
 
 // SetNotificationsEnabled toggles desktop notifications.

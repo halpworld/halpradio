@@ -293,3 +293,81 @@ func TestIPCSocketSymlinkSecurity(t *testing.T) {
 		t.Errorf("expected error rejecting symlink socket, got %v", err)
 	}
 }
+
+func TestIPCPartyCommandsAndPayload(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "pty-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	sockPath := filepath.Join(tempDir, "p.sock")
+
+	var receivedAction MediaAction
+	var receivedPayload string
+
+	partyState := &PlaybackInfo{
+		Status: "playing",
+		Party: &PartyInfo{
+			Active:    true,
+			RoomCode:  "8X2K9P",
+			RoomName:  "team-focus",
+			IsHost:    true,
+			Host:      "alice",
+			DJPass:    "host",
+			Listeners: 3,
+			Peers:     []string{"alice", "bob", "charlie"},
+		},
+	}
+
+	server, err := StartIPCServerWithPayload(sockPath, func(action MediaAction, payload string) (*PlaybackInfo, error) {
+		receivedAction = action
+		receivedPayload = payload
+		return partyState, nil
+	})
+	if err != nil {
+		t.Fatalf("StartIPCServerWithPayload failed: %v", err)
+	}
+	defer server.Close()
+
+	// 1. Test party-join with payload
+	resp, err := SendIPCCommandWithPayload(sockPath, "party-join", "8X2K9P")
+	if err != nil {
+		t.Fatalf("SendIPCCommandWithPayload party-join failed: %v", err)
+	}
+	if !resp.Success {
+		t.Errorf("expected success true, got %v (%s)", resp.Success, resp.Message)
+	}
+	if receivedAction != ActionPartyJoin || receivedPayload != "8X2K9P" {
+		t.Errorf("expected party-join with 8X2K9P, got %s / %s", receivedAction, receivedPayload)
+	}
+	if resp.Status == nil || resp.Status.Party == nil || resp.Status.Party.RoomCode != "8X2K9P" {
+		t.Errorf("expected party status with room code 8X2K9P, got %+v", resp.Status)
+	}
+
+	// 2. Test party-react with emoji
+	resp, err = SendIPCCommandWithPayload(sockPath, "party-react", "🔥")
+	if err != nil {
+		t.Fatalf("SendIPCCommandWithPayload party-react failed: %v", err)
+	}
+	if receivedAction != ActionPartyReact || receivedPayload != "🔥" {
+		t.Errorf("expected party-react with 🔥, got %s / %s", receivedAction, receivedPayload)
+	}
+
+	// 3. Test space-delimited fallback: "party-chat hello world"
+	resp, err = SendIPCCommand(sockPath, "party-chat hello world")
+	if err != nil {
+		t.Fatalf("SendIPCCommand space-delimited failed: %v", err)
+	}
+	if receivedAction != ActionPartyChat || receivedPayload != "hello world" {
+		t.Errorf("expected party-chat with 'hello world', got %s / %s", receivedAction, receivedPayload)
+	}
+}
+
+func TestSanitizeStringRuneSafe(t *testing.T) {
+	// 5 distinct single-rune emojis + extra
+	input := "🔥🎸🎉🚀👀 extra"
+	sanitized := SanitizeString(input, 5)
+	if sanitized != "🔥🎸🎉🚀👀" {
+		t.Errorf("expected '🔥🎸🎉🚀👀', got %q", sanitized)
+	}
+}
