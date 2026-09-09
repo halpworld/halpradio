@@ -4,22 +4,22 @@
 class Halpradio < Formula
   desc "LazyVim-inspired Terminal Internet Radio Streamer"
   homepage "https://github.com/halpworld/halpradio"
-  version "0.4.0"
+  version "0.5.0"
   license "GPL-3.0-or-later"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/halpworld/halpradio/releases/download/v0.4.0/halpradio_0.4.0_darwin_arm64.tar.gz"
+      url "https://github.com/halpworld/halpradio/releases/download/v0.5.0/halpradio_0.5.0_darwin_arm64.tar.gz"
     else
-      url "https://github.com/halpworld/halpradio/releases/download/v0.4.0/halpradio_0.4.0_darwin_amd64.tar.gz"
+      url "https://github.com/halpworld/halpradio/releases/download/v0.5.0/halpradio_0.5.0_darwin_amd64.tar.gz"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm? && Hardware::CPU.is_64_bit?
-      url "https://github.com/halpworld/halpradio/releases/download/v0.4.0/halpradio_0.4.0_linux_arm64.tar.gz"
+      url "https://github.com/halpworld/halpradio/releases/download/v0.5.0/halpradio_0.5.0_linux_arm64.tar.gz"
     else
-      url "https://github.com/halpworld/halpradio/releases/download/v0.4.0/halpradio_0.4.0_linux_amd64.tar.gz"
+      url "https://github.com/halpworld/halpradio/releases/download/v0.5.0/halpradio_0.5.0_linux_amd64.tar.gz"
     end
   end
 

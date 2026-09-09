@@ -55,12 +55,13 @@ halpradio/
     ├── app/              # CLI flag parsing, configuration loading & app bootstrap
     ├── player/           # Multi-backend audio playback engine & ICY stream reader
     │   └── fingerprint/  # Acoustic stream recognition, Chromaprint / AcoustID client, LRU cache
+    ├── party/            # P2P mesh synchronized radio rooms, Argon2id/AES-256-GCM E2EE & protocol engine
     ├── plugin/           # Wazero Wasm sandboxing engine, capability permissions, host API, registry client
     ├── radio/            # Station catalog store, YAML parser, RadioBrowser client & metadata sanitizer
     ├── theme/            # Theme definitions & color palette registry
     ├── timer/            # Pomodoro focus engine, sleep timer with volume fade, and OS event dispatcher
     ├── ui/               # Main Bubble Tea Model, Update, View, and Keymap logic
-    │   └── components/   # Modular UI sub-views (Header, StationList, PlayerBar, Visualizer, Modals)
+    │   └── components/   # Modular UI sub-views (Header, StationList, PlayerBar, Visualizer, Modals, PartyBar)
     └── util/             # OS configuration directory resolution & clipboard utilities
 ```
 
@@ -68,7 +69,8 @@ halpradio/
 
 | Package | Key Types / Files | Responsibilities |
 |---|---|---|
-| [`pkg/app`](../pkg/app/app.go) | `Run()`, `RunPluginCLI()` | Parses CLI flags (`--backend`, `--theme`, `--version`, `--fingerprint`, `--auto-identify`), handles CLI subcommands (`remote`, `plugin`), sets up store, instantiates `player.Manager`, initializes `tea.Program`. |
+| [`pkg/app`](../pkg/app/app.go) | `Run()`, `RunPluginCLI()` | Parses CLI flags (`--backend`, `--theme`, `--version`, `--fingerprint`, `--auto-identify`), handles CLI subcommands (`remote`, `plugin`, `party`), sets up store, instantiates `player.Manager`, initializes `tea.Program`. |
+| [`pkg/party`](../pkg/party/sync.go) | `Session`, `MeshNode`, `Packet`, `Crypto` | P2P mesh synchronized radio rooms, WebRTC data channels, Argon2id key derivation & AES-256-GCM encryption, sub-second playback sync, host election, ASCII reaction bus. |
 | [`pkg/player`](../pkg/player/player.go) | `Player`, `Manager`, `TrackInfo` | Detects audio CLI backends (`mpv`, `vlc`, `ffplay`, etc.) or falls back to native Go audio. Runs ICY metadata streaming goroutine. |
 | [`pkg/player/fingerprint`](../pkg/player/fingerprint/client.go) | `Client`, `Result`, `LRUCache` | Captures 5s audio buffers, computes Chromaprint subfingerprints, queries AcoustID & MusicBrainz APIs with LRU caching. |
 | [`pkg/plugin`](../pkg/plugin/manager.go) | `Manager`, `Sandbox`, `Manifest`, `RegistryClient` | Executes sandboxed WebAssembly plugins via Wazero with capability checks (`network`, `storage`, `events`). Fetches and verifies official registry packages. |
