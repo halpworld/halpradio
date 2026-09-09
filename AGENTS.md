@@ -40,6 +40,7 @@ halpradio/
 ├── pkg/
     ├── app/app.go        # CLI flags (-backend, -theme, -version), config loading, tea.Program setup
     ├── player/player.go   # Player interface, Manager struct, multi-backend exec, native Oto audio, ICY stream listener
+    ├── party/            # P2P mesh synchronized radio rooms, Argon2id/AES-256-GCM E2EE & protocol engine
     ├── plugin/           # Wazero Wasm sandbox, capability permissions, host API, registry client
     ├── radio/            # Store (bundled/local/favorites), Station struct, RadioBrowser HTTP client
     ├── theme/theme.go    # Theme struct & color palettes (tokyonight, catppuccin, synthwave, nord, gruvbox, dracula)

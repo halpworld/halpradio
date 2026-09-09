@@ -78,6 +78,7 @@ docker run --rm -it --device /dev/snd halpworld/halpradio:latest
 | **Linux MPRIS v2 & Media Keys** | ✅ **Native D-Bus + `playerctl`** | ❌ None | ❌ None | ❌ None | ⚠️ Basic MPRIS |
 | **Song Change Desktop Notifications** | ✅ **Native macOS/Linux/Win + Dedupe** | ❌ None | ❌ None | ❌ None | ❌ None |
 | **CLI & Hotkey Remote (`halpradio remote`)** | ✅ **macOS Shortcuts, Raycast, tmux** | ❌ None | ❌ None | ❌ None | ⚠️ Socket |
+| **Terminal Party Line (`Ctrl+p`)** | ✅ **P2P Mesh Sync, E2EE Rooms & Reactions** | ❌ None | ❌ None | ❌ None | ❌ None |
 | **Acoustic Fingerprinting (`I`)** | ✅ **Chromaprint / AcoustID + Ad Strip** | ❌ None | ❌ None | ❌ None | ❌ None |
 | **Pomodoro & Sleep Timers (`z`)** | ✅ **Intervals, Station Switch & OS Notify** | ❌ None | ❌ None | ❌ None | ⚠️ Basic sleep |
 | **Beat-Reactive Animated Visualizers** | ✅ **5 Animal DJs + EQ Spectrum** | ❌ None | ❌ None | ❌ None | ⚠️ Basic VU |
@@ -321,6 +322,42 @@ Internet radio ICY streams often emit dirty titles like:
 
 ---
 
+## 🎉 Terminal Party Line: P2P Mesh Synchronized Radio Rooms & Reactions
+
+Share the groove with teammates, study groups, or friends with zero central audio relaying! `halpradio` features an end-to-end encrypted (E2EE) P2P mesh party system powered by WebRTC data channels:
+
+### 👥 In-TUI Party Manager (`Ctrl+p`)
+- **Quick Create & Join**: Press `Ctrl+p` anywhere in the app to host a new room with a memorable 6-character room code (e.g. `#8X2K9P`) or join an existing session.
+- **Argon2id & AES-256-GCM Encryption**: Every party room derives high-entropy session keys with Argon2id and encrypts all peer-to-peer control traffic using AES-256-GCM with CSPRNG nonces.
+- **Zero Central Audio Relaying**: Audio streams directly from the source radio broadcast on each client while synchronization commands and metadata travel peer-to-peer over WebRTC data channels.
+- **DJ Pass Governance**: Host can choose **Host Only** (only the room creator can change stations) or **Open Democracy** (any participant can tune stations).
+- **Sub-Second Playback Sync**: Late-joining listeners automatically tune to the room's current broadcast with sub-second clock sync.
+- **Deterministic Host Election**: If the room host disconnects, peers deterministically elect a successor host without interrupting playback.
+
+### 🎈 Live ASCII Reactions & Mini-Chat
+- While in an active party room, press `1` - `5` anytime to float live reactions across connected listeners' terminals:
+  - `1`: 🔥 Fire
+  - `2`: ❤️ Heart
+  - `3`: ☕ Coffee
+  - `4`: 🚀 Rocket
+  - `5`: 👀 Eyes
+- Floating reactions rise and decay gracefully over 3.5 seconds in the party bar without disturbing your TUI view.
+
+### ⌨️ CLI Party Commands
+Control and join party rooms directly from your shell or tmux sessions:
+```bash
+halpradio party create "team-focus"       # Create room and launch TUI
+halpradio party create --dj-pass=open     # Create room with democratic DJ control
+halpradio party create --headless         # Host room headlessly in server / tmux
+halpradio party join 8X2K9P               # Join room #8X2K9P with interactive TUI
+halpradio party status                    # Inspect current room, listener count, and host
+halpradio party react 1                   # Send 🔥 reaction to current room
+halpradio party chat "Loving this track!"  # Send mini-chat ping to room
+halpradio party leave                     # Disconnect from current room
+```
+
+---
+
 ## ⌨️ Navigation & Keybindings (Vim & Media Style)
 
 Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Overlay**.
@@ -338,7 +375,9 @@ Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Over
 | | `0` / `F` | Jump directly to Analog Frequency Tuner (experimental) |
 | | `g` / `G` | Jump to top / bottom of list |
 | | `Ctrl+u` / `Ctrl+d` | Half page up / down |
-| **Discovery & Sharing** | `I` | **Identify playing track** via acoustic stream fingerprinting (Chromaprint / AcoustID) |
+| **Discovery & Sharing** | `Ctrl+p` | Open **Party Room Manager** (P2P mesh synchronized listening & room setup) |
+| | `1` - `5` | Send live floating ASCII reaction (🔥 ❤️ ☕ 🚀 👀) when in Party Room |
+| | `I` | **Identify playing track** via acoustic stream fingerprinting (Chromaprint / AcoustID) |
 | | `y` | Yank / copy track metadata (`Artist - Title`) or identified song to system clipboard |
 | | `o` | Open streaming search in default web browser (Spotify, YT Music, Apple, DDG, Google) |
 | | `s` | Star / bookmark track to `~/.config/halpradio/saved_tracks.txt` (on History tab) |
