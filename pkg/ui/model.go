@@ -6,7 +6,9 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/halpworld/halpradio/pkg/art"
 	"github.com/halpworld/halpradio/pkg/desktop"
+	"github.com/halpworld/halpradio/pkg/lyrics"
 	"github.com/halpworld/halpradio/pkg/party"
 	"github.com/halpworld/halpradio/pkg/player"
 	"github.com/halpworld/halpradio/pkg/player/fingerprint"
@@ -24,6 +26,7 @@ type FocusArea int
 const (
 	FocusMainList FocusArea = iota
 	FocusSidebar
+	FocusLyrics
 )
 
 type TickMsg time.Time
@@ -207,6 +210,34 @@ type Model struct {
 	LastFingerprintTime time.Time
 	FingerprintClient   *fingerprint.Client
 
+	// Synced lyrics & terminal album art state
+	ShowLyrics       bool
+	ShowArtModal     bool
+	LyricsClient     *lyrics.Client
+	LyricsSheet      *lyrics.Sheet
+	LyricsStatus     string
+	IsFetchingLyrics bool
+	LyricsScroll     int
+	LyricsOffset     time.Duration
+	LyricsTrackKey   string
+	TrackStartTime   time.Time
+
+	ArtClient     *art.Client
+	ArtRenderer   *art.Renderer
+	ArtProtocol   art.Protocol
+	Cover         *art.Cover
+	ArtLines      []string
+	ArtCols       int
+	ArtRows       int
+	ArtStatus     string
+	IsFetchingArt bool
+	ArtTrackKey   string
+
+	// ArtClearFrames counts down the frames that still carry the protocol's
+	// image-delete escape. Kitty placements survive a text repaint, so a
+	// closed drawer has to explicitly evict them.
+	ArtClearFrames int
+
 	// Terminal Party Room State
 	PartySession     *party.PartySession
 	ShowPartyModal   bool
@@ -218,6 +249,10 @@ type Model struct {
 	IsChatting       bool
 	ChatInput        string
 	sendMsgFn        func(tea.Msg)
+
+	// nowPlayingSig is the station + track signature the lyric sheet and
+	// artwork currently belong to, used to notice a change on air.
+	nowPlayingSig string
 }
 
 func NewModel(
@@ -289,6 +324,19 @@ func NewModel(
 		PlaybackStartTime:          time.Now(),
 		FingerprintClient:          fingerprint.NewClient(cfg.AcoustidAPIKey),
 		PartyInputs:                make([]string, 3),
+		LyricsOffset:               time.Duration(cfg.LyricsOffsetMs) * time.Millisecond,
+		ShowLyrics:                 cfg.LyricsEnabled && cfg.LyricsAutoOpen,
+	}
+
+	if cfg.LyricsEnabled {
+		m.LyricsClient = lyrics.NewClient(util.GetLyricsCacheDir())
+	}
+	if cfg.AlbumArtEnabled {
+		m.ArtProtocol = art.Resolve(cfg.AlbumArtProtocol)
+		m.ArtRenderer = art.NewRenderer(m.ArtProtocol)
+		m.ArtClient = art.NewClient(util.GetAlbumArtCacheDir(), cfg.LastFMAPIKey)
+	} else {
+		m.ArtProtocol = art.ProtocolNone
 	}
 
 	allThemes := theme.GetAllThemes()
@@ -617,6 +665,7 @@ func (m *Model) PlayNextStation() {
 	m.IsIdentifying = false
 	m.PlaybackStartTime = time.Now()
 	m.LastFingerprintTime = time.Time{}
+	m.resetNowPlaying()
 	_ = m.Player.Play(st)
 	m.PlayingID = st.ID
 	m.StatusMessage = fmt.Sprintf("Playing %s [%s]", st.Name, m.Player.ActiveBackend())
@@ -637,6 +686,7 @@ func (m *Model) PlayPrevStation() {
 	m.IsIdentifying = false
 	m.PlaybackStartTime = time.Now()
 	m.LastFingerprintTime = time.Time{}
+	m.resetNowPlaying()
 	_ = m.Player.Play(st)
 	m.PlayingID = st.ID
 	m.StatusMessage = fmt.Sprintf("Playing %s [%s]", st.Name, m.Player.ActiveBackend())
@@ -672,6 +722,7 @@ func (m *Model) TogglePlayPause() {
 		m.IsIdentifying = false
 		m.PlaybackStartTime = time.Now()
 		m.LastFingerprintTime = time.Time{}
+		m.resetNowPlaying()
 		_ = m.Player.Play(st)
 		m.PlayingID = st.ID
 		m.StatusMessage = fmt.Sprintf("Playing %s [%s]", st.Name, m.Player.ActiveBackend())

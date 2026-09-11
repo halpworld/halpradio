@@ -322,6 +322,66 @@ Internet radio ICY streams often emit dirty titles like:
 
 ---
 
+## 📜 Real-Time Synced Karaoke Lyrics & Multi-Protocol Terminal Album Art
+
+Modern terminals grew real graphics capabilities, so `halpradio` uses them. Press `L` for a live lyric sheet that scrolls itself, and `A` for the cover art of whatever is on air — all without leaving the terminal.
+
+### 🎤 Live Synced Lyrics Drawer (`L` key)
+- **LRCLIB First**: Queries [LRCLIB](https://lrclib.net) with the artist, title and duration taken from ICY stream metadata or the acoustic fingerprint, then falls back to NetEase when LRCLIB has no match.
+- **Auto-Scrolling Karaoke View**: When timestamped `.lrc` data exists, the drawer highlights the line being sung, fades the surrounding lines, and draws a progress gauge across the active line.
+- **Manual Scroll For Plain Text**: Unsynced lyrics render as a formatted sheet you scroll with `j` / `k`.
+- **Sync Nudge**: Internet radio exposes no seek position, so the lyric clock starts when the station announces a new title. Press `,` and `.` to shift the sync in 0.5 second steps when a station announces late or early.
+- **Never Blocks The UI**: Every lookup runs as a Bubble Tea command off the update loop, so the TUI stays responsive on slow connections.
+- **Fits Any Terminal**: At 80 columns or wider the drawer takes its own columns rather than overlapping the station list; below that the sheet becomes a full-width overlay, and resizing moves it between the two without closing it.
+- **Disk & Memory Cache**: Sheets are memoised in RAM and cached under `~/.cache/halpradio/lyrics/`, and stations with no match are negative-cached so the APIs are not hammered every track.
+
+### 🖼️ Multi-Protocol Album Art (`A` key)
+`halpradio` detects your terminal's best image transport at startup and encodes artwork for it:
+
+| Priority | Protocol | Terminals |
+|---|---|---|
+| 1 | **Kitty Graphics** | Ghostty, Kitty, WezTerm |
+| 2 | **iTerm2 Inline Images** | iTerm2, WezTerm |
+| 3 | **Sixel** | Foot, xterm, mlterm, yaft |
+| 4 | **Truecolor Half-Block** | every 24-bit colour terminal |
+| 5 | **Braille** | 256-colour and monochrome fallback |
+
+- **High-Res Cover Lookup**: Artwork is resolved from the iTunes Search API, Deezer, MusicBrainz plus the [Cover Art Archive](https://coverartarchive.org/), and Last.fm when you supply `lastfm_api_key`.
+- **No Distortion On Basic Terminals**: The half-block and Braille renderers letterbox the image to keep covers square, and every renderer emits output padded to an exact cell grid so the surrounding layout never shifts.
+- **Two Surfaces**: A thumbnail sits at the top of the lyrics drawer, and `A` opens a floating full-size viewer showing the album, the provider and the active protocol.
+- **Cached Locally**: Downloaded covers live under `~/.cache/halpradio/art/`.
+
+```text
+┌─ 📻 CATALOG ──────────────────┬─ 📜 LIVE LYRICS ───────────────┐
+│  ▶ SomaFM Groove Salad        │      ▄▄▄▄▄▄▄▄▄▄▄▄              │
+│    Nightwave Plaza            │      █ ALBUM ART █             │
+│    Radio Paradise             │      ▀▀▀▀▀▀▀▀▀▀▀▀              │
+│    KEXP 90.3                  │       🖼 iTunes                 │
+│                               │  Tycho - A Walk                │
+│                               │                                │
+│                               │    I've been wandering         │
+│                               │  ► Searching for a signal ◄    │
+│                               │    Everything is quiet         │
+│                               │  ━━━━━━━━━━━───────            │
+│                               │  ⏱ Synced via LRCLIB           │
+│                               │  L close · , . sync            │
+└───────────────────────────────┴────────────────────────────────┘
+```
+
+Tune the feature from `~/.config/halpradio/config.yaml`:
+```yaml
+lyrics_enabled: true          # LRCLIB / NetEase synced lyrics engine
+lyrics_auto_open: false       # open the drawer on startup
+lyrics_offset_ms: 0           # persistent sync correction
+album_art_enabled: true       # terminal cover art renderer
+album_art_protocol: auto      # auto | kitty | iterm2 | sixel | halfblock | braille | off
+lastfm_api_key: ""            # optional extra cover art provider
+```
+
+Set `HALPRADIO_NO_ART=1` to disable image rendering for a single run, or `HALPRADIO_ART_PROTOCOL=halfblock` to force a transport when detection guesses wrong.
+
+---
+
 ## 🎉 Terminal Party Line: P2P Mesh Synchronized Radio Rooms & Reactions
 
 Share the groove with teammates, study groups, or friends with zero central audio relaying! `halpradio` features an end-to-end encrypted (E2EE) P2P mesh party system powered by WebRTC data channels:
@@ -378,6 +438,9 @@ Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Over
 | **Discovery & Sharing** | `Ctrl+p` | Open **Party Room Manager** (P2P mesh synchronized listening & room setup) |
 | | `1` - `5` | Send live floating ASCII reaction (🔥 ❤️ ☕ 🚀 👀) when in Party Room |
 | | `I` | **Identify playing track** via acoustic stream fingerprinting (Chromaprint / AcoustID) |
+| | `L` | Toggle **live synced lyrics drawer** (LRCLIB / NetEase) |
+| | `A` | Toggle **album art viewer** (Kitty / Sixel / iTerm2 / half-block) |
+| | `,` / `.` | Nudge lyric sync backward / forward by 0.5s (lyrics drawer open) |
 | | `y` | Yank / copy track metadata (`Artist - Title`) or identified song to system clipboard |
 | | `o` | Open streaming search in default web browser (Spotify, YT Music, Apple, DDG, Google) |
 | | `s` | Star / bookmark track to `~/.config/halpradio/saved_tracks.txt` (on History tab) |
@@ -510,6 +573,7 @@ Explore detailed technical documentation in the [`docs/`](./docs) folder:
 - 🔌 **[Plugin & Extension System Guide](./docs/PLUGINS.md)**: Sandboxed WebAssembly (Wasm) architecture, capability permissions, developer SDK, and publishing to the official registry.
 - 🎵 **[Audio Engine & Stream Player](./docs/AUDIO_PLAYER.md)**: Multi-backend auto-detection (`mpv`, `vlc`, `ffplay`, native Go), process lifecycle, and real-time ICY metadata extraction.
 - 📻 **[Station Catalog & RadioBrowser Integration](./docs/STATION_MANAGEMENT.md)**: Station storage hierarchy (`stations.yaml`, local config, favorites), RadioBrowser API client, and PR export workflow.
+- 📜 **[Synced Lyrics & Terminal Album Art](./docs/LYRICS_AND_ART.md)**: LRCLIB / NetEase lyric providers, LRC parsing, playback-position estimation, cover art providers, and the Kitty / iTerm2 / Sixel / half-block / Braille renderers.
 - 🎨 **[Theme System & Audio Visualizers](./docs/THEME_SYSTEM.md)**: Lipgloss styling system, theme palettes, and TUI visualizer algorithms.
 - ⚙️ **[Configuration & Keybindings](./docs/CONFIGURATION.md)**: Directory layout, `config.yaml` options, CLI flags, and complete keymap reference.
 - 📦 **[Packaging & Distribution Guide](./docs/PACKAGING.md)**: Specifications for Homebrew, Arch Linux AUR, Docker, Scoop, and Nix.

@@ -43,6 +43,8 @@ halpradio/
     ├── party/            # P2P mesh synchronized radio rooms, Argon2id/AES-256-GCM E2EE & protocol engine
     ├── plugin/           # Wazero Wasm sandbox, capability permissions, host API, registry client
     ├── radio/            # Store (bundled/local/favorites), Station struct, RadioBrowser HTTP client
+    ├── lyrics/           # LRCLIB & NetEase lyric providers, LRC parser, RAM + disk cache
+    ├── art/              # Cover art providers & Kitty/iTerm2/Sixel/half-block/Braille renderers
     ├── theme/theme.go    # Theme struct & color palettes (tokyonight, catppuccin, synthwave, nord, gruvbox, dracula)
     ├── timer/            # Pomodoro focus interval engine, sleep timer with volume fade, OS event dispatcher
     ├── ui/               # Model, Update loop, View orchestrator, keymaps
@@ -68,6 +70,10 @@ halpradio/
 ### 3. Theme Compliance (`pkg/theme/theme.go`)
 - **Rule**: Never hardcode hex color strings (e.g. `#7aa2f7`) inside component files.
 - Always use active theme tokens provided by `m.theme` (e.g. `theme.Primary`, `theme.Secondary`, `theme.Border`, `theme.Playing`).
+
+### 3b. Terminal Image Rendering (`pkg/art`)
+- Every renderer must return exactly `rows` lines whose `lipgloss.Width` equals `cols`. Escape-sequence transports (Kitty APC, iTerm2 OSC 1337, Sixel DCS) pad with spaces so Bubble Tea's layout arithmetic still holds.
+- **Rule**: Rasterise artwork in [`pkg/ui/update.go`](./pkg/ui/update.go) (on a new cover or a `tea.WindowSizeMsg`), never inside a component `View()`.
 
 ### 4. Error Handling & TUI Resilience
 - Audio stream errors or invalid URLs should update `player.Manager` status to `StatusError` or populate `lastError`.

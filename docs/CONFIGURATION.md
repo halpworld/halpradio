@@ -70,6 +70,14 @@ fingerprint_enabled: true   # Enable on-demand acoustic recognition via 'I' (Chr
 auto_identify: false        # Automatically identify music when streams lack ICY track metadata
 acoustid_api_key: ""        # AcoustID API key (leave empty to use default halpradio client key)
 
+# Synced Lyrics & Terminal Album Art
+lyrics_enabled: true        # Enable the LRCLIB / NetEase synced lyrics drawer ('L' key)
+lyrics_auto_open: false     # Open the lyrics drawer automatically on startup
+lyrics_offset_ms: 0         # Persistent lyric sync correction in milliseconds (',' / '.' adjust live)
+album_art_enabled: true     # Enable terminal cover art rendering ('A' key)
+album_art_protocol: auto    # auto | kitty | iterm2 | sixel | halfblock | braille | off
+lastfm_api_key: ""          # Optional extra cover art provider (iTunes, Deezer & Cover Art Archive need no key)
+
 # Experimental Features (On Hold)
 experimental_tuner: false   # Enable experimental Analog Frequency Tuner on Tab 0 (see docs/TUNER.md)
 ```
