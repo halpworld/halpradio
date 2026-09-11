@@ -16,11 +16,14 @@
 - `pkg/player/player.go`: Multi-backend player manager (`mpv`, `vlc`, `ffplay`, etc.) + native Go fallback (`oto/v3` + `go-mp3`) and ICY stream metadata listener.
 - `pkg/radio/store.go`: Station catalog store (`bundled`, `local`, `favorites`), YAML/JSON persistence.
 - `pkg/radio/radiobrowser.go`: RadioBrowser HTTP search client.
+- `pkg/lyrics/`: LRCLIB + NetEase lyric providers, LRC timestamp parser, RAM/disk cache.
+- `pkg/art/`: cover art providers and terminal image renderers (Kitty, iTerm2, Sixel, half-block, Braille).
 - `pkg/theme/theme.go`: Theme definitions (`tokyonight`, `catppuccin`, `synthwave`, `nord`, `gruvbox`, `dracula`).
 - `pkg/timer/`: Pomodoro focus state machine, sleep timer countdown, and OS notification dispatcher.
 - `pkg/ui/model.go` & `update.go` & `view.go`: Bubble Tea Model, Update loop, View orchestrator.
-- `pkg/ui/components/`: Sub-views (`header`, `sidebar`, `stationlist`, `playerbar`, `statusbar`, `visualizer`, `modals`, `whichkey`).
-- `pkg/util/`: Path resolution (`~/.config/halpradio/`) and clipboard helper.
+- `pkg/ui/components/`: Sub-views (`header`, `sidebar`, `stationlist`, `playerbar`, `statusbar`, `visualizer`, `modals`, `whichkey`, `lyrics`, `art`).
+- `pkg/ui/nowplaying.go`: Lyric/artwork lookup commands, sync offset, and the artwork rasterisation step.
+- `pkg/util/`: Path resolution (`~/.config/halpradio/`, `~/.cache/halpradio/`) and clipboard helper.
 
 ## 🎨 Code Style & Architectural Constraints
 1. **Thread Safety**: Always protect shared state in `player.Manager` with `m.mu.Lock()` / `m.mu.Unlock()`.
@@ -29,3 +32,4 @@
 4. **Theme Tokens**: Never hardcode hex color strings in UI components. Use `theme.Primary`, `theme.Border`, `theme.Playing`, etc.
 5. **Resilience**: Never call `panic()` or `os.Exit()` on playback errors. Set `m.status = StatusError` and let the TUI inform the user gracefully.
 6. **Verification**: Always run `go test ./...` and `gofmt -s -w .` after making modifications.
+7. **Terminal Images**: Every `art.Renderer` protocol must return exactly `rows` lines whose `lipgloss.Width` equals `cols`, so escape-sequence transports cannot shift the surrounding layout. Rasterise artwork in `pkg/ui/update.go`, never inside a component `View()`.

@@ -40,6 +40,12 @@ type Config struct {
 	FingerprintEnabled   bool   `yaml:"fingerprint_enabled"`
 	AcoustidAPIKey       string `yaml:"acoustid_api_key,omitempty"`
 	AutoIdentify         bool   `yaml:"auto_identify"`
+	LyricsEnabled        bool   `yaml:"lyrics_enabled"`
+	LyricsAutoOpen       bool   `yaml:"lyrics_auto_open"`
+	LyricsOffsetMs       int    `yaml:"lyrics_offset_ms,omitempty"`
+	AlbumArtEnabled      bool   `yaml:"album_art_enabled"`
+	AlbumArtProtocol     string `yaml:"album_art_protocol,omitempty"`
+	LastFMAPIKey         string `yaml:"lastfm_api_key,omitempty"`
 	PartyNickname        string `yaml:"party_nickname,omitempty"`
 	PartyRelayURL        string `yaml:"party_relay_url,omitempty"`
 	PartyPort            int    `yaml:"party_port,omitempty"`
@@ -79,6 +85,12 @@ func DefaultConfig() Config {
 		FingerprintEnabled:   true,
 		AcoustidAPIKey:       "v8pQ6oyB",
 		AutoIdentify:         true,
+		LyricsEnabled:        true,
+		LyricsAutoOpen:       false,
+		LyricsOffsetMs:       0,
+		AlbumArtEnabled:      true,
+		AlbumArtProtocol:     "auto",
+		LastFMAPIKey:         "",
 		PartyNickname:        "",
 		PartyPort:            0,
 	}
@@ -140,6 +152,40 @@ func GetConfigFile() string {
 	return filepath.Join(GetConfigDir(), "config.yaml")
 }
 
+// GetCacheDir returns the directory used for large regenerable downloads such
+// as album artwork and lyric sheets. It is deliberately separate from the
+// config directory so users can delete it without losing their settings.
+func GetCacheDir() string {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return filepath.Join(".halpradio", "cache")
+		}
+		return filepath.Join(home, ".cache", "halpradio")
+	}
+	return filepath.Join(cacheDir, "halpradio")
+}
+
+// GetLyricsCacheDir returns the on-disk cache location for lyric sheets.
+func GetLyricsCacheDir() string {
+	return filepath.Join(GetCacheDir(), "lyrics")
+}
+
+// GetAlbumArtCacheDir returns the on-disk cache location for cover artwork.
+func GetAlbumArtCacheDir() string {
+	return filepath.Join(GetCacheDir(), "art")
+}
+
+// EnsureCacheDir creates the lyrics and artwork cache directories. A failure
+// here is never fatal: the callers fall back to network-only operation.
+func EnsureCacheDir() error {
+	if err := os.MkdirAll(GetLyricsCacheDir(), 0700); err != nil {
+		return err
+	}
+	return os.MkdirAll(GetAlbumArtCacheDir(), 0700)
+}
+
 func GetPluginsDir() string {
 	return filepath.Join(GetConfigDir(), "plugins")
 }
@@ -184,6 +230,9 @@ func LoadConfig() (Config, error) {
 	}
 	if cfg.SleepFadeSeconds < 0 {
 		cfg.SleepFadeSeconds = 10
+	}
+	if cfg.AlbumArtProtocol == "" {
+		cfg.AlbumArtProtocol = "auto"
 	}
 
 	return cfg, nil

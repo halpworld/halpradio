@@ -53,6 +53,10 @@ type KeyMap struct {
 	Plugins        key.Binding
 	Party          key.Binding
 	IdentifyTrack  key.Binding
+	Lyrics         key.Binding
+	AlbumArt       key.Binding
+	LyricsSyncBack key.Binding
+	LyricsSyncFwd  key.Binding
 }
 
 func DefaultKeyMap() KeyMap {
@@ -232,6 +236,22 @@ func DefaultKeyMap() KeyMap {
 		IdentifyTrack: key.NewBinding(
 			key.WithKeys("I"),
 			key.WithHelp("I", "identify track (acoustic fingerprint)"),
+		),
+		Lyrics: key.NewBinding(
+			key.WithKeys("L"),
+			key.WithHelp("L", "synced lyrics drawer"),
+		),
+		AlbumArt: key.NewBinding(
+			key.WithKeys("A"),
+			key.WithHelp("A", "album art modal"),
+		),
+		LyricsSyncBack: key.NewBinding(
+			key.WithKeys(","),
+			key.WithHelp(",", "nudge lyrics sync back"),
+		),
+		LyricsSyncFwd: key.NewBinding(
+			key.WithKeys("."),
+			key.WithHelp(".", "nudge lyrics sync forward"),
 		),
 	}
 }

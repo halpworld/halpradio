@@ -60,6 +60,9 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 		col2 := []string{
 			sectionStyle.Render("⭐ DISCOVERY & SHARING"),
 			formatRow("I", "Identify stream (AcoustID)", 11),
+			formatRow("L", "Synced lyrics drawer", 11),
+			formatRow("A", "Album art viewer", 11),
+			formatRow(", / .", "Nudge lyric sync", 11),
 			formatRow("y", "Yank (copy) track info", 11),
 			formatRow("o", "Open streaming search", 11),
 			formatRow("s", "Bookmark track (in Hist)", 11),
@@ -100,6 +103,7 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 		col2 := []string{
 			sectionStyle.Render("⭐ ACTIONS & SEARCH"),
 			formatRow("I/y", "Identify/Yank", 8),
+			formatRow("L/A", "Lyrics/Art", 8),
 			formatRow("o", "Search web", 8),
 			formatRow("f/s", "Fav/Bookmark", 8),
 			formatRow("a/e/d", "Add/Edit/Del", 8),
@@ -130,6 +134,7 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 			formatRow("s / x", "Stop playback", 8),
 			formatRow("z / r", "Timer/Random", 8),
 			formatRow("y / f", "Yank/Favorite", 8),
+			formatRow("L / A", "Lyrics/Art", 8),
 			formatRow("+/-/m", "Vol/Zoom/Mute", 8),
 			formatRow("p / P", "PR/Plugins", 8),
 			formatRow("/ / ?", "Search/Help", 8),

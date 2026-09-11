@@ -12,6 +12,10 @@ import (
 )
 
 func (m Model) View() string {
+	// A terminal image placed by Kitty outlives a text repaint, so a frame
+	// where artwork just disappeared has to carry the delete escape.
+	artClear := m.ArtClearSequence()
+
 	width := m.Width
 	height := m.Height
 
@@ -21,11 +25,24 @@ func (m Model) View() string {
 	}
 
 	if m.ShowWhichKey {
-		return components.RenderWhichKeyOverlay(width, height, m.Theme)
+		return artClear + components.RenderWhichKeyOverlay(width, height, m.Theme)
 	}
 
 	if m.ShowPRExport {
-		return components.RenderPRExportModal(m.ExportStation, width, height, m.Theme)
+		return artClear + components.RenderPRExportModal(m.ExportStation, width, height, m.Theme)
+	}
+
+	if m.ShowArtModal {
+		return artClear + components.RenderAlbumArtModal(components.AlbumArtModalInput{
+			Cover:      m.Cover,
+			Lines:      m.ArtLines,
+			Status:     m.ArtStatus,
+			Fetching:   m.IsFetchingArt,
+			Protocol:   m.ArtProtocol,
+			TrackLabel: m.nowPlayingTrack(),
+			Width:      width,
+			Height:     height,
+		}, m.Theme)
 	}
 
 	if m.ShowThemePicker {
@@ -34,7 +51,7 @@ func (m Model) View() string {
 		if m.ThemeModalTab == 1 {
 			cursor = m.ThemeRegistryCursor
 		}
-		return components.RenderThemePickerModal(
+		return artClear + components.RenderThemePickerModal(
 			installed,
 			m.ThemeRegistryList,
 			m.ThemeModalTab,
@@ -50,11 +67,11 @@ func (m Model) View() string {
 	}
 
 	if m.ShowAddModal {
-		return components.RenderAddStationModal(m.AddInputs, m.AddFocusIdx, m.AddErrMsg, width, height, m.Theme)
+		return artClear + components.RenderAddStationModal(m.AddInputs, m.AddFocusIdx, m.AddErrMsg, width, height, m.Theme)
 	}
 
 	if m.ShowTimerModal {
-		return components.RenderTimerModal(
+		return artClear + components.RenderTimerModal(
 			m.Timer,
 			m.TimerModalScreen,
 			m.TimerMenuCursor,
@@ -70,7 +87,7 @@ func (m Model) View() string {
 	}
 
 	if m.ShowPartyModal {
-		return components.RenderPartyManagerModal(
+		return artClear + components.RenderPartyManagerModal(
 			m.PartySession,
 			m.PartyModalScreen,
 			m.PartyModalCursor,
@@ -84,7 +101,7 @@ func (m Model) View() string {
 	}
 
 	if m.ShowPermissionApproval {
-		return components.RenderPermissionApprovalModal(m.ApprovalPlugin, width, height, m.Theme)
+		return artClear + components.RenderPermissionApprovalModal(m.ApprovalPlugin, width, height, m.Theme)
 	}
 
 	if m.ShowPluginModal {
@@ -92,7 +109,7 @@ func (m Model) View() string {
 		if m.PluginMgr != nil {
 			installed = m.PluginMgr.GetPlugins()
 		}
-		return components.RenderPluginManagerModal(
+		return artClear + components.RenderPluginManagerModal(
 			installed,
 			m.PluginRegistryList,
 			m.PluginModalTab,
@@ -160,6 +177,25 @@ func (m Model) View() string {
 		mainContentHeight = 3
 	}
 
+	// The lyrics drawer steals columns from the main content area so the
+	// station list keeps its own layout instead of being overlapped.
+	contentWidth := width
+	drawerWidth := 0
+	if m.ShowLyrics {
+		drawerWidth = LyricsDrawerWidth(width)
+		if drawerWidth > 0 {
+			contentWidth = width - drawerWidth - 1
+			if contentWidth < 24 {
+				contentWidth = 24
+				drawerWidth = width - contentWidth - 1
+				if drawerWidth < 24 {
+					drawerWidth = 0
+					contentWidth = width
+				}
+			}
+		}
+	}
+
 	var mainArea string
 	if m.ActiveTab == 0 {
 		var actItems []string
@@ -172,7 +208,7 @@ func (m Model) View() string {
 			}
 		}
 		sidebarW := 26
-		if width < 65 {
+		if contentWidth < 65 {
 			sidebarW = 18
 		}
 		sidebarView := components.RenderSidebar(
@@ -185,7 +221,7 @@ func (m Model) View() string {
 			m.ActiveFocus == FocusSidebar,
 			m.Theme,
 		)
-		listWidth := width - sidebarW - 1
+		listWidth := contentWidth - sidebarW - 1
 		if listWidth < 20 {
 			listWidth = 20
 		}
@@ -210,7 +246,7 @@ func (m Model) View() string {
 			}
 		}
 		sidebarW := 28
-		if width < 70 {
+		if contentWidth < 70 {
 			sidebarW = 18
 		}
 		sidebarView := components.RenderSidebar(
@@ -223,7 +259,7 @@ func (m Model) View() string {
 			m.ActiveFocus == FocusSidebar,
 			m.Theme,
 		)
-		listWidth := width - sidebarW - 1
+		listWidth := contentWidth - sidebarW - 1
 		if listWidth < 20 {
 			listWidth = 20
 		}
@@ -239,7 +275,7 @@ func (m Model) View() string {
 		mainArea = lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, " ", stationListView)
 	} else if m.ActiveTab == 3 {
 		sidebarW := 26
-		if width < 65 {
+		if contentWidth < 65 {
 			sidebarW = 18
 		}
 		sidebarView := components.RenderSidebar(
@@ -252,7 +288,7 @@ func (m Model) View() string {
 			m.ActiveFocus == FocusSidebar,
 			m.Theme,
 		)
-		listWidth := width - sidebarW - 1
+		listWidth := contentWidth - sidebarW - 1
 		if listWidth < 20 {
 			listWidth = 20
 		}
@@ -270,7 +306,7 @@ func (m Model) View() string {
 		mainArea = components.RenderHistoryList(
 			m.Store.GetHistory(),
 			m.HistoryIndex,
-			width,
+			contentWidth,
 			mainContentHeight,
 			m.Theme,
 		)
@@ -281,7 +317,7 @@ func (m Model) View() string {
 				m.TunerFreq,
 				m.TunerBand,
 				m.PlayingID,
-				width,
+				contentWidth,
 				mainContentHeight,
 				m.Theme,
 			)
@@ -293,7 +329,7 @@ func (m Model) View() string {
 				m.GlobeZoom,
 				m.GlobeStationIndex,
 				m.PlayingID,
-				width,
+				contentWidth,
 				mainContentHeight,
 				m.Theme,
 			)
@@ -303,14 +339,33 @@ func (m Model) View() string {
 			m.Stations,
 			m.SelectedIndex,
 			m.PlayingID,
-			width,
+			contentWidth,
 			mainContentHeight,
 			true,
 			m.Theme,
 		)
 	}
 
-	return lipgloss.JoinVertical(
+	if drawerWidth > 0 {
+		drawerView := components.RenderLyricsDrawer(components.LyricsDrawerInput{
+			Sheet:      m.LyricsSheet,
+			Status:     m.LyricsStatus,
+			Fetching:   m.IsFetchingLyrics,
+			TrackLabel: m.nowPlayingTrack(),
+			ArtLines:   m.ArtLines,
+			ArtCols:    m.ArtCols,
+			ArtSource:  m.coverSourceLabel(),
+			Elapsed:    m.lyricElapsed(),
+			Offset:     m.LyricsOffset,
+			Scroll:     m.LyricsScroll,
+			Focused:    m.ActiveFocus == FocusLyrics,
+			Width:      drawerWidth,
+			Height:     mainContentHeight,
+		}, m.Theme)
+		mainArea = lipgloss.JoinHorizontal(lipgloss.Top, mainArea, " ", drawerView)
+	}
+
+	return artClear + lipgloss.JoinVertical(
 		lipgloss.Left,
 		headerView,
 		mainArea,

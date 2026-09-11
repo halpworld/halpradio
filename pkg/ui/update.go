@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -12,7 +13,9 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/halpworld/halpradio/pkg/art"
 	"github.com/halpworld/halpradio/pkg/debuglog"
+	"github.com/halpworld/halpradio/pkg/lyrics"
 	"github.com/halpworld/halpradio/pkg/party"
 	"github.com/halpworld/halpradio/pkg/player"
 	"github.com/halpworld/halpradio/pkg/player/fingerprint"
@@ -58,10 +61,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
 		m.Height = msg.Height
+		// Artwork is rasterised to a fixed cell grid, so a resize has to
+		// re-encode it at the new dimensions.
+		m.renderArt()
 		return m, nil
 
 	case TickMsg:
 		m.Visualizer.Tick()
+		if m.ArtClearFrames > 0 {
+			m.ArtClearFrames--
+		}
 		if m.Player.Status() == player.StatusError && m.Player.Error() != "" {
 			m.StatusMessage = fmt.Sprintf("Error: %s", m.Player.Error())
 		}
@@ -117,6 +126,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 				}
+			}
+		}
+
+		// Lyrics and album art follow whatever is on air, whichever code
+		// path started it: the station list, the globe, the analog tuner, a
+		// party room sync or an OS media key.
+		if m.Config.LyricsEnabled || m.Config.AlbumArtEnabled {
+			if sig := m.nowPlayingSignature(); sig != m.nowPlayingSig {
+				m.nowPlayingSig = sig
+				m.resetNowPlaying()
+				tickCmds = append(tickCmds, m.syncNowPlaying()...)
+				m.renderArt()
 			}
 		}
 
@@ -614,6 +635,62 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case LyricsFetchedMsg:
+		if msg.TrackKey != m.LyricsTrackKey {
+			// A newer track already superseded this lookup.
+			return m, nil
+		}
+		m.IsFetchingLyrics = false
+		m.LyricsScroll = 0
+		if msg.Err != nil && !errors.Is(msg.Err, lyrics.ErrNotFound) {
+			// Providers were unreachable rather than empty-handed. Drop the
+			// track key so reopening the drawer retries instead of showing a
+			// permanent "no lyrics" verdict.
+			m.LyricsSheet = nil
+			m.LyricsTrackKey = ""
+			m.LyricsStatus = "Lyrics providers unreachable — press L again to retry"
+			return m, nil
+		}
+		if msg.Err != nil || msg.Sheet == nil || msg.Sheet.IsEmpty() {
+			m.LyricsSheet = nil
+			m.LyricsStatus = fmt.Sprintf("No lyrics found for %q", msg.TrackKey)
+			return m, nil
+		}
+		m.LyricsSheet = msg.Sheet
+		m.LyricsStatus = ""
+		if m.ShowLyrics {
+			kind := "unsynced"
+			if msg.Sheet.Synced {
+				kind = "synced"
+			}
+			m.StatusMessage = fmt.Sprintf("📜 Loaded %s lyrics from %s", kind, msg.Sheet.Source)
+		}
+		return m, nil
+
+	case CoverArtFetchedMsg:
+		if msg.TrackKey != m.ArtTrackKey {
+			return m, nil
+		}
+		m.IsFetchingArt = false
+		if msg.Err != nil && !errors.Is(msg.Err, art.ErrNotFound) {
+			m.Cover = nil
+			m.ArtLines = nil
+			m.ArtTrackKey = ""
+			m.ArtStatus = "Cover art providers unreachable — press A again to retry"
+			return m, nil
+		}
+		if msg.Err != nil || msg.Cover == nil {
+			m.Cover = nil
+			m.ArtLines = nil
+			m.ArtStatus = "No cover art found for this track"
+			return m, nil
+		}
+		m.Cover = msg.Cover
+		m.ArtStatus = ""
+		m.ArtCols, m.ArtRows = 0, 0
+		m.renderArt()
+		return m, nil
+
 	case tea.KeyMsg:
 		if m.ShowWhichKey {
 			if key.Matches(msg, m.KeyMap.Clear) || key.Matches(msg, m.KeyMap.Help) || key.Matches(msg, m.KeyMap.Quit) {
@@ -625,6 +702,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.ShowPRExport {
 			if key.Matches(msg, m.KeyMap.Clear) || key.Matches(msg, m.KeyMap.PlayPause) || key.Matches(msg, m.KeyMap.Quit) {
 				m.ShowPRExport = false
+			}
+			return m, nil
+		}
+
+		if m.ShowArtModal {
+			switch {
+			case key.Matches(msg, m.KeyMap.Quit):
+				_ = m.Player.Stop()
+				return m, tea.Quit
+			case key.Matches(msg, m.KeyMap.Lyrics):
+				m.ShowArtModal = false
+				return m, tea.Batch(m.toggleLyricsDrawer()...)
+			case key.Matches(msg, m.KeyMap.Clear),
+				key.Matches(msg, m.KeyMap.AlbumArt),
+				key.Matches(msg, m.KeyMap.PlayPause):
+				m.ShowArtModal = false
+				m.renderArt()
 			}
 			return m, nil
 		}
@@ -781,7 +875,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.Up):
-			if m.ActiveTab == 8 {
+			if m.ShowLyrics && m.ActiveFocus == FocusLyrics {
+				m.scrollLyrics(-1)
+			} else if m.ActiveTab == 8 {
 				if m.Config.ExperimentalTuner && m.ActiveTuner {
 					cfg := tuner.Bands[m.TunerBand]
 					step := 0.5
@@ -845,7 +941,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.Down):
-			if m.ActiveTab == 8 {
+			if m.ShowLyrics && m.ActiveFocus == FocusLyrics {
+				m.scrollLyrics(1)
+			} else if m.ActiveTab == 8 {
 				if m.Config.ExperimentalTuner && m.ActiveTuner {
 					cfg := tuner.Bands[m.TunerBand]
 					step := 0.5
@@ -897,7 +995,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case key.Matches(msg, m.KeyMap.Left):
-			if m.ActiveTab == 8 {
+			if m.ShowLyrics && m.ActiveFocus == FocusLyrics {
+				m.ActiveFocus = FocusMainList
+			} else if m.ActiveTab == 8 {
 				if m.Config.ExperimentalTuner && m.ActiveTuner {
 					cfg := tuner.Bands[m.TunerBand]
 					step := 0.1
@@ -929,7 +1029,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.Right):
-			if m.ActiveTab == 8 {
+			if m.ShowLyrics && m.ActiveFocus == FocusLyrics {
+				// The drawer is already the rightmost pane.
+			} else if m.ActiveTab == 8 {
 				if m.Config.ExperimentalTuner && m.ActiveTuner {
 					cfg := tuner.Bands[m.TunerBand]
 					step := 0.1
@@ -1198,7 +1300,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.SwitchTab(7)
 			}
 
-		case key.Matches(msg, m.KeyMap.FastSweepRight):
+		case key.Matches(msg, m.KeyMap.FastSweepRight), key.Matches(msg, m.KeyMap.Lyrics):
+			// L drives the analog dial while the tuner is live, and opens the
+			// synced lyrics drawer everywhere else.
 			if m.ActiveTab == 8 && m.Config.ExperimentalTuner && m.ActiveTuner {
 				step := 1.0
 				if m.TunerBand == "AM" {
@@ -1206,12 +1310,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else if m.TunerBand == "SW" {
 					step = 0.5
 				}
-				m.TunerFreq = math.Round((m.TunerFreq-step)*100) / 100
+				m.TunerFreq = math.Round((m.TunerFreq+step)*100) / 100
 				cfg := tuner.Bands[m.TunerBand]
 				if m.TunerFreq > cfg.MaxFreq {
 					m.TunerFreq = cfg.MaxFreq
 				}
 				m.onTunerFreqChanged()
+			} else {
+				return m, tea.Batch(m.toggleLyricsDrawer()...)
+			}
+
+		case key.Matches(msg, m.KeyMap.AlbumArt):
+			return m, tea.Batch(m.toggleArtModal()...)
+
+		case key.Matches(msg, m.KeyMap.LyricsSyncBack):
+			if m.ShowLyrics {
+				m.nudgeLyricsSync(-lyricsSyncStep)
+			}
+
+		case key.Matches(msg, m.KeyMap.LyricsSyncFwd):
+			if m.ShowLyrics {
+				m.nudgeLyricsSync(lyricsSyncStep)
 			}
 
 		case key.Matches(msg, m.KeyMap.Activity):
@@ -1550,7 +1669,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.IsSearching = true
 
 		case key.Matches(msg, m.KeyMap.Clear):
-			if m.SearchQuery != "" {
+			if m.ShowLyrics {
+				m.ShowLyrics = false
+				if m.ActiveFocus == FocusLyrics {
+					m.ActiveFocus = FocusMainList
+				}
+				m.renderArt()
+			} else if m.SearchQuery != "" {
 				m.SearchQuery = ""
 				m.RefreshStations()
 			}
