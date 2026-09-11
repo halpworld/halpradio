@@ -162,22 +162,39 @@ func RenderStatusBar(searchQuery string, message string, activeTab int, width in
 			}
 		}
 	} else {
-		// Standard tabs legend
-		if width >= 95 {
+		// Standard tabs legend. The bar is clipped to the terminal width, so
+		// the order doubles as a priority list: anything that has to survive
+		// on a narrow terminal belongs near the front.
+		if width >= 118 {
 			items = []struct {
 				key  string
 				desc string
 			}{
 				{"j/k", "Nav"},
-				{"Space", "Play/Pause"},
+				{"Space", "Play"},
+				{"L", "Lyrics"},
+				{"A", "Art"},
 				{"I", "Identify"},
-				{"z", "Timer/Pomo"},
+				{"z", "Timer"},
 				{"f", "Fav"},
-				{"y", "Yank"},
 				{"+/-", "Vol"},
 				{"/", "Search"},
-				{"a", "Add"},
-				{"?", "WhichKey"},
+				{"?", "Help"},
+				{"q", "Quit"},
+			}
+		} else if width >= 95 {
+			items = []struct {
+				key  string
+				desc string
+			}{
+				{"j/k", "Nav"},
+				{"Space", "Play"},
+				{"L", "Lyrics"},
+				{"A", "Art"},
+				{"z", "Timer"},
+				{"+/-", "Vol"},
+				{"/", "Search"},
+				{"?", "Help"},
 				{"q", "Quit"},
 			}
 		} else if width >= 65 {
@@ -187,9 +204,9 @@ func RenderStatusBar(searchQuery string, message string, activeTab int, width in
 			}{
 				{"j/k", "Nav"},
 				{"Space", "Play"},
-				{"z", "Timer"},
+				{"L", "Lyrics"},
+				{"A", "Art"},
 				{"f", "Fav"},
-				{"+/-", "Vol"},
 				{"/", "Search"},
 				{"?", "Help"},
 				{"q", "Quit"},
@@ -201,7 +218,7 @@ func RenderStatusBar(searchQuery string, message string, activeTab int, width in
 			}{
 				{"j/k", "Nav"},
 				{"Space", "Play"},
-				{"/", "Search"},
+				{"L", "Lyrics"},
 				{"?", "Help"},
 				{"q", "Quit"},
 			}

@@ -177,22 +177,17 @@ func (m Model) View() string {
 		mainContentHeight = 3
 	}
 
-	// The lyrics drawer steals columns from the main content area so the
-	// station list keeps its own layout instead of being overlapped.
+	// Beside the station list the drawer steals columns so the list keeps its
+	// own layout. On a terminal too narrow for both, the sheet takes over the
+	// content area instead of silently declining to appear.
+	lyricsSurface, lyricsWidth := m.lyricsSurface()
 	contentWidth := width
-	drawerWidth := 0
-	if m.ShowLyrics {
-		drawerWidth = LyricsDrawerWidth(width)
-		if drawerWidth > 0 {
-			contentWidth = width - drawerWidth - 1
-			if contentWidth < 24 {
-				contentWidth = 24
-				drawerWidth = width - contentWidth - 1
-				if drawerWidth < 24 {
-					drawerWidth = 0
-					contentWidth = width
-				}
-			}
+	if lyricsSurface == LyricsSurfaceDrawer {
+		contentWidth = width - lyricsWidth - 1
+		if contentWidth < 24 {
+			lyricsSurface = LyricsSurfaceOverlay
+			lyricsWidth = width
+			contentWidth = width
 		}
 	}
 
@@ -346,8 +341,8 @@ func (m Model) View() string {
 		)
 	}
 
-	if drawerWidth > 0 {
-		drawerView := components.RenderLyricsDrawer(components.LyricsDrawerInput{
+	if lyricsSurface != LyricsSurfaceHidden {
+		lyricsView := components.RenderLyricsDrawer(components.LyricsDrawerInput{
 			Sheet:      m.LyricsSheet,
 			Status:     m.LyricsStatus,
 			Fetching:   m.IsFetchingLyrics,
@@ -359,10 +354,14 @@ func (m Model) View() string {
 			Offset:     m.LyricsOffset,
 			Scroll:     m.LyricsScroll,
 			Focused:    m.ActiveFocus == FocusLyrics,
-			Width:      drawerWidth,
+			Width:      lyricsWidth,
 			Height:     mainContentHeight,
 		}, m.Theme)
-		mainArea = lipgloss.JoinHorizontal(lipgloss.Top, mainArea, " ", drawerView)
+		if lyricsSurface == LyricsSurfaceDrawer {
+			mainArea = lipgloss.JoinHorizontal(lipgloss.Top, mainArea, " ", lyricsView)
+		} else {
+			mainArea = lyricsView
+		}
 	}
 
 	return artClear + lipgloss.JoinVertical(

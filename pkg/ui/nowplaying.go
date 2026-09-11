@@ -218,11 +218,13 @@ func (m Model) fetchCoverCmd(stationID, key string) tea.Cmd {
 
 // LyricsDrawerMinWidth is the narrowest terminal that can host the drawer
 // alongside the station list, which itself will not render below 28 columns
-// next to an 18 column sidebar.
+// next to an 18 column sidebar. Below this the sheet takes over the content
+// area instead, so L always shows something.
 const LyricsDrawerMinWidth = 80
 
 // LyricsDrawerWidth returns how many columns the lyrics drawer occupies for a
-// given terminal width, or 0 when the terminal is too narrow to host it.
+// given terminal width, or 0 when the terminal cannot host it beside the
+// station list.
 func LyricsDrawerWidth(width int) int {
 	if width < LyricsDrawerMinWidth {
 		return 0
@@ -235,6 +237,34 @@ func LyricsDrawerWidth(width int) int {
 		w = 32
 	}
 	return w
+}
+
+// LyricsSurface says where the lyric sheet is drawn at a given terminal size.
+type LyricsSurface int
+
+const (
+	// LyricsSurfaceHidden means the sheet is not on screen.
+	LyricsSurfaceHidden LyricsSurface = iota
+	// LyricsSurfaceDrawer puts the sheet beside the station list.
+	LyricsSurfaceDrawer
+	// LyricsSurfaceOverlay gives the sheet the whole content area, for
+	// terminals too narrow to show both.
+	LyricsSurfaceOverlay
+)
+
+// lyricsSurface reports where the sheet goes and how many columns it gets.
+func (m Model) lyricsSurface() (LyricsSurface, int) {
+	if !m.ShowLyrics {
+		return LyricsSurfaceHidden, 0
+	}
+	width := m.Width
+	if width == 0 {
+		width = 80
+	}
+	if drawer := LyricsDrawerWidth(width); drawer > 0 {
+		return LyricsSurfaceDrawer, drawer
+	}
+	return LyricsSurfaceOverlay, width
 }
 
 // artTarget returns the cell dimensions artwork should be rendered at for the
@@ -264,14 +294,11 @@ func (m Model) artTarget() (cols, rows int) {
 		return cols, rows
 	}
 
-	if !m.ShowLyrics {
+	surface, surfaceWidth := m.lyricsSurface()
+	if surface == LyricsSurfaceHidden {
 		return 0, 0
 	}
-	drawer := LyricsDrawerWidth(width)
-	if drawer == 0 {
-		return 0, 0
-	}
-	cols = drawer - 6
+	cols = surfaceWidth - 6
 	if cols > 20 {
 		cols = 20
 	}
@@ -390,11 +417,6 @@ func (m *Model) toggleLyricsDrawer() []tea.Cmd {
 		m.renderArt()
 		return nil
 	}
-	if LyricsDrawerWidth(m.Width) == 0 && m.Width > 0 {
-		m.StatusMessage = fmt.Sprintf("Terminal too narrow for the lyrics drawer (needs %d columns)", LyricsDrawerMinWidth)
-		return nil
-	}
-
 	m.ShowLyrics = true
 	m.ActiveFocus = FocusLyrics
 	cmds := m.syncNowPlaying()

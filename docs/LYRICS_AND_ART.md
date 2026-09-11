@@ -149,11 +149,13 @@ JSON sidecar holding the provider, origin URL and fetch time.
 └───────────────────────────────┴────────────────────────────────┘
 ```
 
-- The drawer **takes its own columns** rather than overlapping the station
-  list, so the list keeps its own layout and selection.
-- It needs an 80 column terminal, because the station list will not render
-  below 28 columns beside an 18 column sidebar. Narrower terminals get a status
-  message instead of a broken frame.
+- On an 80 column terminal or wider the drawer **takes its own columns** rather
+  than overlapping the station list, so the list keeps its layout and
+  selection.
+- Below that the sheet takes over the content area as a full-width overlay,
+  because the station list will not render under 28 columns beside an 18 column
+  sidebar. `L` therefore always shows something at any width, and resizing
+  moves the sheet between the two surfaces without closing it.
 - Every lookup runs as a Bubble Tea command off the update loop, so a slow
   provider never blocks the keyboard. Results that arrive after the track has
   changed are dropped by comparing the track key.
@@ -173,6 +175,9 @@ JSON sidecar holding the provider, origin URL and fetch time.
 | `,` / `.` | Nudge the lyric sync back / forward by 0.5s |
 | `h` | Return focus to the station list, leaving the drawer open |
 | `Esc` | Close the drawer |
+
+The status bar carries `[L] Lyrics` and `[A] Art` on every station tab, so the
+feature is discoverable without opening the which-key overlay.
 
 ### Configuration
 

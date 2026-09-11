@@ -51,16 +51,59 @@ func TestLyricsKey_TogglesDrawerAndFocus(t *testing.T) {
 	}
 }
 
-func TestLyricsKey_RefusedOnNarrowTerminal(t *testing.T) {
-	m := sizedTestModel(70, 20)
+func TestLyricsKey_FallsBackToOverlayOnNarrowTerminal(t *testing.T) {
+	m := sizedTestModel(70, 24)
 
 	updated, _ := m.Update(keyRune('L'))
 	m = updated.(Model)
-	if m.ShowLyrics {
-		t.Error("expected the drawer to stay closed on a 60 column terminal")
+	if !m.ShowLyrics {
+		t.Fatal("expected L to open the sheet even on a 70 column terminal")
 	}
-	if !strings.Contains(m.StatusMessage, "too narrow") {
-		t.Errorf("expected a width warning, got %q", m.StatusMessage)
+
+	surface, surfaceWidth := m.lyricsSurface()
+	if surface != LyricsSurfaceOverlay {
+		t.Errorf("expected the overlay surface below %d columns, got %v", LyricsDrawerMinWidth, surface)
+	}
+	if surfaceWidth != 70 {
+		t.Errorf("expected the overlay to take the full width, got %d", surfaceWidth)
+	}
+
+	out := m.View()
+	if !strings.Contains(out, "LIVE LYRICS") {
+		t.Error("expected the sheet to be visible on a narrow terminal")
+	}
+	// The overlay replaces the station list rather than squeezing beside it.
+	if strings.Contains(out, "Ambient Two") {
+		t.Error("expected the overlay to take over the content area")
+	}
+	if got := lipgloss.Width(out); got > 70 {
+		t.Errorf("overlay view is %d columns wide, exceeds the terminal", got)
+	}
+}
+
+func TestLyricsSurface_SwitchesOnResize(t *testing.T) {
+	m := sizedTestModel(120, 40)
+	updated, _ := m.Update(keyRune('L'))
+	m = updated.(Model)
+
+	if surface, _ := m.lyricsSurface(); surface != LyricsSurfaceDrawer {
+		t.Fatalf("expected a drawer at 120 columns, got %v", surface)
+	}
+
+	// Shrinking the window must not make the open sheet vanish.
+	updated, _ = m.Update(tea.WindowSizeMsg{Width: 70, Height: 24})
+	m = updated.(Model)
+	if surface, _ := m.lyricsSurface(); surface != LyricsSurfaceOverlay {
+		t.Errorf("expected the sheet to become an overlay after shrinking, got %v", surface)
+	}
+	if !strings.Contains(m.View(), "LIVE LYRICS") {
+		t.Error("expected the sheet to stay visible after shrinking")
+	}
+
+	updated, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = updated.(Model)
+	if surface, _ := m.lyricsSurface(); surface != LyricsSurfaceDrawer {
+		t.Error("expected the drawer to come back when the window grows")
 	}
 }
 

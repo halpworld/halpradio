@@ -331,7 +331,8 @@ Modern terminals grew real graphics capabilities, so `halpradio` uses them. Pres
 - **Auto-Scrolling Karaoke View**: When timestamped `.lrc` data exists, the drawer highlights the line being sung, fades the surrounding lines, and draws a progress gauge across the active line.
 - **Manual Scroll For Plain Text**: Unsynced lyrics render as a formatted sheet you scroll with `j` / `k`.
 - **Sync Nudge**: Internet radio exposes no seek position, so the lyric clock starts when the station announces a new title. Press `,` and `.` to shift the sync in 0.5 second steps when a station announces late or early.
-- **Never Blocks The UI**: Every lookup runs as a Bubble Tea command off the update loop, so the TUI stays responsive on slow connections, and the drawer takes its own columns rather than overlapping the station list.
+- **Never Blocks The UI**: Every lookup runs as a Bubble Tea command off the update loop, so the TUI stays responsive on slow connections.
+- **Fits Any Terminal**: At 80 columns or wider the drawer takes its own columns rather than overlapping the station list; below that the sheet becomes a full-width overlay, and resizing moves it between the two without closing it.
 - **Disk & Memory Cache**: Sheets are memoised in RAM and cached under `~/.cache/halpradio/lyrics/`, and stations with no match are negative-cached so the APIs are not hammered every track.
 
 ### 🖼️ Multi-Protocol Album Art (`A` key)
