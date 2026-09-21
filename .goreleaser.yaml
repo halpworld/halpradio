@@ -42,6 +42,33 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+nfpms:
+  - id: halpradio-debs
+    package_name: halpradio
+    file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    vendor: halpworld
+    homepage: "https://github.com/halpworld/halpradio"
+    maintainer: "halpworld <https://github.com/halpworld>"
+    description: "LazyVim-inspired Terminal Internet Radio Streamer"
+    license: "GPL-3.0-or-later"
+    section: sound
+    priority: optional
+    formats:
+      - deb
+    dependencies:
+      - ca-certificates
+    recommends:
+      - mpv
+    suggests:
+      - vlc
+    contents:
+      - src: stations.yaml
+        dst: /usr/share/halpradio/stations.yaml
+      - src: LICENSE
+        dst: /usr/share/doc/halpradio/copyright
+      - src: README.md
+        dst: /usr/share/doc/halpradio/README.md
+
 brews:
   - name: halpradio
     repository:
@@ -49,7 +76,7 @@ brews:
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
-    skip_upload: "{{ if not .Env.HOMEBREW_TAP_TOKEN }}true{{ else }}false{{ end }}"
+    skip_upload: auto
     commit_author:
       name: github-actions[bot]
       email: 41898282+github-actions[bot]@users.noreply.github.com

@@ -332,8 +332,8 @@ const drawerArtMinRows = 6
 func drawerArtBudget(termHeight int) int {
 	// Header, player bar, status bar and the spacer between them.
 	const chromeRows = 12
-	// Drawer border, its own header block, its footer and the minimum sheet.
-	const drawerRows = 2 + 5 + 3 + 7
+	// Drawer border, its own header block with separator, its footer and the minimum sheet.
+	const drawerRows = 2 + 7 + 3 + 7
 	return termHeight - chromeRows - drawerRows
 }
 

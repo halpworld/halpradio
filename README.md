@@ -153,7 +153,31 @@ brew upgrade halpradio
 
 ---
 
-### Method 2: One-Line Installer Script (macOS & Linux)
+### Method 2: Debian / Ubuntu / Linux Mint / Pop!_OS (`apt install`)
+
+Install via the official APT repository:
+
+```bash
+# 1. Download official GPG archive signing key
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://halpworld.github.io/halpradio/halpradio-archive-keyring.gpg | sudo tee /etc/apt/keyrings/halpradio-archive-keyring.gpg > /dev/null
+
+# 2. Add repository to APT sources
+echo "deb [signed-by=/etc/apt/keyrings/halpradio-archive-keyring.gpg] https://halpworld.github.io/halpradio stable main" | sudo tee /etc/apt/sources.list.d/halpradio.list
+
+# 3. Update & install
+sudo apt update
+sudo apt install halpradio
+```
+
+Or install standalone `.deb` package directly:
+```bash
+sudo apt install ./halpradio_*_linux_amd64.deb
+```
+
+---
+
+### Method 3: One-Line Installer Script (macOS & Linux)
 
 Automatically detects your OS and architecture (`arm64` / `amd64`), downloads the latest release binary, and installs it to `/usr/local/bin`:
 
@@ -163,7 +187,7 @@ curl -fsSL https://raw.githubusercontent.com/halpworld/halpradio/main/install.sh
 
 ---
 
-### Method 3: Pre-Compiled Binary Releases
+### Method 4: Pre-Compiled Binary Releases
 
 Download pre-compiled standalone tarballs from the [GitHub Releases](https://github.com/halpworld/halpradio/releases) page:
 
@@ -177,7 +201,7 @@ Download pre-compiled standalone tarballs from the [GitHub Releases](https://git
 
 ---
 
-### Method 4: Go Install
+### Method 5: Go Install
 
 If you have Go 1.21+ installed:
 
@@ -187,7 +211,7 @@ go install github.com/halpworld/halpradio@latest
 
 ---
 
-### Method 5: Build From Source
+### Method 6: Build From Source
 
 ```bash
 git clone https://github.com/halpworld/halpradio.git

@@ -83,10 +83,10 @@ decode before they are accepted.
 
 | Priority | Protocol | Detected from |
 |---|---|---|
-| 1 | Kitty graphics | `TERM_PROGRAM=ghostty`, `TERM` containing `kitty`, `KITTY_WINDOW_ID`, `TERM_PROGRAM=WezTerm` |
+| 1 | Kitty graphics | `TERM` containing `kitty`, `KITTY_WINDOW_ID`, `TERM_PROGRAM=kitty` |
 | 2 | iTerm2 inline images | `TERM_PROGRAM=iTerm.app`, `ITERM_SESSION_ID` |
 | 3 | Sixel | `TERM` containing `foot`, `mlterm`, `yaft` or `sixel`, or `HALPRADIO_SIXEL` |
-| 4 | Truecolor half-block | `COLORTERM` of `truecolor`/`24bit`, or `TERM` containing `256color` |
+| 4 | Truecolor half-block | `COLORTERM` of `truecolor`/`24bit`, `TERM_PROGRAM=ghostty`, `TERM_PROGRAM=WezTerm`, or `TERM` containing `256color` |
 | 5 | Braille | anything else |
 | — | None | `TERM` empty or `dumb`, or `HALPRADIO_NO_ART` / `NO_GRAPHICS` set |
 

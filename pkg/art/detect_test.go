@@ -33,8 +33,9 @@ func TestDetectEnv(t *testing.T) {
 		{"HALPRADIO_NO_ART disables", map[string]string{
 			EnvNoArt: "true", "TERM": "xterm-256color",
 		}, ProtocolNone},
-		{"ghostty", map[string]string{"TERM_PROGRAM": "ghostty", "TERM": "xterm-256color"}, ProtocolKitty},
-		{"wezterm", map[string]string{"TERM_PROGRAM": "WezTerm"}, ProtocolKitty},
+		{"ghostty auto defaults to halfblock", map[string]string{"TERM_PROGRAM": "ghostty", "TERM": "xterm-256color"}, ProtocolHalfBlock},
+		{"wezterm auto defaults to halfblock", map[string]string{"TERM_PROGRAM": "WezTerm"}, ProtocolHalfBlock},
+		{"ghostty explicit override kitty", map[string]string{EnvProtocol: "kitty", "TERM_PROGRAM": "ghostty"}, ProtocolKitty},
 		{"term kitty", map[string]string{"TERM": "xterm-kitty"}, ProtocolKitty},
 		{"kitty window id", map[string]string{"KITTY_WINDOW_ID": "3", "TERM": "screen"}, ProtocolKitty},
 		{"iterm program", map[string]string{"TERM_PROGRAM": "iTerm.app", "TERM": "xterm-256color"}, ProtocolITerm2},

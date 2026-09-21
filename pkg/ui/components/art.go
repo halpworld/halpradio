@@ -50,6 +50,8 @@ func RenderAlbumArtModal(in AlbumArtModalInput, th theme.Theme) string {
 	}
 	innerW := boxWidth - 4
 
+	borderStyle := lipgloss.NewStyle().Foreground(th.Border)
+
 	parts := []string{titleStyle.Width(innerW).Render("🖼  ALBUM ART"), ""}
 
 	if len(in.Lines) > 0 {
@@ -66,29 +68,32 @@ func RenderAlbumArtModal(in AlbumArtModalInput, th theme.Theme) string {
 			}
 		}
 		for _, row := range wrapPlain(msg, innerW) {
-			parts = append(parts, infoStyle.Render(row))
+			parts = append(parts, centerLine(infoStyle.Render(row), innerW))
 		}
 	}
 
 	parts = append(parts, "")
+	parts = append(parts, centerLine(borderStyle.Render(strings.Repeat("─", innerW)), innerW))
+	parts = append(parts, "")
+
 	if in.TrackLabel != "" {
-		parts = append(parts, trackStyle.Render(truncate(in.TrackLabel, innerW)))
+		parts = append(parts, centerLine(trackStyle.Render(truncate(in.TrackLabel, innerW)), innerW))
 	}
 	if in.Cover != nil {
 		meta := in.Cover.Source
 		if in.Cover.Album != "" {
 			meta = fmt.Sprintf("%s • %s", in.Cover.Album, in.Cover.Source)
 		}
-		parts = append(parts, metaStyle.Render(truncate(meta, innerW)))
+		parts = append(parts, centerLine(metaStyle.Render(truncate(meta, innerW)), innerW))
 	}
 
 	badge := protoStyle.Render(in.Protocol.Label())
-	parts = append(parts, "", badge)
+	parts = append(parts, "", centerLine(badge, innerW))
 	hint := "[ A ] / [ Esc ] close · [ L ] lyrics"
 	if innerW < lipgloss.Width(hint) {
 		hint = "[ Esc ] close"
 	}
-	parts = append(parts, hintStyle.Render(hint))
+	parts = append(parts, centerLine(hintStyle.Render(hint), innerW))
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).

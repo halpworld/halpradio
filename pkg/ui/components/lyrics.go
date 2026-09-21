@@ -60,9 +60,10 @@ func RenderLyricsDrawer(in LyricsDrawerInput, th theme.Theme) string {
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(th.Primary)
 	mutedStyle := lipgloss.NewStyle().Foreground(th.Muted)
 	trackStyle := lipgloss.NewStyle().Bold(true).Foreground(th.Secondary)
+	borderStyle := lipgloss.NewStyle().Foreground(th.Border)
 
 	var head []string
-	head = append(head, titleStyle.Render(truncate("📜 LIVE LYRICS", innerW)))
+	head = append(head, centerLine(titleStyle.Render(truncate("📜 LIVE LYRICS", innerW)), innerW))
 
 	if len(in.ArtLines) > 0 {
 		head = append(head, "")
@@ -76,15 +77,21 @@ func RenderLyricsDrawer(in LyricsDrawerInput, th theme.Theme) string {
 
 	if in.TrackLabel != "" {
 		head = append(head, "")
-		head = append(head, trackStyle.Render(truncate(in.TrackLabel, innerW)))
+		head = append(head, centerLine(trackStyle.Render(truncate(in.TrackLabel, innerW)), innerW))
 	}
-
-	foot := lyricsFooter(in, innerW, th)
 
 	maxInnerH := in.Height - 2
 	if maxInnerH < 1 {
 		maxInnerH = 1
 	}
+
+	// Clean separator between now-playing header and the lyric sheet
+	if maxInnerH >= 10 {
+		head = append(head, "")
+		head = append(head, centerLine(borderStyle.Render(strings.Repeat("─", innerW)), innerW))
+	}
+
+	foot := lyricsFooter(in, innerW, th)
 
 	// Everything left over after the header and footer belongs to the sheet.
 	bodyHeight := maxInnerH - len(head) - len(foot)

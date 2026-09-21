@@ -89,11 +89,16 @@ func DetectEnv(getenv func(string) string) Protocol {
 	termProgram := strings.TrimSpace(getenv("TERM_PROGRAM"))
 	colorTerm := strings.ToLower(strings.TrimSpace(getenv("COLORTERM")))
 
-	// 1. Kitty graphics protocol: kitty, ghostty and WezTerm all speak it.
-	if strings.EqualFold(termProgram, "ghostty") ||
-		strings.EqualFold(termProgram, "WezTerm") ||
-		strings.Contains(term, "kitty") ||
-		strings.TrimSpace(getenv("KITTY_WINDOW_ID")) != "" {
+	// 1. Kitty graphics protocol: native kitty terminal speaks it reliably.
+	// Note: While Ghostty and WezTerm implement portions of the Kitty graphics
+	// protocol, their support in full-screen alt-screen TUI apps with differential
+	// repainting causes severe placement, clearing, and z-index overlap glitches.
+	// They both support truecolor half-blocks flawlessly, which is chosen as the
+	// stable default under auto-detection. Users can still explicitly opt into
+	// Kitty protocol with album_art_protocol: kitty or HALPRADIO_ART_PROTOCOL=kitty.
+	if strings.Contains(term, "kitty") ||
+		strings.TrimSpace(getenv("KITTY_WINDOW_ID")) != "" ||
+		strings.EqualFold(termProgram, "kitty") {
 		return ProtocolKitty
 	}
 
@@ -115,7 +120,8 @@ func DetectEnv(getenv func(string) string) Protocol {
 	}
 
 	// 4. Truecolor half-blocks.
-	if colorTerm == "truecolor" || colorTerm == "24bit" || strings.Contains(term, "256color") {
+	if colorTerm == "truecolor" || colorTerm == "24bit" || strings.Contains(term, "256color") ||
+		strings.EqualFold(termProgram, "ghostty") || strings.EqualFold(termProgram, "WezTerm") {
 		return ProtocolHalfBlock
 	}
 
