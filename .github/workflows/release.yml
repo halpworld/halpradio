@@ -44,11 +44,14 @@ jobs:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
       - name: Import GPG key for APT signing
-        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
         run: |
-          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          if [ -n "$GPG_PRIVATE_KEY" ]; then
+            echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          else
+            echo "ℹ️ No GPG_PRIVATE_KEY secret set, skipping GPG import"
+          fi
 
       - name: Checkout gh-pages branch to preserve package pool
         uses: actions/checkout@v7
