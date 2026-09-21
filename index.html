@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>halpradio APT Repository</title>
+  <style>
+    :root {
+      --bg: #1a1b26;
+      --card-bg: #24283b;
+      --text: #c0caf5;
+      --heading: #7aa2f7;
+      --accent: #bb9af7;
+      --green: #9ece6a;
+      --border: #414868;
+      --code-bg: #16161e;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      margin: 0;
+      padding: 2rem 1rem;
+      display: flex;
+      justify-content: center;
+    }
+    .container {
+      max-width: 800px;
+      width: 100%;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    h1 {
+      color: var(--heading);
+      margin-bottom: 0.2rem;
+      font-size: 2.2rem;
+    }
+    .tagline {
+      color: var(--accent);
+      font-size: 1.1rem;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+    h2 {
+      color: var(--green);
+      margin-top: 0;
+      font-size: 1.4rem;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem;
+      overflow-x: auto;
+      font-family: "JetBrains Mono", Consolas, Menlo, Monaco, monospace;
+      font-size: 0.95rem;
+      color: #7dcfff;
+    }
+    a {
+      color: var(--heading);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    footer {
+      text-align: center;
+      margin-top: 3rem;
+      color: #565f89;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📻 halpradio Official APT Repository</h1>
+      <p class="tagline">LazyVim-inspired Terminal Internet Radio Streamer</p>
+    </header>
+
+    <div class="card">
+      <h2>🚀 Quick Install on Debian, Ubuntu, Linux Mint & Pop!_OS</h2>
+      <p>Run the following commands in your terminal to add the repository and install <code>halpradio</code>:</p>
+      <pre># 1. Download official GPG archive signing key
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://halpworld.github.io/halpradio/halpradio-archive-keyring.gpg | sudo tee /etc/apt/keyrings/halpradio-archive-keyring.gpg &gt; /dev/null
+
+# 2. Add halpradio repository to APT sources
+echo "deb [signed-by=/etc/apt/keyrings/halpradio-archive-keyring.gpg] https://halpworld.github.io/halpradio stable main" | sudo tee /etc/apt/sources.list.d/halpradio.list
+
+# 3. Update index and install
+sudo apt update
+sudo apt install halpradio</pre>
+    </div>
+
+    <div class="card">
+      <h2>📦 Direct .deb Download</h2>
+      <p>You can also download individual packages directly:</p>
+      <ul>
+        <li>Browse repository packages: <a href="pool/main/"><code>pool/main/</code></a></li>
+        <li>GitHub Releases: <a href="https://github.com/halpworld/halpradio/releases">halpworld/halpradio/releases</a></li>
+      </ul>
+      <p>Install downloaded package directly with automatic dependency resolution:</p>
+      <pre>sudo apt install ./halpradio_*.deb</pre>
+    </div>
+
+    <footer>
+      <p>Project homepage: <a href="https://github.com/halpworld/halpradio">github.com/halpworld/halpradio</a></p>
+    </footer>
+  </div>
+</body>
+</html>

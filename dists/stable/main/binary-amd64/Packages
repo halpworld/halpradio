@@ -1,0 +1,18 @@
+Package: halpradio
+Version: 0.7.0
+Section: sound
+Priority: optional
+Architecture: amd64
+Maintainer: halpworld <https://github.com/halpworld>
+Installed-Size: 15503
+Depends: ca-certificates
+Recommends: mpv
+Suggests: vlc
+Homepage: https://github.com/halpworld/halpradio
+Description: LazyVim-inspired Terminal Internet Radio Streamer
+Filename: pool/main/halpradio_0.7.0_linux_amd64.deb
+Size: 5882426
+MD5sum: b4527a28de6cfdd4ca16dcbb3da2d23e
+SHA1: a0b7775b2daad97b6d067ce4360988fd62637a35
+SHA256: e9af24beb3cfde2f1cdd7f22a1c315842bbc7804b1fc94ac6cb817aaf5f30e06
+

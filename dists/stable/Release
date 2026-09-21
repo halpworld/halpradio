@@ -1,0 +1,24 @@
+Origin: halpradio
+Label: halpradio
+Suite: stable
+Codename: stable
+Version: 1.0
+Architectures: amd64 arm64
+Components: main
+Description: halpradio Official APT Repository
+Date: Mon, 21 Sep 2026 15:07:23 UTC
+MD5Sum:
+ 262a2f3b59d9a3ed54c556539663983e      558 main/binary-amd64/Packages
+ d10d440c63878b7fa3c901dc5a70ef29      406 main/binary-amd64/Packages.gz
+ 2f2cadf682841ec4d053176f2ebdfd4e      558 main/binary-arm64/Packages
+ b1cfc32dbf373914702f2722299dcb54      406 main/binary-arm64/Packages.gz
+SHA1:
+ 2046a27cf82b65b6258c408d1510f53d2f8e08af      558 main/binary-amd64/Packages
+ 6ca1445fc5f06a1840e6abb97bc1fba411db1cad      406 main/binary-amd64/Packages.gz
+ 28b97d6bef2400ff041ecdefe680926a5bec07cf      558 main/binary-arm64/Packages
+ 962c62841a758f74957c159e24abd8f4b528caa1      406 main/binary-arm64/Packages.gz
+SHA256:
+ 7bf4d70044a9e04807a121419fddcea60ae910ceca7429ba3ec71d15d2c3331b      558 main/binary-amd64/Packages
+ f82decbb4d25233ec4590feec9d362b729e568f2688f4ad847b3726f10cc6f39      406 main/binary-amd64/Packages.gz
+ 953e0a5e25f8308d4ec6a5200d252d5190d42b1a577863af31db7a1cc1847d44      558 main/binary-arm64/Packages
+ 8f2cb4d8f1fdd7f1f7b62c76bc379c9310056d3f4a2b42844d47df441725a0a8      406 main/binary-arm64/Packages.gz
