@@ -81,17 +81,24 @@ func RenderLyricsDrawer(in LyricsDrawerInput, th theme.Theme) string {
 
 	foot := lyricsFooter(in, innerW, th)
 
-	// Everything left over after the header and footer belongs to the sheet.
-	bodyHeight := (in.Height - 2) - len(head) - len(foot)
-	if bodyHeight < 1 {
-		bodyHeight = 1
+	maxInnerH := in.Height - 2
+	if maxInnerH < 1 {
+		maxInnerH = 1
 	}
 
-	body := renderLyricsBody(in, innerW, bodyHeight, th)
+	// Everything left over after the header and footer belongs to the sheet.
+	bodyHeight := maxInnerH - len(head) - len(foot)
+	var body []string
+	if bodyHeight > 0 {
+		body = renderLyricsBody(in, innerW, bodyHeight, th)
+	}
 
 	all := append([]string{}, head...)
 	all = append(all, body...)
 	all = append(all, foot...)
+	if len(all) > maxInnerH {
+		all = all[:maxInnerH]
+	}
 	return boxStyle.Render(strings.Join(all, "\n"))
 }
 

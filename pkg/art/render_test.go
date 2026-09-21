@@ -280,7 +280,7 @@ func TestRenderKittyChunking(t *testing.T) {
 			t.Fatalf("chunk %d keys %q missing %q", i, keys, wantMore)
 		}
 		if i == 0 {
-			for _, want := range []string{"a=T", "f=100", "c=40", "r=20", "i=", "q=2"} {
+			for _, want := range []string{"a=T", "f=100", "c=40", "r=20", "i=", "p=1", "C=1", "q=2"} {
 				if !strings.Contains(keys, want) {
 					t.Fatalf("first chunk keys %q missing %q", keys, want)
 				}

@@ -110,17 +110,18 @@ func (m Model) coverSourceLabel() string {
 // resetNowPlaying drops the lyric sheet and artwork held for the previous
 // track. It is called whenever the station or announced title changes.
 func (m *Model) resetNowPlaying() {
+	hadArt := len(m.ArtLines) > 0
 	m.LyricsSheet = nil
 	m.LyricsStatus = ""
 	m.LyricsScroll = 0
 	m.LyricsTrackKey = ""
 	m.IsFetchingLyrics = false
 	m.Cover = nil
-	m.ArtLines = nil
 	m.ArtStatus = ""
 	m.ArtTrackKey = ""
 	m.IsFetchingArt = false
 	m.TrackStartTime = time.Time{}
+	m.dropArt(hadArt)
 }
 
 // syncNowPlaying starts any lookups the current track still needs and returns

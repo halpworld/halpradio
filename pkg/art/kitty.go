@@ -7,9 +7,11 @@ import (
 )
 
 const (
-	// kittyImageID is the placement id every halpradio cover uses. Keeping it
-	// stable means a redraw replaces the previous cover instead of stacking.
+	// kittyImageID is the image ID every halpradio cover uses.
 	kittyImageID = 4242
+	// kittyPlacementID is the placement ID every halpradio cover uses. Keeping it
+	// stable means a redraw replaces the previous cover instead of stacking.
+	kittyPlacementID = 1
 	// kittyChunkSize is the maximum base64 payload per APC escape, as
 	// mandated by the Kitty graphics protocol.
 	kittyChunkSize = 4096
@@ -41,10 +43,14 @@ func renderKitty(png []byte, cols, rows int) string {
 
 		sb.WriteString("\x1b_G")
 		if first {
+			// C=1 instructs the terminal not to move the cursor after placement,
+			// keeping the Bubble Tea cell grid and line positions intact.
+			// p=1 assigns a stable placement ID so redraws replace the existing
+			// placement rather than creating duplicate stacked placements.
 			// q=2 suppresses the terminal's success and error replies. Without
 			// it kitty and ghostty answer on stdin, which a TUI input reader
 			// surfaces as junk keypresses.
-			fmt.Fprintf(&sb, "a=T,f=100,i=%d,c=%d,r=%d,q=2,m=%d", kittyImageID, cols, rows, more)
+			fmt.Fprintf(&sb, "a=T,f=100,i=%d,p=%d,c=%d,r=%d,C=1,q=2,m=%d", kittyImageID, kittyPlacementID, cols, rows, more)
 			first = false
 		} else {
 			fmt.Fprintf(&sb, "m=%d", more)
