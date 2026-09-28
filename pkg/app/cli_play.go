@@ -260,6 +260,8 @@ func executeHeadlessPlay(st radio.Station, vol int, backend string, duration tim
 			}
 		}
 	})
+	cfg, _ := util.LoadConfig()
+	pm.SetDSP(loadDSPSettings(cfg))
 	defer pm.Close()
 
 	if err := pm.Play(st); err != nil {

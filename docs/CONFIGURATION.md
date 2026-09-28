@@ -14,6 +14,7 @@ All user state and settings are stored in your platform's standard configuration
 ```
 ~/.config/halpradio/
 ├── config.yaml       # Persistent user preferences, timers & system hooks
+├── dsp.yaml          # Equalizer curve & DSP rack toggles (saved by the `E` modal)
 ├── debug.log         # Diagnostic log, only when started with --debug
 ├── stations.yaml     # Custom user-added radio stations
 ├── favorites.json    # Favorited stations list
@@ -30,6 +31,7 @@ All user state and settings are stored in your platform's standard configuration
 # Audio & Player Preferences
 volume: 80
 player_backend: "auto"     # auto, native, mpv, vlc, cvlc, ffplay, mplayer, mpg123
+loudness_target_lufs: -14  # EBU R128 normalizer target (-31 to -5 LUFS); toggle the normalizer with E → n
 theme: "tokyonight"        # built-in (tokyonight, catppuccin, synthwave, nord, gruvbox, dracula) or custom theme ID
 visualizer_mode: "dj-cat"   # dj-cat, dj-dog, dj-bear, dj-frog, dj-bunny, bars, wave, spectrum, minimal, off
 search_provider: "spotify"  # spotify, youtube, apple, soundcloud, bandcamp, ddg, google
@@ -81,6 +83,22 @@ lastfm_api_key: ""          # Optional extra cover art provider (iTunes, Deezer 
 # Experimental Features (On Hold)
 experimental_tuner: false   # Enable experimental Analog Frequency Tuner on Tab 0 (see docs/TUNER.md)
 ```
+
+---
+
+### `dsp.yaml` Schema:
+
+Written when you close the equalizer modal (`E`, then `Esc`) and loaded at startup. The loudness target lives in `config.yaml`, not here.
+
+```yaml
+preset: Bass Boost        # Flat, Bass Boost, Vocal Clarity, Electronic, Acoustic, Deep Focus, Lo-Fi Tape or Custom
+bands: [6, 5, 3, 1, 0, 0, 0, 0, 0, 0]   # dB for 32, 64, 125, 250, 500, 1k, 2k, 4k, 8k, 16k Hz (clamped to ±12)
+normalizer: true          # EBU R128 loudness normalizer + -1 dBFS limiter
+crossfeed: false          # Bauer / Chu Moy binaural crossfeed for headphones
+lofi: false               # Lo-fi cassette: band-limit, tape saturation and hiss
+```
+
+See [AUDIO_PLAYER.md](AUDIO_PLAYER.md#-dsp-rack-equalizer-loudness-normalizer--crossfeed) for how each stage works and which backends support it.
 
 ---
 
@@ -249,12 +267,30 @@ issue.
 | `Space` / `Enter` (or Media Play/Pause) | Toggle Play / Pause selected station (or tune in from history) |
 | `s` / `x` (or Media Stop) | Stop audio stream playback |
 | `z` / `Z` | Open **Sleep Timer & Pomodoro Focus Mode** modal |
+| `E` | Open the **Graphic Equalizer & DSP Rack** modal (see below) |
 | `r` / `R` | Play a random station |
 | `+` / `=` / `>` (or Media VolUp) | Increase volume (+5%) — works across ANSI, ISO, AZERTY, QWERTZ layouts |
 | `-` / `_` / `<` (or Media VolDown) | Decrease volume (-5%) |
 | `m` / `M` / `0` (or Media Mute) | Toggle Mute / Unmute audio |
 | `v` | Cycle audio visualizer mode (`dj-cat`, `dj-dog`, `dj-bear`, `dj-frog`, `dj-bunny`, `bars`, `wave`, `spectrum`, `minimal`) |
 | `b` | Switch dial band (`FM` / `AM` / `SW`) in frequency tuner mode |
+
+#### 🎚 Inside the Equalizer & DSP Rack modal (`E`)
+
+Every change is sent to the player immediately, so you hear it while you tune.
+
+| Keybinding | Action |
+|---|---|
+| `Tab` / `l` / `→` · `Shift+Tab` / `h` / `←` | Select next / previous band |
+| `k` / `↑` / `+` · `j` / `↓` / `-` | Raise / lower the selected band by 1 dB |
+| `K` / `PgUp` · `J` / `PgDn` | Raise / lower the selected band by 3 dB |
+| `0` | Reset the selected band to 0 dB |
+| `p` / `P` | Cycle presets forward / backward |
+| `r` | Reset the whole curve to Flat |
+| `n` | Toggle the EBU R128 loudness normalizer |
+| `c` | Toggle binaural crossfeed |
+| `t` | Toggle lo-fi cassette mode |
+| `Esc` / `Enter` / `E` | Save to `dsp.yaml` and close |
 
 ### ⭐ Discovery, Sharing & History
 

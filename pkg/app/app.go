@@ -749,6 +749,7 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 			program.Send(ui.TrackUpdatedMsg(info))
 		}
 	})
+	pm.SetDSP(loadDSPSettings(cfg))
 	pm.SetOnAutoPause(func() {
 		if program != nil {
 			program.Send(ui.AutoPauseMsg{})

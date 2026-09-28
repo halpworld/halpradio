@@ -11,6 +11,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/lyrics"
 	"github.com/halpworld/halpradio/pkg/party"
 	"github.com/halpworld/halpradio/pkg/player"
+	"github.com/halpworld/halpradio/pkg/player/dsp"
 	"github.com/halpworld/halpradio/pkg/player/fingerprint"
 	"github.com/halpworld/halpradio/pkg/plugin"
 	"github.com/halpworld/halpradio/pkg/radio"
@@ -238,6 +239,12 @@ type Model struct {
 	// closed drawer has to explicitly evict them.
 	ArtClearFrames int
 
+	// Graphic equalizer & DSP rack modal. DSP mirrors the player's settings;
+	// every edit is pushed to the player at once and saved to dsp.yaml on close.
+	ShowEQModal bool
+	EQBand      int
+	DSP         dsp.Settings
+
 	// Terminal Party Room State
 	PartySession     *party.PartySession
 	ShowPartyModal   bool
@@ -326,6 +333,12 @@ func NewModel(
 		PartyInputs:                make([]string, 3),
 		LyricsOffset:               time.Duration(cfg.LyricsOffsetMs) * time.Millisecond,
 		ShowLyrics:                 cfg.LyricsEnabled && cfg.LyricsAutoOpen,
+	}
+
+	if pm != nil {
+		m.DSP = pm.DSPSettings()
+	} else {
+		m.DSP = dsp.DefaultSettings()
 	}
 
 	if cfg.LyricsEnabled {

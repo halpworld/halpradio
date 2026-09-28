@@ -52,6 +52,7 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 			formatRow("Space/Enter", "Play / Pause", 12),
 			formatRow("s / x", "Stop audio stream", 12),
 			formatRow("z / Z", "Timer / Pomodoro", 12),
+			formatRow("E", "Equalizer & DSP rack", 12),
 			formatRow("r / R", "Play random station", 12),
 			formatRow("+ / - / =", "Volume / Globe Zoom", 12),
 			formatRow("m", "Toggle mute", 12),
@@ -97,6 +98,7 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 			formatRow("Space", "Play / Pause", 8),
 			formatRow("s/x", "Stop playback", 8),
 			formatRow("z/r", "Timer/Random", 8),
+			formatRow("E", "Equalizer/DSP", 8),
 			formatRow("+/-/m", "Vol/Zoom/Mute", 8),
 		}
 
@@ -132,7 +134,7 @@ func RenderWhichKeyOverlay(width int, height int, th theme.Theme) string {
 			formatRow("M / 9", "Globe Explorer", 8),
 			formatRow("Space", "Play / Pause", 8),
 			formatRow("s / x", "Stop playback", 8),
-			formatRow("z / r", "Timer/Random", 8),
+			formatRow("z/r/E", "Timer/Rnd/EQ", 8),
 			formatRow("y / f", "Yank/Favorite", 8),
 			formatRow("L / A", "Lyrics/Art", 8),
 			formatRow("+/-/m", "Vol/Zoom/Mute", 8),

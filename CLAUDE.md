@@ -14,6 +14,7 @@
 - `main.go`: Embeds `stations.yaml` via `//go:embed` and calls `app.Run()`.
 - `pkg/app/app.go`: CLI flags (`-backend`, `-theme`, `-version`), config initialization, tea.Program runner.
 - `pkg/player/player.go`: Multi-backend player manager (`mpv`, `vlc`, `ffplay`, etc.) + native Go fallback (`oto/v3` + `go-mp3`) and ICY stream metadata listener.
+- `pkg/player/dsp/`: Pure Go DSP rack on float PCM before oto (10-band EQ, EBU R128 normalizer + limiter, crossfeed, lo-fi), `dsp.yaml` persistence and the FFmpeg lavfi mapping for mpv/ffplay.
 - `pkg/radio/store.go`: Station catalog store (`bundled`, `local`, `favorites`), YAML/JSON persistence.
 - `pkg/radio/radiobrowser.go`: RadioBrowser HTTP search client.
 - `pkg/lyrics/`: LRCLIB + NetEase lyric providers, LRC timestamp parser, RAM/disk cache.
@@ -21,7 +22,7 @@
 - `pkg/theme/theme.go`: Theme definitions (`tokyonight`, `catppuccin`, `synthwave`, `nord`, `gruvbox`, `dracula`).
 - `pkg/timer/`: Pomodoro focus state machine, sleep timer countdown, and OS notification dispatcher.
 - `pkg/ui/model.go` & `update.go` & `view.go`: Bubble Tea Model, Update loop, View orchestrator.
-- `pkg/ui/components/`: Sub-views (`header`, `sidebar`, `stationlist`, `playerbar`, `statusbar`, `visualizer`, `modals`, `whichkey`, `lyrics`, `art`).
+- `pkg/ui/components/`: Sub-views (`header`, `sidebar`, `stationlist`, `playerbar`, `statusbar`, `visualizer`, `modals`, `whichkey`, `lyrics`, `art`, `equalizer`).
 - `pkg/ui/nowplaying.go`: Lyric/artwork lookup commands, sync offset, and the artwork rasterisation step.
 - `pkg/util/`: Path resolution (`~/.config/halpradio/`, `~/.cache/halpradio/`) and clipboard helper.
 

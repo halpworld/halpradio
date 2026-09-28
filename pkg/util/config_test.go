@@ -2,6 +2,7 @@ package util
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -232,5 +233,42 @@ sleep_fade_seconds: -10
 	}
 	if reloadedDiscordCfg.DiscordRPC || reloadedDiscordCfg.DiscordClientID != "999888777666555444" {
 		t.Errorf("Expected DiscordRPC false and custom client ID, got %+v", reloadedDiscordCfg)
+	}
+}
+
+func TestLoudnessTargetAndDSPFile(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	if got := DefaultConfig().LoudnessTargetLUFS; got != -14 {
+		t.Errorf("default loudness target = %v, want -14", got)
+	}
+	if got := GetDSPFile(); got != filepath.Join(GetConfigDir(), "dsp.yaml") {
+		t.Errorf("GetDSPFile() = %q", got)
+	}
+
+	// A config.yaml written before the field existed falls back to -14.
+	if err := EnsureConfigDir(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(GetConfigFile(), []byte("volume: 50\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LoudnessTargetLUFS != -14 {
+		t.Errorf("missing loudness target should default to -14, got %v", cfg.LoudnessTargetLUFS)
+	}
+
+	cfg.LoudnessTargetLUFS = -23
+	if err := SaveConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ = LoadConfig()
+	if cfg.LoudnessTargetLUFS != -23 {
+		t.Errorf("loudness target did not round-trip: %v", cfg.LoudnessTargetLUFS)
 	}
 }

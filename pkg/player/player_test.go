@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/halpworld/halpradio/pkg/player/dsp"
 	"github.com/halpworld/halpradio/pkg/radio"
 )
 
@@ -577,6 +578,7 @@ type recordingControl struct {
 	mu      sync.Mutex
 	volumes []int
 	mutes   []bool
+	filters []string
 	closed  bool
 }
 
@@ -590,6 +592,18 @@ func (c *recordingControl) SetMute(muted bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.mutes = append(c.mutes, muted)
+}
+
+func (c *recordingControl) SetAudioFilter(af string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.filters = append(c.filters, af)
+}
+
+func (c *recordingControl) audioFilters() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]string(nil), c.filters...)
 }
 
 func (c *recordingControl) Close() error {
@@ -609,7 +623,7 @@ func (c *recordingControl) snapshot() ([]int, []bool, bool) {
 // --input-terminal=no while volume/mute commands were written to its stdin.
 // mpv discards stdin commands, so those changes silently did nothing.
 func TestMPVArgsUseIPCNotStdin(t *testing.T) {
-	args, err := buildExternalArgs("mpv", "http://stream.example.com/live.mp3", 55, "/tmp/halp/s")
+	args, err := buildExternalArgs("mpv", "http://stream.example.com/live.mp3", 55, "/tmp/halp/s", dsp.DefaultSettings())
 	if err != nil {
 		t.Fatalf("buildExternalArgs error: %v", err)
 	}
@@ -633,7 +647,7 @@ func TestMPVArgsUseIPCNotStdin(t *testing.T) {
 // TestMPVArgsWithoutIPCEndpoint covers the degraded path where an IPC endpoint
 // could not be created: playback must still start, just without live control.
 func TestMPVArgsWithoutIPCEndpoint(t *testing.T) {
-	args, err := buildExternalArgs("mpv", "http://stream.example.com/live.mp3", 40, "")
+	args, err := buildExternalArgs("mpv", "http://stream.example.com/live.mp3", 40, "", dsp.DefaultSettings())
 	if err != nil {
 		t.Fatalf("buildExternalArgs error: %v", err)
 	}
@@ -647,7 +661,7 @@ func TestMPVArgsWithoutIPCEndpoint(t *testing.T) {
 // TestMPlayerArgsUseSlaveMode guards the sibling regression: mplayer only reads
 // commands from stdin when it is started in slave mode.
 func TestMPlayerArgsUseSlaveMode(t *testing.T) {
-	args, err := buildExternalArgs("mplayer", "http://stream.example.com/live.mp3", 55, "")
+	args, err := buildExternalArgs("mplayer", "http://stream.example.com/live.mp3", 55, "", dsp.DefaultSettings())
 	if err != nil {
 		t.Fatalf("buildExternalArgs error: %v", err)
 	}
@@ -663,14 +677,14 @@ func TestMPlayerArgsUseSlaveMode(t *testing.T) {
 }
 
 func TestBuildExternalArgsUnknownBackend(t *testing.T) {
-	if _, err := buildExternalArgs("nonexistent", "http://example.com/s", 50, ""); err == nil {
+	if _, err := buildExternalArgs("nonexistent", "http://example.com/s", 50, "", dsp.DefaultSettings()); err == nil {
 		t.Errorf("expected an error for an unknown backend")
 	}
 }
 
 func TestBuildExternalArgsKnownBackends(t *testing.T) {
 	for _, backend := range []string{"mpv", "vlc", "cvlc", "ffplay", "mplayer", "mpg123"} {
-		args, err := buildExternalArgs(backend, "http://example.com/s", 50, "")
+		args, err := buildExternalArgs(backend, "http://example.com/s", 50, "", dsp.DefaultSettings())
 		if err != nil {
 			t.Fatalf("backend %s: unexpected error %v", backend, err)
 		}
@@ -1019,5 +1033,177 @@ func (p *mpvProbe) get(t *testing.T, name string, requestID int) any {
 			t.Fatalf("mpv get_property %s returned %q", name, resp.Error)
 		}
 		return resp.Data
+	}
+}
+
+func dspTestSettings() dsp.Settings {
+	s := dsp.DefaultSettings().ApplyPreset("Bass Boost")
+	s.Normalizer = true
+	s.Crossfeed = true
+	return s
+}
+
+// TestExternalArgsCarryDSPGraph checks the rack reaches FFmpeg-based backends
+// as a filter graph and stays out of backends that cannot take one.
+func TestExternalArgsCarryDSPGraph(t *testing.T) {
+	fx := dspTestSettings()
+
+	args, err := buildExternalArgs("mpv", "http://example.com/s", 50, "", fx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsArg(args, "--af="+dsp.MPVAudioFilter(fx)) {
+		t.Errorf("mpv argv missing DSP filter: %v", args)
+	}
+
+	args, err = buildExternalArgs("ffplay", "http://example.com/s", 50, "", fx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(args, "\x00")
+	if !strings.Contains(joined, "-af\x00"+dsp.LavfiGraph(fx)+"\x00--") {
+		t.Errorf("ffplay argv missing -af graph before the URL: %v", args)
+	}
+
+	for _, backend := range []string{"vlc", "cvlc", "mplayer", "mpg123"} {
+		args, _ := buildExternalArgs(backend, "http://example.com/s", 50, "", fx)
+		for _, a := range args {
+			if strings.Contains(a, "loudnorm") || strings.Contains(a, "equalizer") {
+				t.Errorf("%s cannot run the rack but got %v", backend, args)
+			}
+		}
+	}
+
+	// A bypassed rack adds no filter flags at all.
+	args, _ = buildExternalArgs("mpv", "http://example.com/s", 50, "", dsp.DefaultSettings())
+	for _, a := range args {
+		if strings.HasPrefix(a, "--af") {
+			t.Errorf("bypassed rack should not add %q", a)
+		}
+	}
+}
+
+func containsArg(args []string, want string) bool {
+	for _, a := range args {
+		if a == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestDSPSupportFor(t *testing.T) {
+	cases := map[string]DSPSupport{
+		"native": DSPLive, "mpv": DSPLive, "ffplay": DSPNextStation,
+		"vlc": DSPUnavailable, "cvlc": DSPUnavailable, "mplayer": DSPUnavailable, "mpg123": DSPUnavailable,
+	}
+	for backend, want := range cases {
+		if got := DSPSupportFor(backend); got != want {
+			t.Errorf("DSPSupportFor(%q) = %q, want %q", backend, got, want)
+		}
+	}
+	if got := NewManager("native", 80, nil).DSPSupport(); got != DSPLive {
+		t.Errorf("native manager support = %q", got)
+	}
+}
+
+// TestManagerSetDSPReachesPlayingStream covers live updates on both paths:
+// the native chain and the mpv IPC channel.
+func TestManagerSetDSPReachesPlayingStream(t *testing.T) {
+	pm := NewManager("native", 80, nil)
+	if pm.DSPSettings().Active() {
+		t.Fatal("a new manager should start with a bypassed rack")
+	}
+
+	ctrl := &recordingControl{}
+	chain := dsp.NewChain(44100, dsp.DefaultSettings())
+	pm.mu.Lock()
+	pm.extCtrl = ctrl
+	pm.dspChain = chain
+	pm.status = StatusPlaying
+	pm.mu.Unlock()
+
+	fx := dspTestSettings()
+	pm.SetDSP(fx)
+
+	if got := pm.DSPSettings(); got.Preset != "Bass Boost" || !got.Normalizer || !got.Crossfeed {
+		t.Errorf("DSPSettings() = %+v", got)
+	}
+	if got := chain.Settings(); got.Preset != "Bass Boost" || !got.Crossfeed {
+		t.Errorf("native chain not updated: %+v", got)
+	}
+	if got := ctrl.audioFilters(); len(got) != 1 || got[0] != dsp.MPVAudioFilter(fx) {
+		t.Errorf("mpv filter updates = %v", got)
+	}
+	if _, _, ok := pm.DSPMeter(); ok {
+		t.Error("meter should not report before any audio was measured")
+	}
+
+	// The returned settings are a copy the caller may edit freely.
+	copied := pm.DSPSettings()
+	copied.Bands[0] = -12
+	if pm.DSPSettings().Bands[0] == -12 {
+		t.Error("DSPSettings must not alias the manager's band slice")
+	}
+
+	_ = pm.Stop()
+	pm.mu.Lock()
+	leaked := pm.dspChain
+	pm.mu.Unlock()
+	if leaked != nil {
+		t.Error("Stop should drop the native DSP chain")
+	}
+	if _, _, ok := pm.DSPMeter(); ok {
+		t.Error("meter should be off once stopped")
+	}
+}
+
+func TestMPVControlSendsAudioFilter(t *testing.T) {
+	c := &mpvControl{endpoint: &mpvIPCEndpoint{Addr: "test"}}
+	af := dsp.MPVAudioFilter(dspTestSettings())
+	c.SetAudioFilter(af) // before connect: replayed on attach
+
+	client, server := net.Pipe()
+	defer server.Close()
+	received := make(chan string, 2)
+	go func() {
+		reader := bufio.NewReader(server)
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				return
+			}
+			received <- strings.TrimSpace(line)
+		}
+	}()
+	c.attach(client)
+
+	want, _ := json.Marshal(map[string]any{"command": []any{"set_property", "af", af}})
+	select {
+	case got := <-received:
+		if got != string(want) {
+			t.Errorf("af command:\n got %s\nwant %s", got, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the af command")
+	}
+	_ = c.Close()
+}
+
+func TestMockPlayerDSP(t *testing.T) {
+	mp := NewMockPlayer(80, nil)
+	if mp.DSPSupport() != DSPLive || mp.DSPSettings().Active() {
+		t.Fatal("unexpected mock DSP defaults")
+	}
+	mp.SetDSP(dspTestSettings())
+	if !mp.DSPSettings().Normalizer || mp.DSPUpdates() != 1 {
+		t.Errorf("mock did not record SetDSP")
+	}
+	mp.SetDSPSupport(DSPUnavailable)
+	if mp.DSPSupport() != DSPUnavailable {
+		t.Error("SetDSPSupport not applied")
+	}
+	if _, _, ok := mp.DSPMeter(); ok {
+		t.Error("mock meter should report off")
 	}
 }

@@ -56,6 +56,7 @@ halpradio/
     ├── art/              # Cover art providers plus Kitty / iTerm2 / Sixel / half-block / Braille renderers
     ├── lyrics/           # LRCLIB & NetEase lyric providers, LRC parser, RAM and disk caches
     ├── player/           # Multi-backend audio playback engine & ICY stream reader
+    │   ├── dsp/          # Pure Go DSP rack: 10-band EQ, EBU R128 normalizer, limiter, crossfeed, lo-fi, lavfi mapping
     │   └── fingerprint/  # Acoustic stream recognition, Chromaprint / AcoustID client, LRU cache
     ├── party/            # P2P mesh synchronized radio rooms, Argon2id/AES-256-GCM E2EE & protocol engine
     ├── plugin/           # Wazero Wasm sandboxing engine, capability permissions, host API, registry client
@@ -63,7 +64,7 @@ halpradio/
     ├── theme/            # Theme definitions & color palette registry
     ├── timer/            # Pomodoro focus engine, sleep timer with volume fade, and OS event dispatcher
     ├── ui/               # Main Bubble Tea Model, Update, View, and Keymap logic
-    │   └── components/   # Modular UI sub-views (Header, StationList, PlayerBar, Visualizer, Modals, PartyBar, LyricsDrawer, AlbumArt)
+    │   └── components/   # Modular UI sub-views (Header, StationList, PlayerBar, Visualizer, Modals, PartyBar, LyricsDrawer, AlbumArt, Equalizer)
     └── util/             # OS configuration directory resolution & clipboard utilities
 ```
 
@@ -76,6 +77,7 @@ halpradio/
 | [`pkg/art`](../pkg/art/client.go) | `Client`, `Cover`, `Renderer`, `Protocol` | Resolves high-resolution cover art from iTunes, Deezer, MusicBrainz / Cover Art Archive and Last.fm, then encodes it for the terminal's best image transport with RAM and disk caching. |
 | [`pkg/lyrics`](../pkg/lyrics/lrclib.go) | `Client`, `Sheet`, `Line`, `ParseLRC()` | Queries LRCLIB and falls back to NetEase, parses `.lrc` timestamps, resolves the active line for a playback offset, and caches sheets in RAM and on disk. |
 | [`pkg/player`](../pkg/player/player.go) | `Player`, `Manager`, `TrackInfo` | Detects audio CLI backends (`mpv`, `vlc`, `ffplay`, etc.) or falls back to native Go audio. Runs ICY metadata streaming goroutine. |
+| [`pkg/player/dsp`](../pkg/player/dsp/chain.go) | `Settings`, `Chain`, `PCMReader` | Float-PCM DSP rack between the native decoder and `oto` (EQ → lo-fi → crossfeed → R128 normalizer → limiter); maps the same settings to FFmpeg `lavfi` graphs for mpv/ffplay; persists `dsp.yaml`. |
 | [`pkg/player/fingerprint`](../pkg/player/fingerprint/client.go) | `Client`, `Result`, `LRUCache` | Captures 5s audio buffers, computes Chromaprint subfingerprints, queries AcoustID & MusicBrainz APIs with LRU caching. |
 | [`pkg/plugin`](../pkg/plugin/manager.go) | `Manager`, `Sandbox`, `Manifest`, `RegistryClient` | Executes sandboxed WebAssembly plugins via Wazero with capability checks (`network`, `storage`, `events`). Fetches and verifies official registry packages. |
 | [`pkg/radio`](../pkg/radio/store.go) | `Store`, `Station`, `Sanitizer`, `History` | Manages bundled, local, and favorite stations. Interfaces with RadioBrowser HTTP API. Cleans dirty metadata and maintains track history. |
