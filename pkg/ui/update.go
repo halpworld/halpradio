@@ -18,6 +18,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/lyrics"
 	"github.com/halpworld/halpradio/pkg/party"
 	"github.com/halpworld/halpradio/pkg/player"
+	"github.com/halpworld/halpradio/pkg/player/dsp"
 	"github.com/halpworld/halpradio/pkg/player/fingerprint"
 	"github.com/halpworld/halpradio/pkg/plugin"
 	"github.com/halpworld/halpradio/pkg/radio"
@@ -747,6 +748,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handlePartyModalKey(msg)
 		}
 
+		if m.ShowEQModal {
+			return m.handleEQModalKey(msg)
+		}
+
 		if m.IsChatting {
 			return m.handlePartyChatKey(msg)
 		}
@@ -821,6 +826,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.KeyMap.Timer):
 			m.openTimerModal()
+
+		case key.Matches(msg, m.KeyMap.Equalizer):
+			m.openEQModal()
 
 		case key.Matches(msg, m.KeyMap.Plugins):
 			m.ShowPluginModal = true
@@ -1770,6 +1778,96 @@ func (m *Model) openTimerModal() {
 	m.TimerPomodoroFocusIdx = 0
 	m.TimerPomodoroNotifyDesktop = m.Timer.PomodoroCfg.NotifyDesktop
 	m.TimerPomodoroNotifyBell = m.Timer.PomodoroCfg.NotifyTerminalBell
+}
+
+func (m *Model) openEQModal() {
+	m.ShowEQModal = true
+	if m.Player != nil {
+		m.DSP = m.Player.DSPSettings()
+	}
+	m.DSP = m.DSP.Normalize()
+	if m.EQBand < 0 || m.EQBand >= dsp.NumBands {
+		m.EQBand = 0
+	}
+}
+
+// setDSP adopts new rack settings and pushes them to the player immediately,
+// so every slider move or toggle is heard in real time.
+func (m *Model) setDSP(s dsp.Settings) {
+	m.DSP = s.Normalize()
+	if m.Player != nil {
+		m.Player.SetDSP(m.DSP)
+	}
+}
+
+// closeEQModal persists the rack to dsp.yaml and returns to the main view.
+func (m *Model) closeEQModal() {
+	m.ShowEQModal = false
+	if err := dsp.Save(util.GetDSPFile(), m.DSP); err != nil {
+		m.StatusMessage = fmt.Sprintf("Could not save DSP settings: %v", err)
+		return
+	}
+	m.StatusMessage = "🎧 DSP rack saved: " + m.DSP.Summary()
+}
+
+func (m Model) handleEQModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	band := m.EQBand
+	gain := 0.0
+	if band >= 0 && band < len(m.DSP.Bands) {
+		gain = m.DSP.Bands[band]
+	}
+
+	switch msg.String() {
+	case "esc", "enter", "E":
+		m.closeEQModal()
+	case "ctrl+c":
+		_ = m.Player.Stop()
+		return m, tea.Quit
+	case "tab", "l", "right":
+		m.EQBand = (band + 1) % dsp.NumBands
+	case "shift+tab", "h", "left":
+		m.EQBand = (band - 1 + dsp.NumBands) % dsp.NumBands
+	case "k", "up", "+", "=":
+		m.setDSP(m.DSP.SetBand(band, gain+1))
+	case "j", "down", "-", "_":
+		m.setDSP(m.DSP.SetBand(band, gain-1))
+	case "K", "pgup":
+		m.setDSP(m.DSP.SetBand(band, gain+3))
+	case "J", "pgdown":
+		m.setDSP(m.DSP.SetBand(band, gain-3))
+	case "0":
+		m.setDSP(m.DSP.SetBand(band, 0))
+	case "r":
+		m.setDSP(m.DSP.ApplyPreset(dsp.PresetFlat))
+	case "p", "P":
+		step := 1
+		if msg.String() == "P" {
+			step = -1
+		}
+		// From a Custom curve, cycling starts at the first preset.
+		idx := dsp.PresetIndex(m.DSP.Preset)
+		if idx < 0 {
+			idx = len(dsp.Presets) - 1
+			if step < 0 {
+				idx = 0
+			}
+		}
+		next := (idx + step + len(dsp.Presets)) % len(dsp.Presets)
+		m.setDSP(m.DSP.ApplyPreset(dsp.Presets[next].Name))
+	case "n":
+		s := m.DSP.Clone()
+		s.Normalizer = !s.Normalizer
+		m.setDSP(s)
+	case "c":
+		s := m.DSP.Clone()
+		s.Crossfeed = !s.Crossfeed
+		m.setDSP(s)
+	case "t":
+		s := m.DSP.Clone()
+		s.LoFi = !s.LoFi
+		m.setDSP(s)
+	}
+	return m, nil
 }
 
 func (m *Model) applyTheme(name string) {

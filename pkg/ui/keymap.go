@@ -50,6 +50,7 @@ type KeyMap struct {
 	FastSweepLeft  key.Binding
 	FastSweepRight key.Binding
 	Timer          key.Binding
+	Equalizer      key.Binding
 	Plugins        key.Binding
 	Party          key.Binding
 	IdentifyTrack  key.Binding
@@ -232,6 +233,10 @@ func DefaultKeyMap() KeyMap {
 		Timer: key.NewBinding(
 			key.WithKeys("z", "Z"),
 			key.WithHelp("z", "sleep/pomodoro timer"),
+		),
+		Equalizer: key.NewBinding(
+			key.WithKeys("E"),
+			key.WithHelp("E", "equalizer & DSP rack"),
 		),
 		IdentifyTrack: key.NewBinding(
 			key.WithKeys("I"),

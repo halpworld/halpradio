@@ -86,6 +86,21 @@ func (m Model) View() string {
 		)
 	}
 
+	if m.ShowEQModal {
+		in := components.EqualizerModalInput{
+			Settings:     m.DSP,
+			SelectedBand: m.EQBand,
+			Width:        width,
+			Height:       height,
+		}
+		if m.Player != nil {
+			in.Backend = m.Player.ActiveBackend()
+			in.Support = m.Player.DSPSupport()
+			in.MeterLUFS, in.MeterGainDB, in.MeterOK = m.Player.DSPMeter()
+		}
+		return artClear + components.RenderEqualizerModal(in, m.Theme)
+	}
+
 	if m.ShowPartyModal {
 		return artClear + components.RenderPartyManagerModal(
 			m.PartySession,

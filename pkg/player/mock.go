@@ -3,6 +3,7 @@ package player
 import (
 	"sync"
 
+	"github.com/halpworld/halpradio/pkg/player/dsp"
 	"github.com/halpworld/halpradio/pkg/radio"
 )
 
@@ -24,6 +25,10 @@ type MockPlayer struct {
 	tunerSignal float64
 	tunerFreq   float64
 	tunerBand   string
+
+	dspSettings dsp.Settings
+	dspSupport  DSPSupport
+	dspUpdates  int
 }
 
 // NewMockPlayer creates a new MockPlayer with the specified initial volume and callback.
@@ -36,6 +41,8 @@ func NewMockPlayer(initialVolume int, onTrackUpd func(TrackInfo)) *MockPlayer {
 		volume:        initialVolume,
 		activeBackend: "mock",
 		onTrackUpd:    onTrackUpd,
+		dspSettings:   dsp.DefaultSettings(),
+		dspSupport:    DSPLive,
 	}
 }
 
@@ -226,4 +233,45 @@ func (m *MockPlayer) TunerSignal() float64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.tunerSignal
+}
+
+// SetDSP records the DSP rack settings on MockPlayer.
+func (m *MockPlayer) SetDSP(s dsp.Settings) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.dspSettings = s.Normalize()
+	m.dspUpdates++
+}
+
+// DSPSettings returns a copy of the recorded DSP rack settings.
+func (m *MockPlayer) DSPSettings() dsp.Settings {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.dspSettings.Clone()
+}
+
+// DSPSupport reports the simulated backend's DSP support (live by default).
+func (m *MockPlayer) DSPSupport() DSPSupport {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.dspSupport
+}
+
+// SetDSPSupport overrides the simulated backend's DSP support.
+func (m *MockPlayer) SetDSPSupport(support DSPSupport) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.dspSupport = support
+}
+
+// DSPUpdates returns how many times SetDSP has been called.
+func (m *MockPlayer) DSPUpdates() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.dspUpdates
+}
+
+// DSPMeter reports no loudness measurement; MockPlayer produces no audio.
+func (m *MockPlayer) DSPMeter() (lufs float64, gainDB float64, ok bool) {
+	return 0, 0, false
 }

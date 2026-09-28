@@ -80,6 +80,7 @@ docker run --rm -it --device /dev/snd halpworld/halpradio:latest
 | **CLI & Hotkey Remote (`halpradio remote`)** | ✅ **macOS Shortcuts, Raycast, tmux** | ❌ None | ❌ None | ❌ None | ⚠️ Socket |
 | **Terminal Party Line (`Ctrl+p`)** | ✅ **P2P Mesh Sync, E2EE Rooms & Reactions** | ❌ None | ❌ None | ❌ None | ❌ None |
 | **Acoustic Fingerprinting (`I`)** | ✅ **Chromaprint / AcoustID + Ad Strip** | ❌ None | ❌ None | ❌ None | ❌ None |
+| **10-Band EQ & R128 Loudness (`E`)** | ✅ **Pure Go DSP: Presets, Crossfeed, Lo-Fi Tape** | ❌ None | ❌ None | ❌ None | ⚠️ Basic EQ |
 | **Pomodoro & Sleep Timers (`z`)** | ✅ **Intervals, Station Switch & OS Notify** | ❌ None | ❌ None | ❌ None | ⚠️ Basic sleep |
 | **Beat-Reactive Animated Visualizers** | ✅ **5 Animal DJs + EQ Spectrum** | ❌ None | ❌ None | ❌ None | ⚠️ Basic VU |
 | **Live ICY Metadata (Song / Artist)** | ✅ **Real-time Async Extraction** | ⚠️ Partial | ❌ None | ⚠️ Partial | ⚠️ Track only |
@@ -110,6 +111,19 @@ Press `v` anytime in **halpradio** to cycle through 5 animated animal DJs, class
 - **Harmonic Multi-Frequency Equalizer Rack**: Solid 6-bar mini-EQ (` ▂▃▄▅▆`) driven by harmonic frequency physics (sub-bass kick, mid melody, treble shimmer) with smooth attack and exponential decay.
 - **Rhythmic Groove**: Head bobbing and turntable vinyl rotation (`◓`, `◑`, `◒`, `◐`) tempo-matched to audio playback.
 - **Sleep State**: When stopped/paused, the DJ rests peacefully on the turntable (`🎧 (= - ω - =)..zzZ [ 💿 ] ⏹ STOPPED`).
+
+---
+
+## 🎚 Graphic Equalizer & DSP Rack
+
+Press `E` to open a 10-band graphic equalizer (32 Hz to 16 kHz, ±12 dB). The sliders respond in real time:
+
+- **Presets**: Flat, Bass Boost, Vocal Clarity, Electronic, Acoustic, Deep Focus and Lo-Fi Tape (`p` cycles through them).
+- **EBU R128 Loudness Normalizer** (`n`): brings quiet and loud stations to the same level (default -14 LUFS, set with `loudness_target_lufs` in `config.yaml`). A -1 dBFS lookahead limiter keeps peaks under control.
+- **Binaural Crossfeed** (`c`): Bauer / Chu Moy crossfeed for more natural headphone listening.
+- **Lo-Fi Cassette Mode** (`t`): tape saturation, band-limiting and hiss.
+
+The rack is written in pure Go and runs before `oto` in the native player. It also drives mpv live through FFmpeg filters, and ffplay from the next station. Settings are saved to `~/.config/halpradio/dsp.yaml`. See [docs/AUDIO_PLAYER.md](docs/AUDIO_PLAYER.md#-dsp-rack-equalizer-loudness-normalizer--crossfeed) for details.
 
 ---
 
@@ -473,6 +487,7 @@ Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Over
 | **Playback** | `Space` / `Enter` / ⏯️ | Toggle Play / Pause selected station (or tune in from history) |
 | | `s` / `x` / ⏹️ | Stop audio stream (on station tabs) |
 | | `z` / `Z` | Open **Sleep Timer & Pomodoro Focus** modal |
+| | `E` | Open **Graphic Equalizer & DSP Rack** (EQ presets, R128 normalizer, crossfeed, lo-fi) |
 | | `r` / `R` | Play random station |
 | | `+` / `-` / `=` / `>` | Volume up / down (5% step, supports ANSI, ISO, AZERTY, QWERTZ) |
 | | `m` / `M` / `0` | Mute / unmute |

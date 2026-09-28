@@ -8,53 +8,55 @@ import (
 )
 
 type Config struct {
-	Volume               int    `yaml:"volume"`
-	PlayerBackend        string `yaml:"player_backend"`
-	Theme                string `yaml:"theme"`
-	VisualizerMode       string `yaml:"visualizer_mode"`
-	LastStationID        string `yaml:"last_station_id"`
-	SearchProvider       string `yaml:"search_provider,omitempty"`
-	PomodoroFocusMin     int    `yaml:"pomodoro_focus_min,omitempty"`
-	PomodoroShortBreak   int    `yaml:"pomodoro_short_break_min,omitempty"`
-	PomodoroLongBreak    int    `yaml:"pomodoro_long_break_min,omitempty"`
-	PomodoroCycles       int    `yaml:"pomodoro_cycles,omitempty"`
-	PomodoroFocusStation string `yaml:"pomodoro_focus_station,omitempty"`
-	PomodoroBreakStation string `yaml:"pomodoro_break_station,omitempty"`
-	SleepFadeSeconds     int    `yaml:"sleep_fade_seconds,omitempty"`
-	EventNotifyDesktop   bool   `yaml:"event_notify_desktop"`
-	EventTerminalBell    bool   `yaml:"event_terminal_bell"`
-	EventCommandHook     string `yaml:"event_command_hook,omitempty"`
-	SongNotifications    bool   `yaml:"song_notifications"`
-	AutoPause            bool   `yaml:"autopause"`
-	MPRISEnabled         bool   `yaml:"mpris_enabled"`
-	IPCEnabled           bool   `yaml:"ipc_enabled"`
-	DiscordRPC           bool   `yaml:"discord_rpc"`
-	DiscordClientID      string `yaml:"discord_client_id,omitempty"`
-	PluginsEnabled       bool   `yaml:"plugins_enabled"`
-	PluginRegistryURL    string `yaml:"plugin_registry_url,omitempty"`
-	ThemeRegistryURL     string `yaml:"theme_registry_url,omitempty"`
-	CatalogAutoUpdate    bool   `yaml:"catalog_auto_update"`
-	CatalogUpdateURL     string `yaml:"catalog_update_url,omitempty"`
-	CatalogCacheTTLHours int    `yaml:"catalog_cache_ttl_hours,omitempty"`
-	ExperimentalTuner    bool   `yaml:"experimental_tuner,omitempty"`
-	FingerprintEnabled   bool   `yaml:"fingerprint_enabled"`
-	AcoustidAPIKey       string `yaml:"acoustid_api_key,omitempty"`
-	AutoIdentify         bool   `yaml:"auto_identify"`
-	LyricsEnabled        bool   `yaml:"lyrics_enabled"`
-	LyricsAutoOpen       bool   `yaml:"lyrics_auto_open"`
-	LyricsOffsetMs       int    `yaml:"lyrics_offset_ms,omitempty"`
-	AlbumArtEnabled      bool   `yaml:"album_art_enabled"`
-	AlbumArtProtocol     string `yaml:"album_art_protocol,omitempty"`
-	LastFMAPIKey         string `yaml:"lastfm_api_key,omitempty"`
-	PartyNickname        string `yaml:"party_nickname,omitempty"`
-	PartyRelayURL        string `yaml:"party_relay_url,omitempty"`
-	PartyPort            int    `yaml:"party_port,omitempty"`
+	Volume               int     `yaml:"volume"`
+	PlayerBackend        string  `yaml:"player_backend"`
+	LoudnessTargetLUFS   float64 `yaml:"loudness_target_lufs"`
+	Theme                string  `yaml:"theme"`
+	VisualizerMode       string  `yaml:"visualizer_mode"`
+	LastStationID        string  `yaml:"last_station_id"`
+	SearchProvider       string  `yaml:"search_provider,omitempty"`
+	PomodoroFocusMin     int     `yaml:"pomodoro_focus_min,omitempty"`
+	PomodoroShortBreak   int     `yaml:"pomodoro_short_break_min,omitempty"`
+	PomodoroLongBreak    int     `yaml:"pomodoro_long_break_min,omitempty"`
+	PomodoroCycles       int     `yaml:"pomodoro_cycles,omitempty"`
+	PomodoroFocusStation string  `yaml:"pomodoro_focus_station,omitempty"`
+	PomodoroBreakStation string  `yaml:"pomodoro_break_station,omitempty"`
+	SleepFadeSeconds     int     `yaml:"sleep_fade_seconds,omitempty"`
+	EventNotifyDesktop   bool    `yaml:"event_notify_desktop"`
+	EventTerminalBell    bool    `yaml:"event_terminal_bell"`
+	EventCommandHook     string  `yaml:"event_command_hook,omitempty"`
+	SongNotifications    bool    `yaml:"song_notifications"`
+	AutoPause            bool    `yaml:"autopause"`
+	MPRISEnabled         bool    `yaml:"mpris_enabled"`
+	IPCEnabled           bool    `yaml:"ipc_enabled"`
+	DiscordRPC           bool    `yaml:"discord_rpc"`
+	DiscordClientID      string  `yaml:"discord_client_id,omitempty"`
+	PluginsEnabled       bool    `yaml:"plugins_enabled"`
+	PluginRegistryURL    string  `yaml:"plugin_registry_url,omitempty"`
+	ThemeRegistryURL     string  `yaml:"theme_registry_url,omitempty"`
+	CatalogAutoUpdate    bool    `yaml:"catalog_auto_update"`
+	CatalogUpdateURL     string  `yaml:"catalog_update_url,omitempty"`
+	CatalogCacheTTLHours int     `yaml:"catalog_cache_ttl_hours,omitempty"`
+	ExperimentalTuner    bool    `yaml:"experimental_tuner,omitempty"`
+	FingerprintEnabled   bool    `yaml:"fingerprint_enabled"`
+	AcoustidAPIKey       string  `yaml:"acoustid_api_key,omitempty"`
+	AutoIdentify         bool    `yaml:"auto_identify"`
+	LyricsEnabled        bool    `yaml:"lyrics_enabled"`
+	LyricsAutoOpen       bool    `yaml:"lyrics_auto_open"`
+	LyricsOffsetMs       int     `yaml:"lyrics_offset_ms,omitempty"`
+	AlbumArtEnabled      bool    `yaml:"album_art_enabled"`
+	AlbumArtProtocol     string  `yaml:"album_art_protocol,omitempty"`
+	LastFMAPIKey         string  `yaml:"lastfm_api_key,omitempty"`
+	PartyNickname        string  `yaml:"party_nickname,omitempty"`
+	PartyRelayURL        string  `yaml:"party_relay_url,omitempty"`
+	PartyPort            int     `yaml:"party_port,omitempty"`
 }
 
 func DefaultConfig() Config {
 	return Config{
 		Volume:               80,
 		PlayerBackend:        "auto",
+		LoudnessTargetLUFS:   -14,
 		Theme:                "tokyonight",
 		VisualizerMode:       "dj-cat",
 		LastStationID:        "",
@@ -136,6 +138,11 @@ func GetCatalogMetadataFile() string {
 
 func GetFavoritesFile() string {
 	return filepath.Join(GetConfigDir(), "favorites.json")
+}
+
+// GetDSPFile returns the path the equalizer & DSP rack settings persist to.
+func GetDSPFile() string {
+	return filepath.Join(GetConfigDir(), "dsp.yaml")
 }
 
 func GetSavedTracksFile() string {
@@ -230,6 +237,9 @@ func LoadConfig() (Config, error) {
 	}
 	if cfg.SleepFadeSeconds < 0 {
 		cfg.SleepFadeSeconds = 10
+	}
+	if cfg.LoudnessTargetLUFS == 0 {
+		cfg.LoudnessTargetLUFS = -14
 	}
 	if cfg.AlbumArtProtocol == "" {
 		cfg.AlbumArtProtocol = "auto"
