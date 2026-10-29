@@ -52,6 +52,7 @@ halpradio/
 ├── stations.yaml         # Bundled station catalog
 ├── docs/                 # Detailed technical documentation
 └── pkg/
+    ├── ai/               # Local AI Radio DJ personas, TTS engines (Piper/Sherpa/Native), ONNX downloader & Liner Notes
     ├── app/              # CLI flag parsing, configuration loading & app bootstrap
     ├── art/              # Cover art providers plus Kitty / iTerm2 / Sixel / half-block / Braille renderers
     ├── lyrics/           # LRCLIB & NetEase lyric providers, LRC parser, RAM and disk caches
@@ -63,7 +64,8 @@ halpradio/
     ├── theme/            # Theme definitions & color palette registry
     ├── timer/            # Pomodoro focus engine, sleep timer with volume fade, and OS event dispatcher
     ├── ui/               # Main Bubble Tea Model, Update, View, and Keymap logic
-    │   └── components/   # Modular UI sub-views (Header, StationList, PlayerBar, Visualizer, Modals, PartyBar, LyricsDrawer, AlbumArt)
+    │   ├── components/   # Modular UI sub-views (Header, StationList, PlayerBar, Visualizer, Modals, PartyBar, LyricsDrawer, AlbumArt)
+    │   └── modals/       # Liner Notes & Artist Biography drawer, AI DJ broadcast banner & AI DJ Studio modal
     └── util/             # OS configuration directory resolution & clipboard utilities
 ```
 
@@ -71,7 +73,8 @@ halpradio/
 
 | Package | Key Types / Files | Responsibilities |
 |---|---|---|
-| [`pkg/app`](../pkg/app/app.go) | `Run()`, `RunPluginCLI()` | Parses CLI flags (`--backend`, `--theme`, `--version`, `--fingerprint`, `--auto-identify`), handles CLI subcommands (`remote`, `plugin`, `party`), sets up store, instantiates `player.Manager`, initializes `tea.Program`. |
+| [`pkg/ai`](../pkg/ai/dj.go) | `DJ`, `LocalTTSEngine`, `LinerNotesClient` | Generates persona-driven radio intros (local Ollama or deterministic templates), synthesizes speech via Piper ONNX, Sherpa-ONNX Kokoro-82M, or native OS TTS, manages opt-in HuggingFace ONNX downloads, and resolves MusicBrainz + Wikipedia liner notes. |
+| [`pkg/app`](../pkg/app/app.go) | `Run()`, `RunPluginCLI()` | Parses CLI flags (`--backend`, `--theme`, `--version`, `--fingerprint`, `--auto-identify`, `--ai-dj`, `--dj-persona`), handles CLI subcommands (`remote`, `plugin`, `party`), sets up store, instantiates `player.Manager`, initializes `tea.Program`. |
 | [`pkg/party`](../pkg/party/sync.go) | `Session`, `MeshNode`, `Packet`, `Crypto` | P2P mesh synchronized radio rooms, WebRTC data channels, Argon2id key derivation & AES-256-GCM encryption, sub-second playback sync, host election, ASCII reaction bus. |
 | [`pkg/art`](../pkg/art/client.go) | `Client`, `Cover`, `Renderer`, `Protocol` | Resolves high-resolution cover art from iTunes, Deezer, MusicBrainz / Cover Art Archive and Last.fm, then encodes it for the terminal's best image transport with RAM and disk caching. |
 | [`pkg/lyrics`](../pkg/lyrics/lrclib.go) | `Client`, `Sheet`, `Line`, `ParseLRC()` | Queries LRCLIB and falls back to NetEase, parses `.lrc` timestamps, resolves the active line for a playback offset, and caches sheets in RAM and on disk. |

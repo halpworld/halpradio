@@ -57,6 +57,9 @@ type KeyMap struct {
 	AlbumArt       key.Binding
 	LyricsSyncBack key.Binding
 	LyricsSyncFwd  key.Binding
+	LinerNotes     key.Binding
+	DJAnnounce     key.Binding
+	DJSettings     key.Binding
 }
 
 func DefaultKeyMap() KeyMap {
@@ -162,8 +165,8 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("e", "edit station"),
 		),
 		DelStation: key.NewBinding(
-			key.WithKeys("d"),
-			key.WithHelp("d", "delete custom station"),
+			key.WithKeys("d", "x", "delete", "backspace"),
+			key.WithHelp("d/del", "delete custom station"),
 		),
 		ExportPR: key.NewBinding(
 			key.WithKeys("p"),
@@ -252,6 +255,18 @@ func DefaultKeyMap() KeyMap {
 		LyricsSyncFwd: key.NewBinding(
 			key.WithKeys("."),
 			key.WithHelp(".", "nudge lyrics sync forward"),
+		),
+		LinerNotes: key.NewBinding(
+			key.WithKeys("i"),
+			key.WithHelp("i", "liner notes & artist bio"),
+		),
+		DJAnnounce: key.NewBinding(
+			key.WithKeys("d"),
+			key.WithHelp("d", "AI DJ intro / del local"),
+		),
+		DJSettings: key.NewBinding(
+			key.WithKeys("D"),
+			key.WithHelp("D", "AI DJ studio & voices"),
 		),
 	}
 }

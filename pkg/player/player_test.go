@@ -1021,3 +1021,49 @@ func (p *mpvProbe) get(t *testing.T, name string, requestID int) any {
 		return resp.Data
 	}
 }
+
+func TestManagerAudioDuckingAndUnducking(t *testing.T) {
+	pm := NewManager("native", 80, nil)
+	ctrl := &recordingControl{}
+	pm.mu.Lock()
+	pm.extCtrl = ctrl
+	pm.status = StatusPlaying
+	pm.mu.Unlock()
+
+	if pm.DuckFactor() != 1.0 {
+		t.Fatalf("expected initial DuckFactor 1.0, got %f", pm.DuckFactor())
+	}
+
+	// Immediate duck to 20%
+	pm.Duck(0.20, 0)
+	if pm.DuckFactor() != 0.20 {
+		t.Errorf("expected DuckFactor 0.20 after instant Duck, got %f", pm.DuckFactor())
+	}
+	// Master volume must remain 80
+	if pm.Volume() != 80 {
+		t.Errorf("expected master Volume() to remain 80 while ducked, got %d", pm.Volume())
+	}
+	volumes, _, _ := ctrl.snapshot()
+	if len(volumes) == 0 || volumes[len(volumes)-1] != 16 {
+		t.Errorf("expected external backend volume scaled to 16 (80 * 0.20), got %v", volumes)
+	}
+
+	// Smooth unduck over 80ms
+	pm.Unduck(80 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
+	if pm.DuckFactor() != 1.0 {
+		t.Errorf("expected DuckFactor restored to 1.0 after Unduck, got %f", pm.DuckFactor())
+	}
+	volumes, _, _ = ctrl.snapshot()
+	if volumes[len(volumes)-1] != 80 {
+		t.Errorf("expected external backend volume restored to 80 after Unduck, got %v", volumes)
+	}
+
+	// Duck with fade and verify Stop() cancels and resets duckFactor to 1.0
+	pm.Duck(0.20, 200*time.Millisecond)
+	time.Sleep(40 * time.Millisecond)
+	_ = pm.Stop()
+	if pm.DuckFactor() != 1.0 {
+		t.Errorf("expected Stop() to reset DuckFactor to 1.0, got %f", pm.DuckFactor())
+	}
+}

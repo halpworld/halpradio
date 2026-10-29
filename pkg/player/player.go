@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -53,6 +54,9 @@ type Player interface {
 	Error() string
 	SetTunerMode(enabled bool, signalStrength float64, freq float64, band string)
 	UpdateTunerSignal(signalStrength float64, freq float64, band string)
+	Duck(targetRatio float64, fadeDur time.Duration)
+	Unduck(fadeDur time.Duration)
+	DuckFactor() float64
 }
 
 type TrackInfo struct {
@@ -70,6 +74,9 @@ type Manager struct {
 	volume         int
 	isMuted        bool
 	lastError      string
+
+	duckFactor float64
+	duckCancel context.CancelFunc
 
 	cmd        *exec.Cmd
 	extCtrl    extControl
@@ -99,6 +106,7 @@ func NewManager(preferredBackend string, initialVolume int, onTrackUpd func(Trac
 	m := &Manager{
 		status:        StatusStopped,
 		volume:        initialVolume,
+		duckFactor:    1.0,
 		onTrackUpd:    onTrackUpd,
 		activeBackend: detectBackend(preferredBackend),
 		staticSynth:   NewStaticSynthesizer(44100),
@@ -226,6 +234,45 @@ func (m *Manager) IsMuted() bool {
 	return m.isMuted
 }
 
+// effectiveGainLocked returns the live station gain in [0.0, 1.0] combining
+// master volume, duckFactor, and (when in tuner mode) lastTunerRSSI.
+// Caller must hold m.mu.
+func (m *Manager) effectiveGainLocked() float64 {
+	gain := (float64(m.volume) / 100.0) * m.duckFactor
+	if m.tunerMode && m.lastTunerRSSI >= 0 {
+		gain *= m.lastTunerRSSI
+	}
+	if gain < 0 {
+		gain = 0
+	}
+	if gain > 1.0 {
+		gain = 1.0
+	}
+	return gain
+}
+
+// applyLiveVolume pushes the current effective volume (including duckFactor and
+// tuner RSSI) to active native and external player backends.
+func (m *Manager) applyLiveVolume() {
+	m.mu.Lock()
+	isMuted := m.isMuted
+	gain := m.effectiveGainLocked()
+	np := m.nativePlayer
+	ctrl := m.extCtrl
+	m.mu.Unlock()
+
+	if np != nil {
+		if isMuted {
+			np.SetVolume(0.0)
+		} else {
+			np.SetVolume(gain)
+		}
+	}
+	if ctrl != nil && !isMuted {
+		ctrl.SetVolume(clampVolume(int(math.Round(gain * 100.0))))
+	}
+}
+
 func (m *Manager) SetVolume(vol int) int {
 	m.mu.Lock()
 	if vol < 0 {
@@ -237,29 +284,20 @@ func (m *Manager) SetVolume(vol int) int {
 	m.volume = vol
 	m.isMuted = false
 	currVol := m.volume
+	gain := m.effectiveGainLocked()
 	np := m.nativePlayer
 	synth := m.staticSynth
 	ctrl := m.extCtrl
-	inTuner := m.tunerMode
-	rssi := m.lastTunerRSSI
 	m.mu.Unlock()
 
 	if np != nil {
-		if inTuner {
-			np.SetVolume((float64(currVol) / 100.0) * rssi)
-		} else {
-			np.SetVolume(float64(currVol) / 100.0)
-		}
+		np.SetVolume(gain)
 	}
 	if synth != nil {
 		synth.SetVolume(float64(currVol)/100.0, false)
 	}
 	if ctrl != nil {
-		effVol := currVol
-		if inTuner {
-			effVol = int(float64(currVol) * rssi)
-		}
-		ctrl.SetVolume(clampVolume(effVol))
+		ctrl.SetVolume(clampVolume(int(math.Round(gain * 100.0))))
 	}
 
 	return currVol
@@ -270,20 +308,17 @@ func (m *Manager) ToggleMute() bool {
 	m.isMuted = !m.isMuted
 	muted := m.isMuted
 	vol := m.volume
+	gain := m.effectiveGainLocked()
 	np := m.nativePlayer
 	synth := m.staticSynth
 	ctrl := m.extCtrl
-	inTuner := m.tunerMode
-	rssi := m.lastTunerRSSI
 	m.mu.Unlock()
 
 	if np != nil {
 		if muted {
 			np.SetVolume(0.0)
-		} else if inTuner {
-			np.SetVolume((float64(vol) / 100.0) * rssi)
 		} else {
-			np.SetVolume(float64(vol) / 100.0)
+			np.SetVolume(gain)
 		}
 	}
 	if synth != nil {
@@ -295,8 +330,96 @@ func (m *Manager) ToggleMute() bool {
 	return muted
 }
 
+// Duck smoothly interpolates duckFactor from its current value to targetRatio
+// over fadeDur without altering the user's master volume.
+func (m *Manager) Duck(targetRatio float64, fadeDur time.Duration) {
+	if targetRatio < 0 {
+		targetRatio = 0
+	}
+	if targetRatio > 1.0 {
+		targetRatio = 1.0
+	}
+
+	m.mu.Lock()
+	if m.duckCancel != nil {
+		m.duckCancel()
+		m.duckCancel = nil
+	}
+	startFactor := m.duckFactor
+	if fadeDur <= 0 || math.Abs(startFactor-targetRatio) < 0.001 {
+		m.duckFactor = targetRatio
+		m.mu.Unlock()
+		m.applyLiveVolume()
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.duckCancel = cancel
+	m.mu.Unlock()
+
+	tickInterval := 25 * time.Millisecond
+	if fadeDur < tickInterval*2 {
+		tickInterval = fadeDur / 4
+		if tickInterval < 2*time.Millisecond {
+			tickInterval = 2 * time.Millisecond
+		}
+	}
+
+	go func() {
+		startTime := time.Now()
+		ticker := time.NewTicker(tickInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case now := <-ticker.C:
+				elapsed := now.Sub(startTime)
+				if elapsed >= fadeDur {
+					m.mu.Lock()
+					if ctx.Err() == nil {
+						m.duckFactor = targetRatio
+					}
+					m.mu.Unlock()
+					if ctx.Err() == nil {
+						m.applyLiveVolume()
+					}
+					return
+				}
+				progress := float64(elapsed) / float64(fadeDur)
+				curr := startFactor + (targetRatio-startFactor)*progress
+				m.mu.Lock()
+				if ctx.Err() == nil {
+					m.duckFactor = curr
+				}
+				m.mu.Unlock()
+				if ctx.Err() == nil {
+					m.applyLiveVolume()
+				}
+			}
+		}
+	}()
+}
+
+// Unduck smoothly interpolates duckFactor back to 1.0 (full volume) over fadeDur.
+func (m *Manager) Unduck(fadeDur time.Duration) {
+	m.Duck(1.0, fadeDur)
+}
+
+// DuckFactor returns the current live audio ducking multiplier (1.0 = unducked).
+func (m *Manager) DuckFactor() float64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.duckFactor
+}
+
 func (m *Manager) Stop() error {
 	m.mu.Lock()
+	if m.duckCancel != nil {
+		m.duckCancel()
+		m.duckCancel = nil
+	}
+	m.duckFactor = 1.0
 	if m.cancelFn != nil {
 		m.cancelFn()
 		m.cancelFn = nil
@@ -335,6 +458,11 @@ func (m *Manager) Stop() error {
 func (m *Manager) Pause() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.duckCancel != nil {
+		m.duckCancel()
+		m.duckCancel = nil
+	}
+	m.duckFactor = 1.0
 	if m.status == StatusPlaying || m.status == StatusConnecting {
 		if m.cancelFn != nil {
 			m.cancelFn()
@@ -424,16 +552,9 @@ func (m *Manager) Play(st radio.Station) error {
 	m.currentTrack = st.Name
 	m.lastError = ""
 	backend := m.activeBackend
-	vol := m.volume
-	if m.isMuted {
-		vol = 0
-	} else if m.tunerMode && m.lastTunerRSSI >= 0 {
-		vol = int(float64(vol) * m.lastTunerRSSI)
-		if vol < 0 {
-			vol = 0
-		} else if vol > 100 {
-			vol = 100
-		}
+	vol := 0
+	if !m.isMuted {
+		vol = clampVolume(int(math.Round(m.effectiveGainLocked() * 100.0)))
 	}
 	m.mu.Unlock()
 
@@ -541,22 +662,9 @@ func (m *Manager) playExternal(ctx context.Context, backend string, st radio.Sta
 		}
 	}
 
-	m.mu.Lock()
-	m.cmd = cmd
-	m.extCtrl = ctrl
-	m.mu.Unlock()
-
 	debuglog.Logf("player", "exec %v", cmd.Args)
 
 	if err := cmd.Start(); err != nil {
-		m.mu.Lock()
-		if m.extCtrl == ctrl {
-			m.extCtrl = nil
-		}
-		if m.cmd == cmd {
-			m.cmd = nil
-		}
-		m.mu.Unlock()
 		if ctrl != nil {
 			_ = ctrl.Close()
 		} else {
@@ -567,6 +675,23 @@ func (m *Manager) playExternal(ctx context.Context, backend string, st radio.Sta
 		}
 		return
 	}
+
+	m.mu.Lock()
+	if ctx.Err() != nil {
+		m.mu.Unlock()
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		if ctrl != nil {
+			_ = ctrl.Close()
+		} else {
+			ipc.Cleanup()
+		}
+		return
+	}
+	m.cmd = cmd
+	m.extCtrl = ctrl
+	m.mu.Unlock()
 
 	m.mu.Lock()
 	m.status = StatusPlaying
@@ -760,6 +885,7 @@ func (m *Manager) SetTunerMode(enabled bool, signalStrength float64, freq float6
 	m.lastTunerRSSI = signalStrength
 	vol := m.volume
 	isMuted := m.isMuted
+	gain := m.effectiveGainLocked()
 	synth := m.staticSynth
 	np := m.nativePlayer
 	ctrl := m.extCtrl
@@ -772,13 +898,13 @@ func (m *Manager) SetTunerMode(enabled bool, signalStrength float64, freq float6
 	}
 	m.startOrStopStaticPlayer(enabled)
 
-	// When leaving tuner mode, restore full master volume on station
+	// Restore or apply live effective volume on station
 	if !enabled && status == StatusPlaying && !isMuted {
 		if np != nil {
-			np.SetVolume(float64(vol) / 100.0)
+			np.SetVolume(gain)
 		}
 		if ctrl != nil {
-			ctrl.SetVolume(clampVolume(vol))
+			ctrl.SetVolume(clampVolume(int(math.Round(gain * 100.0))))
 		}
 	}
 }
@@ -788,6 +914,7 @@ func (m *Manager) UpdateTunerSignal(signalStrength float64, freq float64, band s
 	m.mu.Lock()
 	m.lastTunerRSSI = signalStrength
 	vol := m.volume
+	duck := m.duckFactor
 	isMuted := m.isMuted
 	synth := m.staticSynth
 	np := m.nativePlayer
@@ -799,14 +926,14 @@ func (m *Manager) UpdateTunerSignal(signalStrength float64, freq float64, band s
 		synth.SetParams(signalStrength, freq, band, float64(vol)/100.0, isMuted)
 	}
 
-	// Dynamic volume crossfade: station volume scales with signal strength on both native and external players
+	// Dynamic volume crossfade: station volume scales with signal strength and duckFactor on both native and external players
 	if status == StatusPlaying && !isMuted {
-		stationVol := (float64(vol) / 100.0) * signalStrength
+		stationVol := (float64(vol) / 100.0) * duck * signalStrength
 		if np != nil {
 			np.SetVolume(stationVol)
 		}
 		if ctrl != nil {
-			ctrl.SetVolume(clampVolume(int(stationVol * 100.0)))
+			ctrl.SetVolume(clampVolume(int(math.Round(stationVol * 100.0))))
 		}
 	}
 }

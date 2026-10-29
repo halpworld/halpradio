@@ -49,6 +49,13 @@ type Config struct {
 	PartyNickname        string `yaml:"party_nickname,omitempty"`
 	PartyRelayURL        string `yaml:"party_relay_url,omitempty"`
 	PartyPort            int    `yaml:"party_port,omitempty"`
+	AIDJEnabled          bool   `yaml:"ai_dj"`
+	AIDJPersona          string `yaml:"ai_dj_persona,omitempty"`
+	AIDJTTSEngine        string `yaml:"ai_dj_tts_engine,omitempty"`
+	AIDJVoiceModel       string `yaml:"ai_dj_voice_model,omitempty"`
+	AIDJOllamaURL        string `yaml:"ai_dj_ollama_url,omitempty"`
+	AIDJOllamaModel      string `yaml:"ai_dj_ollama_model,omitempty"`
+	AIDJDuckLevel        int    `yaml:"ai_dj_duck_level,omitempty"`
 }
 
 func DefaultConfig() Config {
@@ -93,6 +100,13 @@ func DefaultConfig() Config {
 		LastFMAPIKey:         "",
 		PartyNickname:        "",
 		PartyPort:            0,
+		AIDJEnabled:          false,
+		AIDJPersona:          "late-night-chill",
+		AIDJTTSEngine:        "auto",
+		AIDJVoiceModel:       "en_US-lessac-medium",
+		AIDJOllamaURL:        "http://127.0.0.1:11434",
+		AIDJOllamaModel:      "",
+		AIDJDuckLevel:        20,
 	}
 }
 
@@ -177,13 +191,31 @@ func GetAlbumArtCacheDir() string {
 	return filepath.Join(GetCacheDir(), "art")
 }
 
-// EnsureCacheDir creates the lyrics and artwork cache directories. A failure
-// here is never fatal: the callers fall back to network-only operation.
+// GetAICacheDir returns the base on-disk cache location for AI DJ and liner notes data.
+func GetAICacheDir() string {
+	return filepath.Join(GetCacheDir(), "ai")
+}
+
+// GetTTSModelsDir returns the on-disk cache location for opt-in ONNX voice models.
+func GetTTSModelsDir() string {
+	return filepath.Join(GetAICacheDir(), "models")
+}
+
+// GetLinerNotesCacheDir returns the on-disk cache location for artist/track liner notes.
+func GetLinerNotesCacheDir() string {
+	return filepath.Join(GetAICacheDir(), "linernotes")
+}
+
+// EnsureCacheDir creates the lyrics, artwork, and liner notes cache directories.
+// A failure here is never fatal: the callers fall back to network-only operation.
 func EnsureCacheDir() error {
 	if err := os.MkdirAll(GetLyricsCacheDir(), 0700); err != nil {
 		return err
 	}
-	return os.MkdirAll(GetAlbumArtCacheDir(), 0700)
+	if err := os.MkdirAll(GetAlbumArtCacheDir(), 0700); err != nil {
+		return err
+	}
+	return os.MkdirAll(GetLinerNotesCacheDir(), 0700)
 }
 
 func GetPluginsDir() string {
@@ -233,6 +265,21 @@ func LoadConfig() (Config, error) {
 	}
 	if cfg.AlbumArtProtocol == "" {
 		cfg.AlbumArtProtocol = "auto"
+	}
+	if cfg.AIDJPersona == "" {
+		cfg.AIDJPersona = "late-night-chill"
+	}
+	if cfg.AIDJTTSEngine == "" {
+		cfg.AIDJTTSEngine = "auto"
+	}
+	if cfg.AIDJVoiceModel == "" {
+		cfg.AIDJVoiceModel = "en_US-lessac-medium"
+	}
+	if cfg.AIDJOllamaURL == "" {
+		cfg.AIDJOllamaURL = "http://127.0.0.1:11434"
+	}
+	if cfg.AIDJDuckLevel <= 0 || cfg.AIDJDuckLevel > 100 {
+		cfg.AIDJDuckLevel = 20
 	}
 
 	return cfg, nil

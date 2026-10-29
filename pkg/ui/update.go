@@ -13,6 +13,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/halpworld/halpradio/pkg/ai"
 	"github.com/halpworld/halpradio/pkg/art"
 	"github.com/halpworld/halpradio/pkg/debuglog"
 	"github.com/halpworld/halpradio/pkg/lyrics"
@@ -129,15 +130,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// Lyrics and album art follow whatever is on air, whichever code
-		// path started it: the station list, the globe, the analog tuner, a
-		// party room sync or an OS media key.
-		if m.Config.LyricsEnabled || m.Config.AlbumArtEnabled {
+		// Lyrics, album art, liner notes and Local AI Radio DJ follow whatever is
+		// on air, whichever code path started it: the station list, the globe,
+		// the analog tuner, a party room sync or an OS media key.
+		if m.Config.LyricsEnabled || m.Config.AlbumArtEnabled || m.ShowLinerNotes || m.Config.AIDJEnabled {
 			if sig := m.nowPlayingSignature(); sig != m.nowPlayingSig {
 				m.nowPlayingSig = sig
 				m.resetNowPlaying()
 				tickCmds = append(tickCmds, m.syncNowPlaying()...)
 				m.renderArt()
+			}
+		}
+
+		if m.DJBannerActive && !m.DJBannerUntil.IsZero() && now.After(m.DJBannerUntil) {
+			m.DJBannerActive = false
+			m.DJBannerFading = false
+			if m.Player != nil && m.Player.DuckFactor() < 1.0 {
+				m.Player.Unduck(0)
 			}
 		}
 
@@ -162,16 +171,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if sp.Status == "playing" {
+			m.cancelDJAnnouncement()
 			_ = m.Player.Play(*st)
 			m.PlayingID = st.ID
 			m.StatusMessage = fmt.Sprintf("📻 Party sync: %s", st.Name)
 			m.SyncDesktop()
 		} else if sp.Status == "paused" {
+			m.cancelDJAnnouncement()
 			_ = m.Player.Pause()
 			m.PlayingID = ""
 			m.StatusMessage = fmt.Sprintf("⏸️ Party paused: %s", st.Name)
 			m.SyncDesktop()
 		} else if sp.Status == "stopped" {
+			m.cancelDJAnnouncement()
 			_ = m.Player.Stop()
 			m.PlayingID = ""
 			m.StatusMessage = "⏹️ Party audio stopped"
@@ -434,7 +446,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Player.ActiveBackend(),
 			)
 		}
-		return m, tea.SetWindowTitle(m.WindowTitle())
+		if m.ShowLinerNotes || m.Config.AIDJEnabled {
+			if sig := m.nowPlayingSignature(); sig != m.nowPlayingSig {
+				m.nowPlayingSig = sig
+				m.resetNowPlaying()
+				cmds = append(cmds, m.syncNowPlaying()...)
+				m.renderArt()
+			}
+		}
+		cmds = append(cmds, tea.SetWindowTitle(m.WindowTitle()))
+		return m, tea.Batch(cmds...)
 
 	case TrackIdentifiedMsg:
 		m.IsIdentifying = false
@@ -529,6 +550,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.PlayingID = st.ID
 			m.StatusMessage = fmt.Sprintf("Resumed %s", st.Name)
 		} else if len(m.Stations) > 0 && m.SelectedIndex < len(m.Stations) {
+			m.cancelDJAnnouncement()
 			st := m.Stations[m.SelectedIndex]
 			_ = m.Player.Play(st)
 			m.PlayingID = st.ID
@@ -542,6 +564,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case MediaPauseMsg:
 		if m.Player.Status() == player.StatusPlaying {
+			m.cancelDJAnnouncement()
 			_ = m.Player.Pause()
 			m.PlayingID = ""
 			m.StatusMessage = "Audio playback paused"
@@ -550,12 +573,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.SetWindowTitle(m.WindowTitle())
 
 	case AutoPauseMsg:
+		m.cancelDJAnnouncement()
 		m.PlayingID = ""
 		m.StatusMessage = "Paused - headphones disconnected"
 		m.SyncDesktop()
 		return m, tea.SetWindowTitle(m.WindowTitle())
 
 	case MediaStopMsg:
+		m.cancelDJAnnouncement()
 		_ = m.Player.Stop()
 		m.PlayingID = ""
 		m.StatusMessage = "Audio playback stopped"
@@ -594,6 +619,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case MediaRandomMsg:
 		if len(m.Stations) > 0 {
+			m.cancelDJAnnouncement()
 			idx := rand.Intn(len(m.Stations))
 			m.SelectedIndex = idx
 			st := m.Stations[idx]
@@ -608,6 +634,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.SetWindowTitle(m.WindowTitle())
 
 	case MediaQuitMsg:
+		m.cancelDJAnnouncement()
 		_ = m.Player.Stop()
 		m.SyncDesktop()
 		return m, tea.Quit
@@ -691,6 +718,92 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.renderArt()
 		return m, nil
 
+	case LinerNotesFetchedMsg:
+		if msg.TrackKey != "" && m.LinerNotesTrackKey != "" && msg.TrackKey != m.LinerNotesTrackKey {
+			return m, nil
+		}
+		m.IsFetchingLinerNotes = false
+		if msg.Err != nil || msg.Notes == nil {
+			if m.LinerNotes == nil {
+				m.LinerNotes = m.initialLinerNotes()
+			}
+			m.LinerNotesStatus = "Showing offline station metadata"
+			return m, nil
+		}
+		m.LinerNotes = msg.Notes
+		m.LinerNotesStatus = ""
+		if m.ShowLinerNotes {
+			m.StatusMessage = fmt.Sprintf("📖 Loaded liner notes (%s)", msg.Notes.Source)
+		}
+		return m, nil
+
+	case DJIntroGeneratedMsg:
+		if msg.Seq != 0 && msg.Seq != m.DJAnnounceSeq {
+			return m, nil
+		}
+		dj := m.ensureDJ()
+		if m.Player != nil {
+			m.Player.Duck(dj.DuckRatio(), 0)
+		}
+		m.DJBannerActive = true
+		m.DJBannerFading = false
+		if msg.Persona != "" {
+			m.DJBannerPersona = msg.Persona
+		} else {
+			m.DJBannerPersona = dj.Persona().Name
+		}
+		if msg.Engine != "" {
+			m.DJBannerEngine = msg.Engine
+		} else {
+			m.DJBannerEngine = dj.EngineLabel()
+		}
+		if strings.TrimSpace(msg.Script) != "" {
+			m.DJBannerScript = msg.Script
+		}
+		m.DJBannerUntil = time.Now().Add(8 * time.Second)
+		return m, m.speakDJScriptCmd(m.DJAnnounceSeq, msg.TrackKey, m.DJBannerScript)
+
+	case DJSpeechFinishedMsg:
+		if msg.Seq != 0 && msg.Seq != m.DJAnnounceSeq {
+			return m, nil
+		}
+		if msg.Script != "" && msg.Script != m.DJBannerScript {
+			return m, nil
+		}
+		if m.Player != nil {
+			m.Player.Unduck(0)
+		}
+		m.DJBannerFading = true
+		return m, m.unduckAfterDelayCmd(m.DJAnnounceSeq, m.DJBannerScript)
+
+	case DJUnduckFinishedMsg:
+		if msg.Seq != 0 && msg.Seq != m.DJAnnounceSeq {
+			return m, nil
+		}
+		if msg.Script == "" || msg.Script == m.DJBannerScript {
+			m.DJBannerActive = false
+			m.DJBannerFading = false
+			if m.Player != nil && m.Player.DuckFactor() < 1.0 {
+				m.Player.Unduck(0)
+			}
+		}
+		return m, nil
+
+	case DJVoiceDownloadedMsg:
+		m.IsDownloadingVoice = false
+		if msg.Err != nil {
+			m.DJModalStatus = fmt.Sprintf("Download error: %v", msg.Err)
+			m.StatusMessage = m.DJModalStatus
+			return m, nil
+		}
+		m.Config.AIDJVoiceModel = msg.ModelID
+		_ = util.SaveConfig(m.Config)
+		m.ensureDJ()
+		m.refreshDJInstalledVoices()
+		m.DJModalStatus = fmt.Sprintf("✓ Installed & activated ONNX voice %s!", msg.ModelID)
+		m.StatusMessage = m.DJModalStatus
+		return m, nil
+
 	case tea.KeyMsg:
 		if m.ShowWhichKey {
 			if key.Matches(msg, m.KeyMap.Clear) || key.Matches(msg, m.KeyMap.Help) || key.Matches(msg, m.KeyMap.Quit) {
@@ -709,11 +822,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.ShowArtModal {
 			switch {
 			case key.Matches(msg, m.KeyMap.Quit):
+				m.cancelDJAnnouncement()
 				_ = m.Player.Stop()
 				return m, tea.Quit
 			case key.Matches(msg, m.KeyMap.Lyrics):
 				m.ShowArtModal = false
 				return m, tea.Batch(m.toggleLyricsDrawer()...)
+			case key.Matches(msg, m.KeyMap.LinerNotes):
+				m.ShowArtModal = false
+				return m, tea.Batch(m.toggleLinerNotesDrawer()...)
 			case key.Matches(msg, m.KeyMap.Clear),
 				key.Matches(msg, m.KeyMap.AlbumArt),
 				key.Matches(msg, m.KeyMap.PlayPause):
@@ -745,6 +862,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.ShowPartyModal {
 			return m.handlePartyModalKey(msg)
+		}
+
+		if m.ShowDJModal {
+			return m.handleDJModalKey(msg)
 		}
 
 		if m.IsChatting {
@@ -792,6 +913,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch {
 		case key.Matches(msg, m.KeyMap.Quit):
+			m.cancelDJAnnouncement()
 			_ = m.Player.Stop()
 			return m, tea.Quit
 
@@ -877,6 +999,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.KeyMap.Up):
 			if m.ShowLyrics && m.ActiveFocus == FocusLyrics {
 				m.scrollLyrics(-1)
+			} else if m.ShowLinerNotes && m.ActiveFocus == FocusLinerNotes {
+				m.scrollLinerNotes(-1)
 			} else if m.ActiveTab == 8 {
 				if m.Config.ExperimentalTuner && m.ActiveTuner {
 					cfg := tuner.Bands[m.TunerBand]
@@ -943,6 +1067,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.KeyMap.Down):
 			if m.ShowLyrics && m.ActiveFocus == FocusLyrics {
 				m.scrollLyrics(1)
+			} else if m.ShowLinerNotes && m.ActiveFocus == FocusLinerNotes {
+				m.scrollLinerNotes(1)
 			} else if m.ActiveTab == 8 {
 				if m.Config.ExperimentalTuner && m.ActiveTuner {
 					cfg := tuner.Bands[m.TunerBand]
@@ -997,6 +1123,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.KeyMap.Left):
 			if m.ShowLyrics && m.ActiveFocus == FocusLyrics {
 				m.ActiveFocus = FocusMainList
+			} else if m.ShowLinerNotes && m.ActiveFocus == FocusLinerNotes {
+				m.ActiveFocus = FocusMainList
 			} else if m.ActiveTab == 8 {
 				if m.Config.ExperimentalTuner && m.ActiveTuner {
 					cfg := tuner.Bands[m.TunerBand]
@@ -1029,7 +1157,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.Right):
-			if m.ShowLyrics && m.ActiveFocus == FocusLyrics {
+			if (m.ShowLyrics && m.ActiveFocus == FocusLyrics) || (m.ShowLinerNotes && m.ActiveFocus == FocusLinerNotes) {
 				// The drawer is already the rightmost pane.
 			} else if m.ActiveTab == 8 {
 				if m.Config.ExperimentalTuner && m.ActiveTuner {
@@ -1063,7 +1191,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.Top):
-			if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
+			if m.ShowLinerNotes && m.ActiveFocus == FocusLinerNotes {
+				m.LinerNotesScroll = 0
+			} else if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
 				if m.ActiveTab == 0 {
 					m.ActivityIndex = 0
 					m.SelectedActivity = ""
@@ -1082,7 +1212,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.Bottom):
-			if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
+			if m.ShowLinerNotes && m.ActiveFocus == FocusLinerNotes {
+				m.scrollLinerNotes(100)
+			} else if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
 				if m.ActiveTab == 0 {
 					m.ActivityIndex = len(m.Activities)
 					if len(m.Activities) > 0 {
@@ -1110,7 +1242,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.HalfPageUp):
-			if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
+			if m.ShowLinerNotes && m.ActiveFocus == FocusLinerNotes {
+				m.scrollLinerNotes(-5)
+			} else if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
 				if m.ActiveTab == 0 {
 					m.ActivityIndex -= 5
 					if m.ActivityIndex < 0 {
@@ -1156,7 +1290,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.KeyMap.HalfPageDown):
-			if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
+			if m.ShowLinerNotes && m.ActiveFocus == FocusLinerNotes {
+				m.scrollLinerNotes(5)
+			} else if (m.ActiveTab == 0 || m.ActiveTab == 2 || m.ActiveTab == 3) && m.ActiveFocus == FocusSidebar {
 				if m.ActiveTab == 0 {
 					m.ActivityIndex += 5
 					if m.ActivityIndex > len(m.Activities) {
@@ -1396,6 +1532,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.ActiveTab == 8 {
 				if m.Config.ExperimentalTuner && m.ActiveTuner {
 					if m.Player.Status() == player.StatusPlaying || m.Player.Status() == player.StatusConnecting {
+						m.cancelDJAnnouncement()
 						_ = m.Player.Pause()
 						m.PlayingID = ""
 						m.StatusMessage = "Tuner audio stream muted / paused [Space: Resume]"
@@ -1403,6 +1540,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					} else {
 						rssi, locked := tuner.CalculateSignalRSSI(m.Store.GetAllStations(), m.TunerBand, m.TunerFreq)
 						if locked != nil && rssi >= 0.20 {
+							m.cancelDJAnnouncement()
 							m.PlayingID = locked.ID
 							_ = m.Player.Play(*locked)
 							m.Player.UpdateTunerSignal(rssi, m.TunerFreq, m.TunerBand)
@@ -1421,11 +1559,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 						st := nearest.Stations[idx]
 						if m.PlayingID == st.ID && m.Player.Status() == player.StatusPlaying {
+							m.cancelDJAnnouncement()
 							_ = m.Player.Pause()
 							m.PlayingID = ""
 							m.StatusMessage = fmt.Sprintf("Paused %s", st.Name)
 							m.SyncDesktop()
 						} else {
+							m.cancelDJAnnouncement()
 							_ = m.Player.Play(st)
 							m.PlayingID = st.ID
 							m.StatusMessage = fmt.Sprintf("Playing %s [%s]", st.Name, m.Player.ActiveBackend())
@@ -1452,6 +1592,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 					if targetStation != nil {
+						m.cancelDJAnnouncement()
 						_ = m.Player.Play(*targetStation)
 						m.PlayingID = targetStation.ID
 						m.StatusMessage = fmt.Sprintf("Playing %s [%s]", targetStation.Name, m.Player.ActiveBackend())
@@ -1473,6 +1614,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.StatusMessage = fmt.Sprintf("🚫 DJ Pass is Host Only (@%s is DJ)", m.PartySession.HostNickname())
 						return m, nil
 					}
+					m.cancelDJAnnouncement()
 					_ = m.Player.Pause()
 					m.PlayingID = ""
 					m.StatusMessage = fmt.Sprintf("Paused %s", st.Name)
@@ -1485,6 +1627,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.StatusMessage = fmt.Sprintf("🚫 DJ Pass is Host Only (@%s is DJ)", m.PartySession.HostNickname())
 						return m, nil
 					}
+					m.cancelDJAnnouncement()
 					_ = m.Player.Play(st)
 					m.PlayingID = st.ID
 					m.StatusMessage = fmt.Sprintf("Playing %s [%s]", st.Name, m.Player.ActiveBackend())
@@ -1511,6 +1654,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			} else {
+				m.cancelDJAnnouncement()
 				_ = m.Player.Stop()
 				m.PlayingID = ""
 				m.IdentifiedResult = nil
@@ -1602,6 +1746,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.KeyMap.RandomPlay):
 			if len(m.Stations) > 0 {
+				m.cancelDJAnnouncement()
 				idx := rand.Intn(len(m.Stations))
 				m.SelectedIndex = idx
 				st := m.Stations[idx]
@@ -1675,10 +1820,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.ActiveFocus = FocusMainList
 				}
 				m.renderArt()
+			} else if m.ShowLinerNotes {
+				m.ShowLinerNotes = false
+				if m.ActiveFocus == FocusLinerNotes {
+					m.ActiveFocus = FocusMainList
+				}
+				m.renderArt()
 			} else if m.SearchQuery != "" {
 				m.SearchQuery = ""
 				m.RefreshStations()
 			}
+
+		case key.Matches(msg, m.KeyMap.LinerNotes):
+			return m, tea.Batch(m.toggleLinerNotesDrawer()...)
+
+		case key.Matches(msg, m.KeyMap.DJSettings):
+			m.refreshDJInstalledVoices()
+			m.ShowDJModal = true
+			m.DJModalStatus = ""
+			return m, nil
 
 		case key.Matches(msg, m.KeyMap.Favorite):
 			if len(m.Stations) > 0 && m.SelectedIndex < len(m.Stations) {
@@ -1732,7 +1892,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.ShowAddModal = true
 			}
 
-		case key.Matches(msg, m.KeyMap.DelStation):
+		case key.Matches(msg, m.KeyMap.DJAnnounce), key.Matches(msg, m.KeyMap.DelStation):
+			isLocalSelected := len(m.Stations) > 0 && m.SelectedIndex >= 0 && m.SelectedIndex < len(m.Stations) && m.Stations[m.SelectedIndex].Source == "local"
+			isPlaying := m.Player != nil && (m.Player.Status() == player.StatusPlaying || m.Player.Status() == player.StatusConnecting)
+			if msg.String() == "d" && (isPlaying || (m.ActiveTab != 6 && !isLocalSelected)) {
+				return m, tea.Batch(m.startDJAnnouncement(true)...)
+			}
 			if len(m.Stations) > 0 && m.SelectedIndex < len(m.Stations) {
 				st := m.Stations[m.SelectedIndex]
 				if st.Source == "local" {
@@ -2153,6 +2318,7 @@ func (m *Model) handleTimerEvent(ev timer.Event) {
 		_ = m.Player.SetVolume(fadedVol)
 
 	case timer.EventSleepComplete:
+		m.cancelDJAnnouncement()
 		_ = m.Player.Stop()
 		m.PlayingID = ""
 		if m.TimerFadeOriginalVol > 0 {
@@ -2171,6 +2337,7 @@ func (m *Model) handleTimerEvent(ev timer.Event) {
 
 	case timer.EventShortBreakStart, timer.EventLongBreakStart:
 		if ev.StationID == "__pause__" || ev.StationID == "pause" {
+			m.cancelDJAnnouncement()
 			_ = m.Player.Pause()
 			m.PlayingID = ""
 		} else if ev.StationID != "" && ev.StationID != m.PlayingID {
@@ -2188,6 +2355,7 @@ func (m *Model) handleTimerEvent(ev timer.Event) {
 func (m *Model) tuneToStationByID(stationID string) {
 	for _, st := range m.Store.GetAllStations() {
 		if st.ID == stationID || strings.EqualFold(st.Name, stationID) {
+			m.cancelDJAnnouncement()
 			_ = m.Player.Play(st)
 			m.PlayingID = st.ID
 			return
@@ -2746,6 +2914,7 @@ func (m *Model) onTunerFreqChanged() {
 		// Authentic analog radio: continuous sound output without requiring keypresses.
 		// As the dial sweeps into a station carrier frequency, audio begins streaming automatically.
 		if m.PlayingID != locked.ID || (m.Player.Status() != player.StatusPlaying && m.Player.Status() != player.StatusConnecting) {
+			m.cancelDJAnnouncement()
 			m.PlayingID = locked.ID
 			_ = m.Player.Play(*locked)
 			m.Player.UpdateTunerSignal(rssi, m.TunerFreq, m.TunerBand)
@@ -2754,6 +2923,7 @@ func (m *Model) onTunerFreqChanged() {
 	} else {
 		// Off-frequency / dead air: pause stream so pure atmospheric static is heard
 		if m.PlayingID != "" && (m.Player.Status() == player.StatusPlaying || m.Player.Status() == player.StatusConnecting) {
+			m.cancelDJAnnouncement()
 			_ = m.Player.Pause()
 			m.PlayingID = ""
 		}
@@ -2998,4 +3168,106 @@ func (m Model) handlePartyModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+}
+
+func nextTTSEngineMode(current string) string {
+	modes := []string{"auto", "piper", "sherpa-onnx", "native", "silent"}
+	curr := strings.ToLower(strings.TrimSpace(current))
+	for i, mode := range modes {
+		if mode == curr {
+			return modes[(i+1)%len(modes)]
+		}
+	}
+	return "piper"
+}
+
+func (m Model) handleDJModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	models := ai.DefaultVoiceModels()
+	totalItems := 3 + len(models)
+
+	switch msg.String() {
+	case "esc", "D", "q":
+		m.ShowDJModal = false
+		return m, nil
+
+	case "j", "down", "tab":
+		m.DJModalCursor = (m.DJModalCursor + 1) % totalItems
+		return m, nil
+
+	case "k", "up", "shift+tab":
+		m.DJModalCursor = (m.DJModalCursor - 1 + totalItems) % totalItems
+		return m, nil
+
+	case "p":
+		m.Config.AIDJPersona = ai.NextPersonaID(m.Config.AIDJPersona)
+		persona := m.ensureDJ().Persona()
+		_ = util.SaveConfig(m.Config)
+		m.DJModalStatus = fmt.Sprintf("✓ DJ Persona: %s", persona.Name)
+		m.StatusMessage = m.DJModalStatus
+		return m, nil
+
+	case "t":
+		cmds := m.startDJAnnouncement(true)
+		m.DJModalStatus = fmt.Sprintf("🎙️ Testing %s (%s)…", m.DJBannerPersona, m.DJBannerEngine)
+		return m, tea.Batch(cmds...)
+
+	case "d":
+		if m.IsDownloadingVoice {
+			m.DJModalStatus = "Voice model download already in progress…"
+			return m, nil
+		}
+		modelID := m.Config.AIDJVoiceModel
+		if m.DJModalCursor >= 3 && m.DJModalCursor-3 < len(models) {
+			modelID = models[m.DJModalCursor-3].ID
+		}
+		if modelID == "" {
+			modelID = "en_US-lessac-medium"
+		}
+		m.IsDownloadingVoice = true
+		m.DJModalStatus = fmt.Sprintf("⬇ Downloading %s from HuggingFace…", modelID)
+		m.StatusMessage = m.DJModalStatus
+		return m, m.downloadVoiceModelCmd(modelID)
+
+	case "enter", " ", "space", "l", "right", "h", "left":
+		switch m.DJModalCursor {
+		case 0:
+			m.Config.AIDJEnabled = !m.Config.AIDJEnabled
+			_ = util.SaveConfig(m.Config)
+			if m.Config.AIDJEnabled {
+				m.DJModalStatus = "✓ Auto AI Radio DJ enabled"
+			} else {
+				m.DJModalStatus = "Auto AI Radio DJ set to on-demand ([d])"
+			}
+			m.StatusMessage = m.DJModalStatus
+		case 1:
+			m.Config.AIDJPersona = ai.NextPersonaID(m.Config.AIDJPersona)
+			persona := m.ensureDJ().Persona()
+			_ = util.SaveConfig(m.Config)
+			m.DJModalStatus = fmt.Sprintf("✓ DJ Persona: %s", persona.Name)
+			m.StatusMessage = m.DJModalStatus
+		case 2:
+			m.Config.AIDJTTSEngine = nextTTSEngineMode(m.Config.AIDJTTSEngine)
+			dj := m.ensureDJ()
+			_ = util.SaveConfig(m.Config)
+			m.DJModalStatus = fmt.Sprintf("✓ TTS Engine mode: %s (%s)", strings.ToUpper(m.Config.AIDJTTSEngine), dj.EngineLabel())
+			m.StatusMessage = m.DJModalStatus
+		default:
+			idx := m.DJModalCursor - 3
+			if idx >= 0 && idx < len(models) {
+				spec := models[idx]
+				m.Config.AIDJVoiceModel = spec.ID
+				m.ensureDJ()
+				m.refreshDJInstalledVoices()
+				_ = util.SaveConfig(m.Config)
+				if m.DJInstalledVoices[spec.ID] {
+					m.DJModalStatus = fmt.Sprintf("✓ Activated ONNX voice %s", spec.Name)
+				} else {
+					m.DJModalStatus = fmt.Sprintf("Selected %s — press [d] to download (~%s)", spec.Name, spec.SizeLabel)
+				}
+				m.StatusMessage = m.DJModalStatus
+			}
+		}
+		return m, nil
+	}
+	return m, nil
 }

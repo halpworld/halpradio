@@ -1,7 +1,10 @@
 package player
 
 import (
+	"context"
+	"math"
 	"sync"
+	"time"
 
 	"github.com/halpworld/halpradio/pkg/radio"
 )
@@ -20,6 +23,9 @@ type MockPlayer struct {
 	lastError      string
 	onTrackUpd     func(TrackInfo)
 
+	duckFactor float64
+	duckCancel context.CancelFunc
+
 	tunerActive bool
 	tunerSignal float64
 	tunerFreq   float64
@@ -34,6 +40,7 @@ func NewMockPlayer(initialVolume int, onTrackUpd func(TrackInfo)) *MockPlayer {
 	return &MockPlayer{
 		status:        StatusStopped,
 		volume:        initialVolume,
+		duckFactor:    1.0,
 		activeBackend: "mock",
 		onTrackUpd:    onTrackUpd,
 	}
@@ -70,6 +77,11 @@ func (m *MockPlayer) Play(st radio.Station) error {
 func (m *MockPlayer) Stop() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.duckCancel != nil {
+		m.duckCancel()
+		m.duckCancel = nil
+	}
+	m.duckFactor = 1.0
 	m.status = StatusStopped
 	m.currentStation = nil
 	m.currentTrack = ""
@@ -80,6 +92,11 @@ func (m *MockPlayer) Stop() error {
 func (m *MockPlayer) Pause() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.duckCancel != nil {
+		m.duckCancel()
+		m.duckCancel = nil
+	}
+	m.duckFactor = 1.0
 	if m.status == StatusPlaying || m.status == StatusConnecting {
 		m.status = StatusPaused
 	}
@@ -226,4 +243,79 @@ func (m *MockPlayer) TunerSignal() float64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.tunerSignal
+}
+
+// Duck smoothly interpolates duckFactor from its current value to targetRatio over fadeDur.
+func (m *MockPlayer) Duck(targetRatio float64, fadeDur time.Duration) {
+	if targetRatio < 0 {
+		targetRatio = 0
+	}
+	if targetRatio > 1.0 {
+		targetRatio = 1.0
+	}
+
+	m.mu.Lock()
+	if m.duckCancel != nil {
+		m.duckCancel()
+		m.duckCancel = nil
+	}
+	startFactor := m.duckFactor
+	if fadeDur <= 0 || math.Abs(startFactor-targetRatio) < 0.001 {
+		m.duckFactor = targetRatio
+		m.mu.Unlock()
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.duckCancel = cancel
+	m.mu.Unlock()
+
+	tickInterval := 25 * time.Millisecond
+	if fadeDur < tickInterval*2 {
+		tickInterval = fadeDur / 4
+		if tickInterval < 2*time.Millisecond {
+			tickInterval = 2 * time.Millisecond
+		}
+	}
+
+	go func() {
+		startTime := time.Now()
+		ticker := time.NewTicker(tickInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case now := <-ticker.C:
+				elapsed := now.Sub(startTime)
+				if elapsed >= fadeDur {
+					m.mu.Lock()
+					if ctx.Err() == nil {
+						m.duckFactor = targetRatio
+					}
+					m.mu.Unlock()
+					return
+				}
+				progress := float64(elapsed) / float64(fadeDur)
+				curr := startFactor + (targetRatio-startFactor)*progress
+				m.mu.Lock()
+				if ctx.Err() == nil {
+					m.duckFactor = curr
+				}
+				m.mu.Unlock()
+			}
+		}
+	}()
+}
+
+// Unduck smoothly interpolates duckFactor back to 1.0 over fadeDur.
+func (m *MockPlayer) Unduck(fadeDur time.Duration) {
+	m.Duck(1.0, fadeDur)
+}
+
+// DuckFactor returns the current live audio ducking multiplier (1.0 = unducked).
+func (m *MockPlayer) DuckFactor() float64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.duckFactor
 }

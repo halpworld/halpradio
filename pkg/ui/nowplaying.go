@@ -8,9 +8,11 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/halpworld/halpradio/pkg/ai"
 	"github.com/halpworld/halpradio/pkg/art"
 	"github.com/halpworld/halpradio/pkg/lyrics"
 	"github.com/halpworld/halpradio/pkg/player"
+	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/util"
 )
 
@@ -28,6 +30,45 @@ type CoverArtFetchedMsg struct {
 	TrackKey  string
 	Cover     *art.Cover
 	Err       error
+}
+
+// LinerNotesFetchedMsg carries the result of an asynchronous MusicBrainz + Wikipedia liner notes lookup.
+type LinerNotesFetchedMsg struct {
+	StationID string
+	TrackKey  string
+	Notes     *ai.LinerNotes
+	Err       error
+}
+
+// DJIntroGeneratedMsg carries a generated Local AI Radio DJ intro script and TTS engine label.
+type DJIntroGeneratedMsg struct {
+	Seq       uint64
+	StationID string
+	TrackKey  string
+	Persona   string
+	Engine    string
+	Script    string
+	Err       error
+}
+
+// DJSpeechFinishedMsg signals that the local TTS engine finished reading a DJ intro.
+type DJSpeechFinishedMsg struct {
+	Seq      uint64
+	TrackKey string
+	Script   string
+	Err      error
+}
+
+// DJUnduckFinishedMsg clears the DJ broadcast banner after the audio volume unduck completes.
+type DJUnduckFinishedMsg struct {
+	Seq    uint64
+	Script string
+}
+
+// DJVoiceDownloadedMsg reports the result of an opt-in HuggingFace ONNX voice model download.
+type DJVoiceDownloadedMsg struct {
+	ModelID string
+	Err     error
 }
 
 // lyricsSyncStep is how far one press of the sync nudge keys shifts playback.
@@ -120,6 +161,11 @@ func (m *Model) resetNowPlaying() {
 	m.ArtStatus = ""
 	m.ArtTrackKey = ""
 	m.IsFetchingArt = false
+	m.LinerNotes = nil
+	m.LinerNotesStatus = ""
+	m.LinerNotesScroll = 0
+	m.LinerNotesTrackKey = ""
+	m.IsFetchingLinerNotes = false
 	m.TrackStartTime = time.Time{}
 	m.dropArt(hadArt)
 }
@@ -136,18 +182,31 @@ func (m *Model) syncNowPlaying() []tea.Cmd {
 		return nil
 	}
 
+	var cmds []tea.Cmd
 	artist, title, _ := m.nowPlayingParts()
 	if artist == "" || title == "" {
-		// Station is broadcasting its own name or an advert slug; there is
-		// nothing a lyrics or artwork provider could match on.
-		return nil
+		// Station is broadcasting its own name or an advert slug; lyrics and
+		// cover art require a song match, while Liner Notes and AI DJ can still
+		// synthesize station-level context.
+		stKey := "station|" + st.ID
+		if m.ShowLinerNotes && !m.IsFetchingLinerNotes && m.LinerNotesTrackKey != stKey {
+			m.IsFetchingLinerNotes = true
+			m.LinerNotesTrackKey = stKey
+			m.LinerNotesScroll = 0
+			m.LinerNotesStatus = "Synthesizing station liner notes…"
+			cmds = append(cmds, m.fetchLinerNotesCmd(st.ID, stKey))
+		}
+		if m.Config.AIDJEnabled && m.DJAnnouncedTrackKey != stKey {
+			m.DJAnnouncedTrackKey = stKey
+			cmds = append(cmds, m.startDJAnnouncement(false)...)
+		}
+		return cmds
 	}
 	key := artist + " - " + title
 	if m.TrackStartTime.IsZero() {
 		m.TrackStartTime = time.Now()
 	}
 
-	var cmds []tea.Cmd
 	if m.Config.LyricsEnabled && m.LyricsClient != nil &&
 		!m.IsFetchingLyrics && m.LyricsTrackKey != key {
 		m.IsFetchingLyrics = true
@@ -165,6 +224,18 @@ func (m *Model) syncNowPlaying() []tea.Cmd {
 		m.ArtLines = nil
 		m.ArtStatus = "Fetching cover art…"
 		cmds = append(cmds, m.fetchCoverCmd(st.ID, key))
+	}
+	if m.ShowLinerNotes && !m.IsFetchingLinerNotes && m.LinerNotesTrackKey != key {
+		m.IsFetchingLinerNotes = true
+		m.LinerNotesTrackKey = key
+		m.LinerNotes = m.initialLinerNotes()
+		m.LinerNotesScroll = 0
+		m.LinerNotesStatus = "Fetching MusicBrainz + Wikipedia liner notes…"
+		cmds = append(cmds, m.fetchLinerNotesCmd(st.ID, key))
+	}
+	if m.Config.AIDJEnabled && m.DJAnnouncedTrackKey != key {
+		m.DJAnnouncedTrackKey = key
+		cmds = append(cmds, m.startDJAnnouncement(false)...)
 	}
 	return cmds
 }
@@ -297,6 +368,9 @@ func (m Model) artTarget() (cols, rows int) {
 
 	surface, surfaceWidth := m.lyricsSurface()
 	if surface == LyricsSurfaceHidden {
+		surface, surfaceWidth = m.linerNotesSurface()
+	}
+	if surface == LyricsSurfaceHidden {
 		return 0, 0
 	}
 	cols = surfaceWidth - 6
@@ -419,6 +493,9 @@ func (m *Model) toggleLyricsDrawer() []tea.Cmd {
 		return nil
 	}
 	m.ShowLyrics = true
+	if m.ShowLinerNotes {
+		m.ShowLinerNotes = false
+	}
 	m.ActiveFocus = FocusLyrics
 	cmds := m.syncNowPlaying()
 	m.renderArt()
@@ -489,4 +566,393 @@ func formatOffset(d time.Duration) string {
 		return fmt.Sprintf("+%.1fs", secs)
 	}
 	return fmt.Sprintf("%.1fs", secs)
+}
+
+// linerNotesSurface reports where the liner notes drawer goes and how many columns it gets.
+func (m Model) linerNotesSurface() (LyricsSurface, int) {
+	if !m.ShowLinerNotes {
+		return LyricsSurfaceHidden, 0
+	}
+	width := m.Width
+	if width == 0 {
+		width = 80
+	}
+	if drawer := LyricsDrawerWidth(width); drawer > 0 {
+		return LyricsSurfaceDrawer, drawer
+	}
+	return LyricsSurfaceOverlay, width
+}
+
+// activeOrSelectedStation returns the currently playing station, or the highlighted
+// station in the current list if nothing is playing yet.
+func (m Model) activeOrSelectedStation() *radio.Station {
+	if m.Player != nil {
+		if st := m.Player.CurrentStation(); st != nil {
+			return st
+		}
+	}
+	if len(m.Stations) > 0 && m.SelectedIndex >= 0 && m.SelectedIndex < len(m.Stations) {
+		s := m.Stations[m.SelectedIndex]
+		return &s
+	}
+	return nil
+}
+
+// initialLinerNotes constructs an immediate offline LinerNotes record from the
+// active station and track so the drawer renders rich content on frame 0 while
+// MusicBrainz + Wikipedia lookups are in flight.
+func (m Model) initialLinerNotes() *ai.LinerNotes {
+	st := m.activeOrSelectedStation()
+	artist, title, album := m.nowPlayingParts()
+	rawTrack := m.nowPlayingTrack()
+	if st == nil && artist == "" && title == "" && rawTrack == "" {
+		return nil
+	}
+	var stName, stGenre, stCountry, stCodec string
+	var stBitrate int
+	if st != nil {
+		stName = st.Name
+		stGenre = st.Genre
+		stCountry = st.Country
+		stCodec = st.Codec
+		stBitrate = st.Bitrate
+	}
+	if artist == "" {
+		artist = stName
+	}
+	if title == "" {
+		if rawTrack != "" {
+			title = rawTrack
+		} else if stName != "" {
+			title = stName + " Live Broadcast"
+		} else {
+			title = "Live Broadcast"
+		}
+	}
+	bio := fmt.Sprintf("%s is currently broadcasting on %s.", artist, fallbackStationName(stName))
+	if stGenre != "" && stCountry != "" {
+		bio = fmt.Sprintf("%s is featured on %s, curating %s selections from %s.", artist, fallbackStationName(stName), stGenre, stCountry)
+	}
+	var trivia []string
+	if stCodec != "" || stBitrate > 0 {
+		trivia = append(trivia, fmt.Sprintf("Streaming live via %s (%s %d kbps).", fallbackStationName(stName), strings.ToUpper(stCodec), stBitrate))
+	} else {
+		trivia = append(trivia, fmt.Sprintf("Streaming live on %s.", fallbackStationName(stName)))
+	}
+	return &ai.LinerNotes{
+		Artist:      artist,
+		Title:       title,
+		Album:       album,
+		Country:     stCountry,
+		Genre:       stGenre,
+		Biography:   bio,
+		AlbumNotes:  "Press d at any time to hear your Local AI Radio DJ introduce this track.",
+		TrackTrivia: trivia,
+		Source:      "Offline Station Metadata",
+		FetchedAt:   time.Now(),
+	}
+}
+
+func fallbackStationName(name string) string {
+	if strings.TrimSpace(name) == "" {
+		return "halpradio"
+	}
+	return strings.TrimSpace(name)
+}
+
+// toggleLinerNotesDrawer opens or closes the interactive Liner Notes & Artist
+// Biography drawer (`i`), moving keyboard focus into it so j/k scroll the bio.
+func (m *Model) toggleLinerNotesDrawer() []tea.Cmd {
+	if m.ShowLinerNotes {
+		m.ShowLinerNotes = false
+		if m.ActiveFocus == FocusLinerNotes {
+			m.ActiveFocus = FocusMainList
+		}
+		m.renderArt()
+		return nil
+	}
+	m.ShowLinerNotes = true
+	if m.ShowLyrics {
+		m.ShowLyrics = false
+	}
+	m.ActiveFocus = FocusLinerNotes
+	if m.LinerNotes == nil {
+		m.LinerNotes = m.initialLinerNotes()
+	}
+	cmds := m.syncNowPlaying()
+	if !m.IsFetchingLinerNotes {
+		if st := m.activeOrSelectedStation(); st != nil {
+			key := "station|" + st.ID
+			if a, t, _ := m.nowPlayingParts(); a != "" && t != "" {
+				key = a + " - " + t
+			}
+			m.IsFetchingLinerNotes = true
+			m.LinerNotesTrackKey = key
+			m.LinerNotesScroll = 0
+			m.LinerNotesStatus = "Fetching MusicBrainz + Wikipedia liner notes…"
+			cmds = append(cmds, m.fetchLinerNotesCmd(st.ID, key))
+		}
+	}
+	m.renderArt()
+	return cmds
+}
+
+// scrollLinerNotes adjusts the vertical scroll offset inside the Liner Notes drawer.
+func (m *Model) scrollLinerNotes(delta int) {
+	m.LinerNotesScroll += delta
+	maxScroll := 40
+	if m.LinerNotes != nil {
+		maxScroll = 24 + len(m.LinerNotes.Discography)*2 + len(m.LinerNotes.TrackTrivia)*3
+	}
+	if m.LinerNotesScroll > maxScroll {
+		m.LinerNotesScroll = maxScroll
+	}
+	if m.LinerNotesScroll < 0 {
+		m.LinerNotesScroll = 0
+	}
+}
+
+// fetchLinerNotesCmd queries MusicBrainz + Wikipedia (with local cache and offline
+// synthesis fallback) off the UI thread.
+func (m Model) fetchLinerNotesCmd(stationID, key string) tea.Cmd {
+	client := m.LinerNotesClient
+	if client == nil {
+		client = ai.NewLinerNotesClient()
+	}
+	artist, title, album := m.nowPlayingParts()
+	rawTrack := m.nowPlayingTrack()
+	st := m.activeOrSelectedStation()
+	var stName, stGenre, stCountry, stCodec string
+	var stBitrate int
+	if st != nil {
+		stName = st.Name
+		stGenre = st.Genre
+		stCountry = st.Country
+		stCodec = st.Codec
+		stBitrate = st.Bitrate
+	}
+	q := ai.LinerNotesQuery{
+		RawTrack:    rawTrack,
+		Artist:      artist,
+		Title:       title,
+		Album:       album,
+		StationName: stName,
+		Genre:       stGenre,
+		Country:     stCountry,
+		Bitrate:     stBitrate,
+		Codec:       stCodec,
+	}
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+
+		notes, err := client.Fetch(ctx, q)
+		return LinerNotesFetchedMsg{
+			StationID: stationID,
+			TrackKey:  key,
+			Notes:     notes,
+			Err:       err,
+		}
+	}
+}
+
+// ensureDJ makes sure m.DJ is initialized and synchronized with m.Config.
+func (m *Model) ensureDJ() *ai.DJ {
+	if m.DJ == nil {
+		m.DJ = ai.NewDJ(ai.DJConfig{
+			PersonaID:   m.Config.AIDJPersona,
+			TTSEngine:   m.Config.AIDJTTSEngine,
+			VoiceModel:  m.Config.AIDJVoiceModel,
+			OllamaURL:   m.Config.AIDJOllamaURL,
+			OllamaModel: m.Config.AIDJOllamaModel,
+			DuckLevel:   m.Config.AIDJDuckLevel,
+		})
+	} else {
+		m.DJ.SetPersona(m.Config.AIDJPersona)
+		m.DJ.SetTTSEngine(m.Config.AIDJTTSEngine, m.Config.AIDJVoiceModel)
+	}
+	return m.DJ
+}
+
+// refreshDJInstalledVoices updates m.DJInstalledVoices in the update loop so View()
+// stays 100% pure and never touches the filesystem.
+func (m *Model) refreshDJInstalledVoices() {
+	models := ai.DefaultVoiceModels()
+	installed := make(map[string]bool, len(models))
+	for _, spec := range models {
+		installed[spec.ID] = ai.IsModelInstalled(spec.ID)
+	}
+	m.DJInstalledVoices = installed
+}
+
+// cancelDJAnnouncement aborts any in-flight DJ speech, increments the sequence
+// token so stale messages are ignored, hides the DJ banner, and unducks volume.
+func (m *Model) cancelDJAnnouncement() {
+	m.DJAnnounceSeq++
+	if m.DJ != nil {
+		m.DJ.Cancel()
+	}
+	m.DJBannerActive = false
+	m.DJBannerFading = false
+	m.DJBannerUntil = time.Time{}
+	if m.Player != nil && m.Player.DuckFactor() < 1.0 {
+		m.Player.Unduck(0)
+	}
+}
+
+// buildDJTrackContext gathers station, ICY/fingerprint track metadata, and cached
+// LinerNotes context for a DJ intro announcement.
+func (m Model) buildDJTrackContext() (ai.TrackContext, string, string) {
+	st := m.activeOrSelectedStation()
+	var stID, stName, stGenre, stCountry string
+	if st != nil {
+		stID = st.ID
+		stName = st.Name
+		stGenre = st.Genre
+		stCountry = st.Country
+	}
+	artist, title, album := m.nowPlayingParts()
+	tc := ai.TrackContext{
+		StationName: stName,
+		Genre:       stGenre,
+		Country:     stCountry,
+		Artist:      artist,
+		Title:       title,
+		Album:       album,
+	}
+	if m.LinerNotes != nil {
+		if tc.Album == "" {
+			tc.Album = m.LinerNotes.Album
+		}
+		tc.ReleaseYear = m.LinerNotes.ReleaseYear
+		tc.OriginCity = m.LinerNotes.OriginCity
+		if len(m.LinerNotes.TrackTrivia) > 0 {
+			tc.Trivia = m.LinerNotes.TrackTrivia[0]
+		}
+	}
+	trackKey := "station|" + stID
+	if artist != "" || title != "" {
+		trackKey = artist + " - " + title
+	}
+	return tc, stID, trackKey
+}
+
+// startDJAnnouncement immediately ducks playback volume, activates the DJ
+// broadcast banner with an initial persona script, and dispatches asynchronous
+// script generation + local TTS synthesis.
+func (m *Model) startDJAnnouncement(onDemand bool) []tea.Cmd {
+	if !onDemand && m.Player != nil && m.Player.Status() != player.StatusPlaying && m.Player.Status() != player.StatusConnecting {
+		return nil
+	}
+	dj := m.ensureDJ()
+	// Cancel any previous announcement in flight and advance the generation sequence token.
+	dj.Cancel()
+	m.DJAnnounceSeq++
+	seq := m.DJAnnounceSeq
+
+	persona := dj.Persona()
+	tc, stID, trackKey := m.buildDJTrackContext()
+
+	// Immediately duck playback volume so live audio and synchronous callers
+	// see the ducked level right away.
+	if m.Player != nil {
+		m.Player.Duck(dj.DuckRatio(), 0)
+	}
+
+	// Populate an immediate zero-latency offline preview script so the banner
+	// is never blank while async Ollama/TTS generation runs.
+	previewDJ := ai.NewDJ(ai.DJConfig{
+		PersonaID:  persona.ID,
+		TTSEngine:  m.Config.AIDJTTSEngine,
+		VoiceModel: m.Config.AIDJVoiceModel,
+		DuckLevel:  m.Config.AIDJDuckLevel,
+	})
+	previewScript, engineLabel, _ := previewDJ.GenerateIntro(context.Background(), tc)
+
+	m.DJBannerActive = true
+	m.DJBannerFading = false
+	m.DJBannerPersona = persona.Name
+	m.DJBannerEngine = engineLabel
+	m.DJBannerScript = previewScript
+	m.DJBannerUntil = time.Now().Add(8 * time.Second)
+	m.StatusMessage = fmt.Sprintf("🎙️ AI DJ (%s): broadcasting track intro…", persona.Name)
+
+	return []tea.Cmd{m.triggerDJIntroCmd(seq, stID, trackKey, tc)}
+}
+
+// triggerDJIntroCmd generates the DJ intro script (consulting local Ollama if
+// configured, or offline persona templates) off the UI thread.
+func (m Model) triggerDJIntroCmd(seq uint64, stationID, trackKey string, tc ai.TrackContext) tea.Cmd {
+	dj := m.DJ
+	if dj == nil {
+		dj = ai.NewDJ(ai.DJConfig{
+			PersonaID:   m.Config.AIDJPersona,
+			TTSEngine:   m.Config.AIDJTTSEngine,
+			VoiceModel:  m.Config.AIDJVoiceModel,
+			OllamaURL:   m.Config.AIDJOllamaURL,
+			OllamaModel: m.Config.AIDJOllamaModel,
+			DuckLevel:   m.Config.AIDJDuckLevel,
+		})
+	}
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		script, label, err := dj.GenerateIntro(ctx, tc)
+		return DJIntroGeneratedMsg{
+			Seq:       seq,
+			StationID: stationID,
+			TrackKey:  trackKey,
+			Persona:   dj.Persona().Name,
+			Engine:    label,
+			Script:    script,
+			Err:       err,
+		}
+	}
+}
+
+// speakDJScriptCmd runs the local TTS engine off the UI thread and returns
+// DJSpeechFinishedMsg when speech synthesis finishes so the player can unduck.
+func (m Model) speakDJScriptCmd(seq uint64, trackKey, script string) tea.Cmd {
+	dj := m.DJ
+	if dj == nil {
+		return func() tea.Msg {
+			return DJSpeechFinishedMsg{Seq: seq, TrackKey: trackKey, Script: script}
+		}
+	}
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+
+		err := dj.Speak(ctx, script)
+		return DJSpeechFinishedMsg{
+			Seq:      seq,
+			TrackKey: trackKey,
+			Script:   script,
+			Err:      err,
+		}
+	}
+}
+
+// unduckAfterDelayCmd keeps the DJ banner in its "Fading to 100%" state briefly
+// after speech finishes before hiding the banner.
+func (m Model) unduckAfterDelayCmd(seq uint64, script string) tea.Cmd {
+	return tea.Tick(350*time.Millisecond, func(t time.Time) tea.Msg {
+		return DJUnduckFinishedMsg{Seq: seq, Script: script}
+	})
+}
+
+// downloadVoiceModelCmd downloads an opt-in ONNX voice model from HuggingFace
+// off the UI thread when explicitly requested by the user in the DJ Studio modal.
+func (m Model) downloadVoiceModelCmd(modelID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		err := ai.DownloadVoiceModel(ctx, modelID, nil)
+		return DJVoiceDownloadedMsg{
+			ModelID: modelID,
+			Err:     err,
+		}
+	}
 }

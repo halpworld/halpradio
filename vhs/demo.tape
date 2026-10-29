@@ -34,5 +34,13 @@ Sleep 800ms
 Escape
 Sleep 300ms
 
+# Open Interactive Liner Notes ('i') and Local AI Radio DJ ('d')
+Type "i"
+Sleep 1000ms
+Type "d"
+Sleep 1200ms
+Type "i"
+Sleep 300ms
+
 Type "q"
 Sleep 500ms
