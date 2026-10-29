@@ -196,7 +196,7 @@ func (m *Model) syncNowPlaying() []tea.Cmd {
 			m.LinerNotesStatus = "Synthesizing station liner notes…"
 			cmds = append(cmds, m.fetchLinerNotesCmd(st.ID, stKey))
 		}
-		if m.Config.AIDJEnabled && m.DJAnnouncedTrackKey != stKey {
+		if m.Config.AIDJEnabled && m.Player.Status() == player.StatusPlaying && !m.DJBannerActive && m.DJAnnouncedTrackKey != stKey {
 			m.DJAnnouncedTrackKey = stKey
 			cmds = append(cmds, m.startDJAnnouncement(false)...)
 		}
@@ -852,6 +852,10 @@ func (m *Model) startDJAnnouncement(onDemand bool) []tea.Cmd {
 
 	persona := dj.Persona()
 	tc, stID, trackKey := m.buildDJTrackContext()
+	m.DJAnnouncedTrackKey = trackKey
+	if sig := m.nowPlayingSignature(); sig != "" {
+		m.nowPlayingSig = sig
+	}
 
 	// Immediately duck playback volume so live audio and synchronous callers
 	// see the ducked level right away.
@@ -874,7 +878,7 @@ func (m *Model) startDJAnnouncement(onDemand bool) []tea.Cmd {
 	m.DJBannerPersona = persona.Name
 	m.DJBannerEngine = engineLabel
 	m.DJBannerScript = previewScript
-	m.DJBannerUntil = time.Now().Add(8 * time.Second)
+	m.DJBannerUntil = time.Now().Add(30 * time.Second)
 	m.StatusMessage = fmt.Sprintf("🎙️ AI DJ (%s): broadcasting track intro…", persona.Name)
 
 	return []tea.Cmd{m.triggerDJIntroCmd(seq, stID, trackKey, tc)}
@@ -921,7 +925,7 @@ func (m Model) speakDJScriptCmd(seq uint64, trackKey, script string) tea.Cmd {
 		}
 	}
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		err := dj.Speak(ctx, script)

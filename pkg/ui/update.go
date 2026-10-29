@@ -143,7 +143,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		if m.DJBannerActive && !m.DJBannerUntil.IsZero() && now.After(m.DJBannerUntil) {
+		if m.DJBannerActive && !m.DJBannerUntil.IsZero() && now.After(m.DJBannerUntil) && (m.DJ == nil || !m.DJ.IsSpeaking()) {
 			m.DJBannerActive = false
 			m.DJBannerFading = false
 			if m.Player != nil && m.Player.DuckFactor() < 1.0 {
@@ -761,7 +761,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if strings.TrimSpace(msg.Script) != "" {
 			m.DJBannerScript = msg.Script
 		}
-		m.DJBannerUntil = time.Now().Add(8 * time.Second)
+		m.DJBannerUntil = time.Now().Add(30 * time.Second)
 		return m, m.speakDJScriptCmd(m.DJAnnounceSeq, msg.TrackKey, m.DJBannerScript)
 
 	case DJSpeechFinishedMsg:
@@ -3338,6 +3338,10 @@ func (m Model) handleDJModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.Config.AIDJEnabled = !m.Config.AIDJEnabled
 			_ = util.SaveConfig(m.Config)
 			if m.Config.AIDJEnabled {
+				if sig := m.nowPlayingSignature(); sig != "" {
+					m.nowPlayingSig = sig
+				}
+				_, _, m.DJAnnouncedTrackKey = m.buildDJTrackContext()
 				m.DJModalStatus = "✓ Auto AI Radio DJ enabled"
 			} else {
 				m.DJModalStatus = "Auto AI Radio DJ set to on-demand ([d])"

@@ -772,6 +772,7 @@ func (e *LocalTTSEngine) speakPiper(ctx context.Context, text string) error {
 		vitsDataDir := filepath.Join(bundleDir, "espeak-ng-data")
 		if fileExistsNonEmpty(vitsModel) && fileExistsNonEmpty(vitsTokens) {
 			cmd := exec.CommandContext(ctx, sherpaBin,
+				"--num-threads=4",
 				"--vits-model="+vitsModel,
 				"--vits-tokens="+vitsTokens,
 				"--vits-data-dir="+vitsDataDir,
@@ -840,6 +841,7 @@ func (e *LocalTTSEngine) speakSherpa(ctx context.Context, text string, personaID
 	var args []string
 	if fileExistsNonEmpty(kokoroVoices) && fileExistsNonEmpty(kokoroTokens) {
 		args = []string{
+			"--num-threads=4",
 			"--kokoro-model=" + kokoroModel,
 			"--kokoro-voices=" + kokoroVoices,
 			"--kokoro-tokens=" + kokoroTokens,
@@ -851,6 +853,7 @@ func (e *LocalTTSEngine) speakSherpa(ctx context.Context, text string, personaID
 	} else {
 		onnxPath, _ := ModelPaths(modelsDir, e.ModelID)
 		args = []string{
+			"--num-threads=4",
 			"--kokoro-model=" + onnxPath,
 			"--output-filename=" + wavPath,
 			text,
