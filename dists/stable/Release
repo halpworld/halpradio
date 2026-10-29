@@ -6,19 +6,19 @@ Version: 1.0
 Architectures: amd64 arm64
 Components: main
 Description: halpradio Official APT Repository
-Date: Mon, 21 Sep 2026 15:07:23 UTC
+Date: Thu, 29 Oct 2026 10:30:55 UTC
 MD5Sum:
- 262a2f3b59d9a3ed54c556539663983e      558 main/binary-amd64/Packages
- d10d440c63878b7fa3c901dc5a70ef29      406 main/binary-amd64/Packages.gz
- 2f2cadf682841ec4d053176f2ebdfd4e      558 main/binary-arm64/Packages
- b1cfc32dbf373914702f2722299dcb54      406 main/binary-arm64/Packages.gz
+ 14a7565fe46c88c1d36aca1e408d037e     1116 main/binary-amd64/Packages
+ ab0382038266ebd774309b57a3257b17      523 main/binary-amd64/Packages.gz
+ 91a6edf7db939b23ed610df0022e83f9     1116 main/binary-arm64/Packages
+ f12e25cca2520383376adc45468224f8      520 main/binary-arm64/Packages.gz
 SHA1:
- 2046a27cf82b65b6258c408d1510f53d2f8e08af      558 main/binary-amd64/Packages
- 6ca1445fc5f06a1840e6abb97bc1fba411db1cad      406 main/binary-amd64/Packages.gz
- 28b97d6bef2400ff041ecdefe680926a5bec07cf      558 main/binary-arm64/Packages
- 962c62841a758f74957c159e24abd8f4b528caa1      406 main/binary-arm64/Packages.gz
+ bfefffa1ff8167caae102cb0e330bd9eb5c4fb6e     1116 main/binary-amd64/Packages
+ 68d9e1719d690f687eb1fd139948afdc82937aa2      523 main/binary-amd64/Packages.gz
+ a2ce6cec65c3fc437c9d7981d66b8e32aa55017f     1116 main/binary-arm64/Packages
+ cb1bc81f1620a564a6d054158e0f0c2f6ec822ed      520 main/binary-arm64/Packages.gz
 SHA256:
- 7bf4d70044a9e04807a121419fddcea60ae910ceca7429ba3ec71d15d2c3331b      558 main/binary-amd64/Packages
- f82decbb4d25233ec4590feec9d362b729e568f2688f4ad847b3726f10cc6f39      406 main/binary-amd64/Packages.gz
- 953e0a5e25f8308d4ec6a5200d252d5190d42b1a577863af31db7a1cc1847d44      558 main/binary-arm64/Packages
- 8f2cb4d8f1fdd7f1f7b62c76bc379c9310056d3f4a2b42844d47df441725a0a8      406 main/binary-arm64/Packages.gz
+ 79f49bf28b4aa131eb98d9d161ddc4d811eb4c9d8c3d7db9c284f101634d4e4d     1116 main/binary-amd64/Packages
+ a287af34125a27e26564755fc75b62787b52003fd300fa7281b545a3f76d17fe      523 main/binary-amd64/Packages.gz
+ d5e8a7353a8f514dbffb0543a19b7818b7634414a736fee7f0618d915aeaa8b1     1116 main/binary-arm64/Packages
+ 2581bfca3fc39754892d87b51f80f3fe464a092f63fedd4ed09fb86816a5c2ee      520 main/binary-arm64/Packages.gz
