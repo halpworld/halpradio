@@ -44,10 +44,10 @@ Every release produces standalone `.deb` packages for `amd64` and `arm64`:
 
 ```bash
 # Download latest .deb (amd64)
-curl -LO https://github.com/halpworld/halpradio/releases/latest/download/halpradio_0.8.0_linux_amd64.deb
+curl -LO https://github.com/halpworld/halpradio/releases/latest/download/halpradio_0.8.1_linux_amd64.deb
 
 # Install using apt (resolves and installs recommended dependencies like mpv)
-sudo apt install ./halpradio_0.8.0_linux_amd64.deb
+sudo apt install ./halpradio_0.8.1_linux_amd64.deb
 ```
 
 ---
@@ -61,7 +61,7 @@ For Arch Linux users, the binary package can be built using the following `PKGBU
 ```bash
 # Maintainer: halpworld <https://github.com/halpworld>
 pkgname=halpradio-bin
-pkgver=0.8.0
+pkgver=0.8.1
 pkgrel=1
 pkgdesc="LazyVim-inspired Terminal Internet Radio Streamer"
 arch=('x86_64' 'aarch64')
@@ -123,17 +123,17 @@ For Windows users using [Scoop](https://scoop.sh):
 
 ```json
 {
-    "version": "0.8.0",
+    "version": "0.8.1",
     "description": "LazyVim-inspired Terminal Internet Radio Streamer",
     "homepage": "https://github.com/halpworld/halpradio",
     "license": "GPL-3.0-or-later",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/halpworld/halpradio/releases/download/v0.8.0/halpradio_0.8.0_windows_amd64.zip",
+            "url": "https://github.com/halpworld/halpradio/releases/download/v0.8.1/halpradio_0.8.1_windows_amd64.zip",
             "bin": "halpradio.exe"
         },
         "arm64": {
-            "url": "https://github.com/halpworld/halpradio/releases/download/v0.8.0/halpradio_0.8.0_windows_arm64.zip",
+            "url": "https://github.com/halpworld/halpradio/releases/download/v0.8.1/halpradio_0.8.1_windows_arm64.zip",
             "bin": "halpradio.exe"
         }
     }
@@ -149,7 +149,7 @@ For Windows users using [Scoop](https://scoop.sh):
 
 buildGoModule rec {
   pname = "halpradio";
-  version = "0.8.0";
+  version = "0.8.1";
 
   src = fetchFromGitHub {
     owner = "halpworld";
