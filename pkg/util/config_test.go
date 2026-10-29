@@ -60,6 +60,27 @@ func TestConfigDefaults(t *testing.T) {
 	if cfg.CatalogCacheTTLHours != 24 {
 		t.Errorf("Expected CatalogCacheTTLHours 24, got %d", cfg.CatalogCacheTTLHours)
 	}
+	if cfg.AIDJEnabled {
+		t.Errorf("Expected AIDJEnabled false by default (opt-in)")
+	}
+	if cfg.AIDJPersona != "late-night-chill" {
+		t.Errorf("Expected AIDJPersona 'late-night-chill', got %q", cfg.AIDJPersona)
+	}
+	if cfg.AIDJTTSEngine != "auto" {
+		t.Errorf("Expected AIDJTTSEngine 'auto', got %q", cfg.AIDJTTSEngine)
+	}
+	if cfg.AIDJVoiceModel != "en_US-lessac-medium" {
+		t.Errorf("Expected AIDJVoiceModel 'en_US-lessac-medium', got %q", cfg.AIDJVoiceModel)
+	}
+	if cfg.AIDJOllamaURL != "http://127.0.0.1:11434" {
+		t.Errorf("Expected AIDJOllamaURL 'http://127.0.0.1:11434', got %q", cfg.AIDJOllamaURL)
+	}
+	if cfg.AIDJOllamaModel != "" {
+		t.Errorf("Expected AIDJOllamaModel '', got %q", cfg.AIDJOllamaModel)
+	}
+	if cfg.AIDJDuckLevel != 20 {
+		t.Errorf("Expected AIDJDuckLevel 20, got %d", cfg.AIDJDuckLevel)
+	}
 }
 
 func TestConfigPathsAndLifecycle(t *testing.T) {
@@ -233,6 +254,27 @@ sleep_fade_seconds: -10
 	}
 	if reloadedDiscordCfg.DiscordRPC || reloadedDiscordCfg.DiscordClientID != "999888777666555444" {
 		t.Errorf("Expected DiscordRPC false and custom client ID, got %+v", reloadedDiscordCfg)
+	}
+
+	// 7. Test AI DJ & Cache directories
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+	if !strings.HasSuffix(GetAICacheDir(), "ai") {
+		t.Errorf("Expected GetAICacheDir suffix 'ai', got %s", GetAICacheDir())
+	}
+	if !strings.HasSuffix(GetTTSModelsDir(), "models") {
+		t.Errorf("Expected GetTTSModelsDir suffix 'models', got %s", GetTTSModelsDir())
+	}
+	if !strings.HasSuffix(GetLinerNotesCacheDir(), "linernotes") {
+		t.Errorf("Expected GetLinerNotesCacheDir suffix 'linernotes', got %s", GetLinerNotesCacheDir())
+	}
+	if err := EnsureCacheDir(); err != nil {
+		t.Fatalf("EnsureCacheDir failed: %v", err)
+	}
+	if _, err := os.Stat(GetLinerNotesCacheDir()); os.IsNotExist(err) {
+		t.Errorf("Expected GetLinerNotesCacheDir to be created by EnsureCacheDir")
+	}
+	if _, err := os.Stat(GetTTSModelsDir()); !os.IsNotExist(err) {
+		t.Errorf("Expected GetTTSModelsDir NOT to be created until on-demand download")
 	}
 }
 

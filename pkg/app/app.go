@@ -644,6 +644,8 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 	experimentalTunerFlag := fs.Bool("experimental-tuner", false, "Enable experimental analog frequency tuner (on hold)")
 	fingerprintFlag := fs.Bool("fingerprint", true, "Enable acoustic stream fingerprinting (AcoustID)")
 	autoIdentifyFlag := fs.Bool("auto-identify", true, "Automatically identify songs when station lacks metadata")
+	aiDJFlag := fs.Bool("ai-dj", false, "Enable Local AI Radio DJ track announcements")
+	djPersonaFlag := fs.String("dj-persona", "", "AI DJ persona (late-night-chill, retro-80s, cyberpunk, bbc-presenter)")
 	debugFlag := fs.Bool("debug", false, "Write a diagnostic log for bug reports (see --debug-log)")
 	debugLogFlag := fs.String("debug-log", "", "Path for the diagnostic log (default ~/.config/halpradio/debug.log)")
 
@@ -734,6 +736,12 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 	}
 	if !*autoIdentifyFlag {
 		cfg.AutoIdentify = false
+	}
+	if *aiDJFlag {
+		cfg.AIDJEnabled = true
+	}
+	if strings.TrimSpace(*djPersonaFlag) != "" {
+		cfg.AIDJPersona = strings.TrimSpace(*djPersonaFlag)
 	}
 
 	store := radio.NewStore()

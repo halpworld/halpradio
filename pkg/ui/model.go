@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/halpworld/halpradio/pkg/ai"
 	"github.com/halpworld/halpradio/pkg/art"
 	"github.com/halpworld/halpradio/pkg/desktop"
 	"github.com/halpworld/halpradio/pkg/lyrics"
@@ -28,6 +29,7 @@ const (
 	FocusMainList FocusArea = iota
 	FocusSidebar
 	FocusLyrics
+	FocusLinerNotes
 )
 
 type TickMsg time.Time
@@ -260,6 +262,29 @@ type Model struct {
 	// nowPlayingSig is the station + track signature the lyric sheet and
 	// artwork currently belong to, used to notice a change on air.
 	nowPlayingSig string
+
+	// Local AI Radio DJ & Interactive Liner Notes Companion state
+	DJ                   *ai.DJ
+	LinerNotesClient     *ai.LinerNotesClient
+	ShowLinerNotes       bool
+	LinerNotes           *ai.LinerNotes
+	LinerNotesStatus     string
+	IsFetchingLinerNotes bool
+	LinerNotesScroll     int
+	LinerNotesTrackKey   string
+	DJBannerActive       bool
+	DJBannerFading       bool
+	DJBannerScript       string
+	DJBannerEngine       string
+	DJBannerPersona      string
+	DJBannerUntil        time.Time
+	DJAnnouncedTrackKey  string
+	DJAnnounceSeq        uint64
+	ShowDJModal          bool
+	DJModalCursor        int
+	DJModalStatus        string
+	DJInstalledVoices    map[string]bool
+	IsDownloadingVoice   bool
 }
 
 func NewModel(
@@ -351,6 +376,17 @@ func NewModel(
 	} else {
 		m.ArtProtocol = art.ProtocolNone
 	}
+
+	m.DJ = ai.NewDJ(ai.DJConfig{
+		PersonaID:   cfg.AIDJPersona,
+		TTSEngine:   cfg.AIDJTTSEngine,
+		VoiceModel:  cfg.AIDJVoiceModel,
+		OllamaURL:   cfg.AIDJOllamaURL,
+		OllamaModel: cfg.AIDJOllamaModel,
+		DuckLevel:   cfg.AIDJDuckLevel,
+	})
+	m.LinerNotesClient = ai.NewLinerNotesClient()
+	m.refreshDJInstalledVoices()
 
 	allThemes := theme.GetAllThemes()
 	for i, t := range allThemes {
@@ -672,6 +708,7 @@ func (m *Model) PlayNextStation() {
 	if len(m.Stations) == 0 {
 		return
 	}
+	m.cancelDJAnnouncement()
 	m.SelectedIndex = (m.SelectedIndex + 1) % len(m.Stations)
 	st := m.Stations[m.SelectedIndex]
 	m.IdentifiedResult = nil
@@ -693,6 +730,7 @@ func (m *Model) PlayPrevStation() {
 	if len(m.Stations) == 0 {
 		return
 	}
+	m.cancelDJAnnouncement()
 	m.SelectedIndex = (m.SelectedIndex - 1 + len(m.Stations)) % len(m.Stations)
 	st := m.Stations[m.SelectedIndex]
 	m.IdentifiedResult = nil
@@ -712,6 +750,7 @@ func (m *Model) PlayPrevStation() {
 // TogglePlayPause toggles between playing and paused or starts playing the selected station.
 func (m *Model) TogglePlayPause() {
 	if m.Player.Status() == player.StatusPlaying {
+		m.cancelDJAnnouncement()
 		_ = m.Player.Pause()
 		m.PlayingID = ""
 		m.StatusMessage = "Audio playback paused"
@@ -730,6 +769,7 @@ func (m *Model) TogglePlayPause() {
 	}
 
 	if len(m.Stations) > 0 && m.SelectedIndex < len(m.Stations) {
+		m.cancelDJAnnouncement()
 		st := m.Stations[m.SelectedIndex]
 		m.IdentifiedResult = nil
 		m.IsIdentifying = false

@@ -713,3 +713,37 @@ func TestSetupAppNoDebugLogByDefault(t *testing.T) {
 		t.Errorf("Expected no debug.log to be created, stat err = %v", err)
 	}
 }
+
+func TestSetupAppAIDJFlags(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	t.Setenv("HALPRADIO_DEBUG", "")
+
+	var buf bytes.Buffer
+	appInst, isDone, err := SetupApp([]string{"--ai-dj", "--dj-persona=cyberpunk", "-mpris=false", "-ipc=false", "-discord=false"}, []byte{}, &buf)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if isDone {
+		t.Fatalf("Expected isDone=false for TUI startup")
+	}
+	defer func() {
+		if appInst != nil {
+			_ = appInst.Player.Close()
+			if appInst.Desktop != nil {
+				_ = appInst.Desktop.Close()
+			}
+			if appInst.PluginMgr != nil {
+				_ = appInst.PluginMgr.Close()
+			}
+		}
+	}()
+
+	if !appInst.Config.AIDJEnabled {
+		t.Errorf("Expected Config.AIDJEnabled=true with --ai-dj")
+	}
+	if appInst.Config.AIDJPersona != "cyberpunk" {
+		t.Errorf("Expected Config.AIDJPersona='cyberpunk', got %q", appInst.Config.AIDJPersona)
+	}
+}

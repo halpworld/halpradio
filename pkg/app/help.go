@@ -235,6 +235,8 @@ func PrintRootHelp(out io.Writer) {
 		{Name: "--ipc", Args: "=<bool>", Description: "Enable local IPC socket for CLI remote control", Default: "true"},
 		{Name: "--fingerprint", Args: "=<bool>", Description: "Enable acoustic stream fingerprinting (AcoustID)", Default: "true"},
 		{Name: "--auto-identify", Args: "=<bool>", Description: "Automatically identify songs when station lacks metadata", Default: "true"},
+		{Name: "--ai-dj", Description: "Enable Local AI Radio DJ track announcements", Default: "false"},
+		{Name: "--dj-persona", Args: "<persona>", Description: "AI DJ persona (late-night-chill, retro-80s, cyberpunk, bbc-presenter)", Default: `"late-night-chill"`},
 		{Name: "--experimental-tuner", Description: "Enable experimental analog frequency tuner (on hold)", Default: "false"},
 		{Name: "--debug", Description: "Write a diagnostic log to attach to bug reports", Default: "false"},
 		{Name: "--debug-log", Args: "<path>", Description: "Diagnostic log path (default ~/.config/halpradio/debug.log)"},

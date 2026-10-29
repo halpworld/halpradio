@@ -9,6 +9,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/ui/components"
 	"github.com/halpworld/halpradio/pkg/ui/components/globe"
 	"github.com/halpworld/halpradio/pkg/ui/components/tuner"
+	"github.com/halpworld/halpradio/pkg/ui/modals"
 )
 
 func (m Model) View() string {
@@ -136,6 +137,29 @@ func (m Model) View() string {
 		)
 	}
 
+	if m.ShowDJModal {
+		activeLabel := ""
+		if m.DJ != nil {
+			activeLabel = m.DJ.EngineLabel()
+		}
+		return artClear + modals.RenderDJSettingsModal(modals.DJSettingsModalInput{
+			Enabled:           m.Config.AIDJEnabled,
+			PersonaID:         m.Config.AIDJPersona,
+			TTSEngine:         m.Config.AIDJTTSEngine,
+			ActiveEngineLabel: activeLabel,
+			SelectedVoiceID:   m.Config.AIDJVoiceModel,
+			OllamaURL:         m.Config.AIDJOllamaURL,
+			OllamaModel:       m.Config.AIDJOllamaModel,
+			DuckLevel:         m.Config.AIDJDuckLevel,
+			InstalledModels:   m.DJInstalledVoices,
+			Cursor:            m.DJModalCursor,
+			Downloading:       m.IsDownloadingVoice,
+			Status:            m.DJModalStatus,
+			Width:             width,
+			Height:            height,
+		}, m.Theme)
+	}
+
 	isTunerActive := m.Config.ExperimentalTuner && m.ActiveTuner
 	headerView := components.RenderHeader(width, m.ActiveTab, m.Player.Status(), m.Player.ActiveBackend(), m.Theme, isTunerActive)
 	headerHeight := lipgloss.Height(headerView)
@@ -187,7 +211,25 @@ func (m Model) View() string {
 	statusBarView := components.RenderStatusBar(m.SearchQuery, m.StatusMessage, m.ActiveTab, width, m.Theme, isTunerActive)
 	statusBarHeight := lipgloss.Height(statusBarView)
 
-	mainContentHeight := height - headerHeight - playerBarHeight - statusBarHeight - 1
+	var djBannerView string
+	djBannerHeight := 0
+	if m.DJBannerActive {
+		candidate := modals.RenderDJBanner(modals.DJBannerInput{
+			Persona:     m.DJBannerPersona,
+			Engine:      m.DJBannerEngine,
+			Script:      m.DJBannerScript,
+			DuckPercent: m.Config.AIDJDuckLevel,
+			Fading:      m.DJBannerFading,
+			Width:       width,
+		}, m.Theme)
+		candH := lipgloss.Height(candidate)
+		if height-headerHeight-playerBarHeight-statusBarHeight-1-candH >= 6 {
+			djBannerView = candidate
+			djBannerHeight = candH
+		}
+	}
+
+	mainContentHeight := height - headerHeight - playerBarHeight - statusBarHeight - djBannerHeight - 1
 	if mainContentHeight < 3 {
 		mainContentHeight = 3
 	}
@@ -196,12 +238,20 @@ func (m Model) View() string {
 	// own layout. On a terminal too narrow for both, the sheet takes over the
 	// content area instead of silently declining to appear.
 	lyricsSurface, lyricsWidth := m.lyricsSurface()
+	linerSurface, linerWidth := m.linerNotesSurface()
 	contentWidth := width
 	if lyricsSurface == LyricsSurfaceDrawer {
 		contentWidth = width - lyricsWidth - 1
 		if contentWidth < 24 {
 			lyricsSurface = LyricsSurfaceOverlay
 			lyricsWidth = width
+			contentWidth = width
+		}
+	} else if linerSurface == LyricsSurfaceDrawer {
+		contentWidth = width - linerWidth - 1
+		if contentWidth < 24 {
+			linerSurface = LyricsSurfaceOverlay
+			linerWidth = width
 			contentWidth = width
 		}
 	}
@@ -377,6 +427,45 @@ func (m Model) View() string {
 		} else {
 			mainArea = lyricsView
 		}
+	} else if linerSurface != LyricsSurfaceHidden {
+		var stName, stGenre, stCountry string
+		if st := m.activeOrSelectedStation(); st != nil {
+			stName = st.Name
+			stGenre = st.Genre
+			stCountry = st.Country
+		}
+		linerView := modals.RenderLinerNotesDrawer(modals.LinerNotesDrawerInput{
+			Notes:       m.LinerNotes,
+			Status:      m.LinerNotesStatus,
+			Fetching:    m.IsFetchingLinerNotes,
+			TrackLabel:  m.nowPlayingTrack(),
+			StationName: stName,
+			Genre:       stGenre,
+			Country:     stCountry,
+			ArtLines:    m.ArtLines,
+			ArtCols:     m.ArtCols,
+			ArtSource:   m.coverSourceLabel(),
+			Scroll:      m.LinerNotesScroll,
+			Focused:     m.ActiveFocus == FocusLinerNotes,
+			Width:       linerWidth,
+			Height:      mainContentHeight,
+		}, m.Theme)
+		if linerSurface == LyricsSurfaceDrawer {
+			mainArea = lipgloss.JoinHorizontal(lipgloss.Top, mainArea, " ", linerView)
+		} else {
+			mainArea = linerView
+		}
+	}
+
+	if djBannerView != "" {
+		return artClear + lipgloss.JoinVertical(
+			lipgloss.Left,
+			headerView,
+			mainArea,
+			djBannerView,
+			playerBarView,
+			statusBarView,
+		)
 	}
 
 	return artClear + lipgloss.JoinVertical(

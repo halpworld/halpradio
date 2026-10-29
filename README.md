@@ -79,6 +79,7 @@ docker run --rm -it --device /dev/snd halpworld/halpradio:latest
 | **Song Change Desktop Notifications** | ✅ **Native macOS/Linux/Win + Dedupe** | ❌ None | ❌ None | ❌ None | ❌ None |
 | **CLI & Hotkey Remote (`halpradio remote`)** | ✅ **macOS Shortcuts, Raycast, tmux** | ❌ None | ❌ None | ❌ None | ⚠️ Socket |
 | **Terminal Party Line (`Ctrl+p`)** | ✅ **P2P Mesh Sync, E2EE Rooms & Reactions** | ❌ None | ❌ None | ❌ None | ❌ None |
+| **Local AI Radio DJ & Liner Notes (`i`/`d`/`D`)** | ✅ **100% Local TTS, Audio Ducking & Bio Drawer** | ❌ None | ❌ None | ❌ None | ❌ None |
 | **Acoustic Fingerprinting (`I`)** | ✅ **Chromaprint / AcoustID + Ad Strip** | ❌ None | ❌ None | ❌ None | ❌ None |
 | **10-Band EQ & R128 Loudness (`E`)** | ✅ **Pure Go DSP: Presets, Crossfeed, Lo-Fi Tape** | ❌ None | ❌ None | ❌ None | ⚠️ Basic EQ |
 | **Pomodoro & Sleep Timers (`z`)** | ✅ **Intervals, Station Switch & OS Notify** | ❌ None | ❌ None | ❌ None | ⚠️ Basic sleep |
@@ -420,6 +421,21 @@ Set `HALPRADIO_NO_ART=1` to disable image rendering for a single run, or `HALPRA
 
 ---
 
+## 🎙️ Local AI Radio DJ & Interactive Liner Notes Companion
+
+Press `i` to open the **Interactive Liner Notes & Artist Biography Drawer**, `d` for an **on-demand AI Radio DJ track intro**, or `D` for the **AI DJ Studio & ONNX Voice Manager**:
+
+<p align="center">
+  <img src="./docs/images/aidj.gif" alt="halpradio Local AI Radio DJ & Interactive Liner Notes Demo" width="850" />
+</p>
+
+- **📖 Interactive Liner Notes & Artist Bio Drawer (`i`)**: Sliding right-hand drawer displaying **Artist Biography**, **Album & Recording Context**, **Discography Highlights**, and **Track Trivia** powered by MusicBrainz + Wikipedia REST APIs with a 30-day local cache (`~/.cache/halpradio/ai/linernotes/`) and a 100% offline station-metadata synthesizer fallback.
+- **🎙️ 100% Local AI Radio DJ (`d` / `D` / `--ai-dj`)**: Choose from 4 radio personas (**Late Night Chill**, **Retro 80s Broadcaster**, **Cyberpunk Host**, **BBC Presenter**). Automatically ducks live stream audio to **20%** while the DJ speaks and restores playback volume to **100%** afterward.
+- **🔊 Zero-Cloud-Lag Local TTS & Opt-In HuggingFace ONNX Voices**: Works out of the box with zero downloads via native OS speech (`say`, `espeak-ng`, `spd-say`), or download opt-in neural `.onnx` voice models (`piper` / `sherpa-onnx` Kokoro-82M) directly from HuggingFace inside the **AI DJ Studio (`D`)**. Optional local [Ollama](https://ollama.com) LLM support with instant offline template fallback.
+- See **[Local AI Radio DJ & Liner Notes Guide](./docs/AI_DJ.md)** for full details.
+
+---
+
 ## 🎉 Terminal Party Line: P2P Mesh Synchronized Radio Rooms & Reactions
 
 Share the groove with teammates, study groups, or friends with zero central audio relaying! `halpradio` features an end-to-end encrypted (E2EE) P2P mesh party system powered by WebRTC data channels:
@@ -476,6 +492,8 @@ Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Over
 | **Discovery & Sharing** | `Ctrl+p` | Open **Party Room Manager** (P2P mesh synchronized listening & room setup) |
 | | `1` - `5` | Send live floating ASCII reaction (🔥 ❤️ ☕ 🚀 👀) when in Party Room |
 | | `I` | **Identify playing track** via acoustic stream fingerprinting (Chromaprint / AcoustID) |
+| | `i` | Toggle **Interactive Liner Notes & Artist Biography drawer** (MusicBrainz + Wikipedia) |
+| | `d` / `D` | Trigger **Local AI Radio DJ** track intro (`d`) or open **AI DJ Studio & ONNX Voices** (`D`) |
 | | `L` | Toggle **live synced lyrics drawer** (LRCLIB / NetEase) |
 | | `A` | Toggle **album art viewer** (Kitty / Sixel / iTerm2 / half-block) |
 | | `,` / `.` | Nudge lyric sync backward / forward by 0.5s (lyrics drawer open) |
@@ -613,6 +631,7 @@ Explore detailed technical documentation in the [`docs/`](./docs) folder:
 - 🎵 **[Audio Engine & Stream Player](./docs/AUDIO_PLAYER.md)**: Multi-backend auto-detection (`mpv`, `vlc`, `ffplay`, native Go), process lifecycle, and real-time ICY metadata extraction.
 - 📻 **[Station Catalog & RadioBrowser Integration](./docs/STATION_MANAGEMENT.md)**: Station storage hierarchy (`stations.yaml`, local config, favorites), RadioBrowser API client, and PR export workflow.
 - 📜 **[Synced Lyrics & Terminal Album Art](./docs/LYRICS_AND_ART.md)**: LRCLIB / NetEase lyric providers, LRC parsing, playback-position estimation, cover art providers, and the Kitty / iTerm2 / Sixel / half-block / Braille renderers.
+- 🎙️ **[Local AI Radio DJ & Interactive Liner Notes](./docs/AI_DJ.md)**: DJ personas, local TTS engines (Piper ONNX, Sherpa-ONNX Kokoro-82M, Native OS TTS), opt-in HuggingFace voice model downloader, local Ollama integration, and MusicBrainz/Wikipedia liner notes drawer.
 - 🎨 **[Theme System & Audio Visualizers](./docs/THEME_SYSTEM.md)**: Lipgloss styling system, theme palettes, and TUI visualizer algorithms.
 - ⚙️ **[Configuration & Keybindings](./docs/CONFIGURATION.md)**: Directory layout, `config.yaml` options, CLI flags, and complete keymap reference.
 - 📦 **[Packaging & Distribution Guide](./docs/PACKAGING.md)**: Specifications for Homebrew, Arch Linux AUR, Docker, Scoop, and Nix.

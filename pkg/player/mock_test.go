@@ -2,6 +2,7 @@ package player
 
 import (
 	"testing"
+	"time"
 
 	"github.com/halpworld/halpradio/pkg/radio"
 )
@@ -112,5 +113,24 @@ func TestMockPlayerLifecycle(t *testing.T) {
 	mp.SetStatus(StatusConnecting)
 	if mp.Status() != StatusConnecting {
 		t.Errorf("expected StatusConnecting, got %s", mp.Status())
+	}
+
+	// Test Duck / Unduck / DuckFactor
+	if mp.DuckFactor() != 1.0 {
+		t.Errorf("expected initial DuckFactor 1.0, got %f", mp.DuckFactor())
+	}
+	mp.Duck(0.20, 0)
+	if mp.DuckFactor() != 0.20 {
+		t.Errorf("expected DuckFactor 0.20, got %f", mp.DuckFactor())
+	}
+	if mp.Volume() != 90 {
+		t.Errorf("expected Volume() to remain 90 while ducked, got %d", mp.Volume())
+	}
+	mp.Unduck(60 * time.Millisecond)
+	if err := mp.Stop(); err != nil {
+		t.Fatalf("Stop failed: %v", err)
+	}
+	if mp.DuckFactor() != 1.0 {
+		t.Errorf("expected Stop to reset DuckFactor to 1.0, got %f", mp.DuckFactor())
 	}
 }

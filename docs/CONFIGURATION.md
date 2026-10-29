@@ -80,6 +80,15 @@ album_art_enabled: true     # Enable terminal cover art rendering ('A' key)
 album_art_protocol: auto    # auto | kitty | iterm2 | sixel | halfblock | braille | off
 lastfm_api_key: ""          # Optional extra cover art provider (iTunes, Deezer & Cover Art Archive need no key)
 
+# Local AI Radio DJ & Interactive Liner Notes Companion
+ai_dj: false                              # Automatically announce new tracks ('d' always triggers on-demand)
+ai_dj_persona: "late-night-chill"         # late-night-chill | retro-80s | cyberpunk | bbc-presenter
+ai_dj_tts_engine: "auto"                  # auto | piper | sherpa-onnx | native | silent
+ai_dj_voice_model: "en_US-lessac-medium"  # Opt-in HuggingFace ONNX model ID in ~/.cache/halpradio/ai/models/
+ai_dj_ollama_url: "http://127.0.0.1:11434"# Optional local Ollama endpoint
+ai_dj_ollama_model: ""                    # Optional local Ollama model (e.g. "llama3.2:1b")
+ai_dj_duck_level: 20                      # Audio ducking percentage (5-100) while DJ speaks
+
 # Experimental Features (On Hold)
 experimental_tuner: false   # Enable experimental Analog Frequency Tuner on Tab 0 (see docs/TUNER.md)
 ```
@@ -181,6 +190,11 @@ halpradio remote status
 # Acoustic stream fingerprinting
 halpradio --fingerprint=true
 halpradio --auto-identify=true
+
+# Local AI Radio DJ & Personas
+halpradio --ai-dj
+halpradio --ai-dj --dj-persona=cyberpunk
+halpradio --ai-dj --dj-persona=bbc-presenter
 
 # Plugin Management CLI
 halpradio plugin list
@@ -297,6 +311,10 @@ Every change is sent to the player immediately, so you hear it while you tune.
 | Keybinding | Action |
 |---|---|
 | `I` | **Identify playing track** via acoustic stream fingerprinting (Chromaprint / AcoustID / MusicBrainz) |
+| `i` | Toggle **Interactive Liner Notes & Artist Biography Drawer** (MusicBrainz + Wikipedia) |
+| `d` | Trigger **on-demand Local AI Radio DJ** track commentary with smooth audio ducking |
+| `D` | Open **AI DJ Studio & ONNX Voice Manager** modal |
+| `L` / `A` | Toggle **Synced Lyrics Drawer** (`L`) or **Album Art Viewer** (`A`) |
 | `y` | Yank / copy track metadata (`Artist - Title`) or identified song to system clipboard |
 | `o` | Open song search in default browser (Spotify, YT Music, Apple, Soundcloud, DDG, Google) |
 | `s` | Bookmark track to `~/.config/halpradio/saved_tracks.txt` (on History tab) |
