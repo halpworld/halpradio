@@ -11,6 +11,7 @@ import (
 
 	"github.com/ebitengine/oto/v3"
 	"github.com/hajimehoshi/go-mp3"
+	"github.com/halpworld/halpradio/pkg/player/dsp"
 	"github.com/halpworld/halpradio/pkg/radio"
 )
 
@@ -86,12 +87,15 @@ func (m *Manager) playNative(ctx context.Context, st radio.Station, vol int) {
 		m.otoSampleRate = decoder.SampleRate()
 	}
 
-	player := otoCtx.NewPlayer(decoder)
+	// Decoded PCM passes through the DSP rack on its way to the device.
+	chain := dsp.NewChain(decoder.SampleRate(), m.dspSettings)
+	player := otoCtx.NewPlayer(dsp.NewPCMReader(decoder, chain))
 	player.SetVolume(float64(vol) / 100.0)
 	player.Play()
 
 	m.nativePlayer = player
 	m.nativeStream = resp.Body
+	m.dspChain = chain
 	m.status = StatusPlaying
 	m.mu.Unlock()
 

@@ -442,6 +442,7 @@ func executeHeadlessParty(
 			fmt.Fprintf(out, "♪ Now Playing: %s\n", info.TrackTitle)
 		}
 	})
+	pm.SetDSP(loadDSPSettings(cfg))
 	defer pm.Close()
 
 	sess.SetHandlers(
@@ -575,6 +576,7 @@ func setupPartyApp(
 			program.Send(ui.TrackUpdatedMsg(info))
 		}
 	})
+	pm.SetDSP(loadDSPSettings(cfg))
 	pm.SetOnAutoPause(func() {
 		if program != nil {
 			program.Send(ui.AutoPauseMsg{})

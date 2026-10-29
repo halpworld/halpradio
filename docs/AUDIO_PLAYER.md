@@ -39,7 +39,7 @@ flowchart TD
 | **FFplay** | `ffplay` | `-nodisp -loglevel quiet -volume N` | MP3, AAC, OGG, FLAC | Part of ffmpeg suite. |
 | **MPlayer** | `mplayer` | `-quiet -volume N` | MP3, AAC, OGG | Traditional Linux media player. |
 | **MPG123** | `mpg123` | `-q -g N` | MP3 | Lightweight MP3 decoder. |
-| **Native Go** | Built-in | Direct PCM stream to host audio | MP3 | Zero external binary dependencies required. |
+| **Native Go** | Built-in | Direct PCM stream to host audio | MP3 | Zero external binary dependencies required. Full live DSP rack. |
 
 ---
 
@@ -48,7 +48,8 @@ flowchart TD
 When no external media CLI is installed on the system, `halpradio` gracefully switches to its **native Go player engine**:
 - **HTTP Streamer**: Initiates an HTTP GET request to the radio stream URL with customizable user agents.
 - **MP3 Decoder**: Streams incoming bytes through `github.com/hajimehoshi/go-mp3`.
-- **Audio Output**: Feeds decoded 16-bit PCM audio samples directly into hardware sound drivers via `github.com/ebitengine/oto/v3`.
+- **DSP Rack**: Runs the decoded PCM through the equalizer, crossfeed, lo-fi and loudness stages (see [DSP Rack](#-dsp-rack-equalizer-loudness-normalizer--crossfeed)).
+- **Audio Output**: Feeds the processed 16-bit PCM audio samples directly into hardware sound drivers via `github.com/ebitengine/oto/v3`.
 
 > [!NOTE]
 > The native Go player handles MP3 streams out of the box. For AAC/AAC+ streams, installing `mpv` or `ffmpeg` is recommended.
@@ -137,6 +138,39 @@ flowchart TD
    - Renders visual confidence bar (`████████░ 94%`) in the player bar.
    - Identified tracks populate the History tab (`H`) with a `✨` star badge.
    - System clipboard yank (`y`) automatically copies identified tracks.
+
+---
+
+## 🎚 DSP Rack: Equalizer, Loudness Normalizer & Crossfeed
+
+Press `E` to open the **Graphic Equalizer & DSP Rack**. The rack is pure Go (`pkg/player/dsp/`) and runs on float PCM between the MP3 decoder and `oto`, so the native backend needs no extra binaries. Settings are saved to `~/.config/halpradio/dsp.yaml` when the modal closes and are restored at startup.
+
+Signal chain, in order:
+
+```
+decoder → 10-band EQ → lo-fi cassette → crossfeed → R128 normalizer → lookahead limiter → oto
+```
+
+| Stage | What it does |
+|---|---|
+| **10-band graphic EQ** | RBJ peaking biquads at 32, 64, 125, 250, 500, 1k, 2k, 4k, 8k and 16k Hz (Q 1.41, ±12 dB). Presets: Flat, Bass Boost, Vocal Clarity, Electronic, Acoustic, Deep Focus and Lo-Fi Tape. Bands at 0 dB and bands above 0.45 × sample rate are skipped. |
+| **Lo-fi cassette** | 90 Hz high-pass, 6.5 kHz low-pass, `tanh` tape saturation and a quiet hiss floor (about -56 dBFS). |
+| **Binaural crossfeed** | The Bauer / Chu Moy bs2b algorithm (700 Hz, 4.5 dB): each ear gets a low-passed, slightly delayed copy of the other channel, which softens hard-panned mixes on headphones. |
+| **EBU R128 normalizer** | ITU-R BS.1770-4 K-weighted loudness over 400 ms blocks every 100 ms, with the -70 LUFS absolute gate and -10 LU relative gate, integrated over a 10 s sliding window. The gain moves towards `loudness_target_lufs` (default -14) at 30 dB/s for the first 3 s of a station, then slowly: 3 dB/s down and 1.5 dB/s up. Individual beats therefore cannot pump the gain. Loudness is measured before the gain, so there is no feedback loop. During silence the gain is held. Boost is capped at +12 dB. |
+| **Lookahead limiter** | Runs with the normalizer. A 5 ms lookahead with a smoothed gain envelope and 120 ms release keeps true peaks under -1 dBFS without clicks. |
+
+With everything off (Flat, all toggles off) the rack is bypassed and the samples pass through bit-for-bit. The full rack runs at well over 20× real time on one core (`go test -bench ChainFullRack ./pkg/player/dsp`). This leaves plenty of headroom, so audio frames are not dropped.
+
+### Backend support
+
+| Backend | DSP support | How |
+|---|---|---|
+| **Native Go** | ✅ Live | In-process `dsp.Chain` wrapped around the decoder |
+| **MPV** | ✅ Live | FFmpeg `lavfi` graph passed with `--af=@halpradio:lavfi=[…]` and updated live over the JSON IPC socket (`set_property af`) |
+| **FFplay** | ⏭ Next station | Same `lavfi` graph passed with `-af`; changes apply when the next station starts |
+| **VLC / CVLC / MPlayer / MPG123** | ❌ Unavailable | The modal shows a warning and suggests native, mpv or ffplay |
+
+External backends use FFmpeg's own filters (`equalizer`, `highpass`, `lowpass`, `asoftclip`, `crossfeed`, `loudnorm`), so the sound is close to the native rack but not identical.
 
 ---
 

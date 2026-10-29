@@ -28,6 +28,9 @@ var errMPVNotConnected = errors.New("mpv IPC channel not connected")
 type extControl interface {
 	SetVolume(vol int)
 	SetMute(muted bool)
+	// SetAudioFilter replaces the backend's audio filter chain with an mpv
+	// --af style value; "" removes all filters.
+	SetAudioFilter(af string)
 	Close() error
 }
 
@@ -62,6 +65,8 @@ type mpvControl struct {
 	haveVolume bool
 	wantMute   bool
 	haveMute   bool
+	wantAF     string
+	haveAF     bool
 }
 
 func newMPVControl(endpoint *mpvIPCEndpoint) *mpvControl {
@@ -105,6 +110,7 @@ func (c *mpvControl) attach(conn io.ReadWriteCloser) {
 	c.conn = conn
 	vol, haveVol := c.wantVolume, c.haveVolume
 	muted, haveMute := c.wantMute, c.haveMute
+	af, haveAF := c.wantAF, c.haveAF
 	c.mu.Unlock()
 
 	// mpv replies to every command; drain the responses so its socket buffer
@@ -116,6 +122,9 @@ func (c *mpvControl) attach(conn io.ReadWriteCloser) {
 	}
 	if haveMute {
 		_ = c.setProperty("mute", muted)
+	}
+	if haveAF {
+		_ = c.setProperty("af", af)
 	}
 }
 
@@ -131,6 +140,15 @@ func (c *mpvControl) SetMute(muted bool) {
 	c.wantMute, c.haveMute = muted, true
 	c.mu.Unlock()
 	_ = c.setProperty("mute", muted)
+}
+
+// SetAudioFilter swaps mpv's filter chain live via the "af" property, so EQ
+// and DSP changes are heard without restarting the stream.
+func (c *mpvControl) SetAudioFilter(af string) {
+	c.mu.Lock()
+	c.wantAF, c.haveAF = af, true
+	c.mu.Unlock()
+	_ = c.setProperty("af", af)
 }
 
 func (c *mpvControl) setProperty(name string, value any) error {
@@ -212,6 +230,10 @@ func (c *mplayerControl) SetMute(muted bool) {
 	}
 	_, _ = fmt.Fprintf(c.stdin, "mute %d\n", flag)
 }
+
+// SetAudioFilter is a no-op: mplayer's filters use a different syntax and
+// cannot be swapped at runtime, so the DSP rack is unavailable there.
+func (c *mplayerControl) SetAudioFilter(string) {}
 
 func (c *mplayerControl) Close() error {
 	c.mu.Lock()

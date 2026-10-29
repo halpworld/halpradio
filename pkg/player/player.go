@@ -17,6 +17,7 @@ import (
 	"unicode"
 
 	"github.com/halpworld/halpradio/pkg/debuglog"
+	"github.com/halpworld/halpradio/pkg/player/dsp"
 	"github.com/halpworld/halpradio/pkg/radio"
 )
 
@@ -29,6 +30,30 @@ const (
 	StatusPaused     PlayStatus = "PAUSED"
 	StatusError      PlayStatus = "ERROR"
 )
+
+// DSPSupport describes how the active backend applies the DSP audio rack.
+type DSPSupport string
+
+const (
+	// DSPLive applies every change to the playing stream immediately.
+	DSPLive DSPSupport = "live"
+	// DSPNextStation applies changes when the next stream starts.
+	DSPNextStation DSPSupport = "next-station"
+	// DSPUnavailable means the backend cannot run the rack at all.
+	DSPUnavailable DSPSupport = "unavailable"
+)
+
+// DSPSupportFor reports how backend handles the DSP rack. The native backend
+// runs the pure-Go chain; FFmpeg-based players get an equivalent lavfi graph.
+func DSPSupportFor(backend string) DSPSupport {
+	switch backend {
+	case "native", "mpv":
+		return DSPLive
+	case "ffplay":
+		return DSPNextStation
+	}
+	return DSPUnavailable
+}
 
 type NativeAudioPlayer interface {
 	Close() error
@@ -57,6 +82,10 @@ type Player interface {
 	Duck(targetRatio float64, fadeDur time.Duration)
 	Unduck(fadeDur time.Duration)
 	DuckFactor() float64
+	SetDSP(s dsp.Settings)
+	DSPSettings() dsp.Settings
+	DSPSupport() DSPSupport
+	DSPMeter() (lufs float64, gainDB float64, ok bool)
 }
 
 type TrackInfo struct {
@@ -97,6 +126,9 @@ type Manager struct {
 
 	onAutoPause   func()
 	autoPauseStop func()
+
+	dspSettings dsp.Settings
+	dspChain    *dsp.Chain // native backend's live rack, nil when not playing natively
 }
 
 func NewManager(preferredBackend string, initialVolume int, onTrackUpd func(TrackInfo)) *Manager {
@@ -110,6 +142,7 @@ func NewManager(preferredBackend string, initialVolume int, onTrackUpd func(Trac
 		onTrackUpd:    onTrackUpd,
 		activeBackend: detectBackend(preferredBackend),
 		staticSynth:   NewStaticSynthesizer(44100),
+		dspSettings:   dsp.DefaultSettings(),
 	}
 	debuglog.Logf("player", "backend %q selected (preferred %q), volume %d", m.activeBackend, preferredBackend, initialVolume)
 	return m
@@ -448,6 +481,7 @@ func (m *Manager) Stop() error {
 		_ = m.nativeStream.Close()
 		m.nativeStream = nil
 	}
+	m.dspChain = nil
 	m.status = StatusStopped
 	m.currentStation = nil
 	m.currentTrack = ""
@@ -581,6 +615,51 @@ func (m *Manager) Play(st radio.Station) error {
 	return nil
 }
 
+// SetDSP replaces the DSP rack settings. The native backend and mpv apply the
+// change to the playing stream at once; ffplay picks it up on the next stream.
+func (m *Manager) SetDSP(s dsp.Settings) {
+	s = s.Normalize()
+	m.mu.Lock()
+	m.dspSettings = s.Clone()
+	chain := m.dspChain
+	ctrl := m.extCtrl
+	m.mu.Unlock()
+
+	if chain != nil {
+		chain.Update(s)
+	}
+	if ctrl != nil {
+		ctrl.SetAudioFilter(dsp.MPVAudioFilter(s))
+	}
+	debuglog.Logf("player", "dsp settings: %s", s.Summary())
+}
+
+// DSPSettings returns a copy of the current DSP rack settings.
+func (m *Manager) DSPSettings() dsp.Settings {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.dspSettings.Clone()
+}
+
+// DSPSupport reports how the active backend applies the DSP rack.
+func (m *Manager) DSPSupport() DSPSupport {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return DSPSupportFor(m.activeBackend)
+}
+
+// DSPMeter reports the native normalizer's measured loudness and applied gain.
+// ok is false for external backends, which do their own metering.
+func (m *Manager) DSPMeter() (lufs float64, gainDB float64, ok bool) {
+	m.mu.Lock()
+	chain := m.dspChain
+	m.mu.Unlock()
+	if chain == nil {
+		return 0, 0, false
+	}
+	return chain.Loudness()
+}
+
 // clampVolume constrains a volume level to mpv/mplayer's 0-100 percentage range.
 func clampVolume(vol int) int {
 	if vol < 0 {
@@ -594,8 +673,9 @@ func clampVolume(vol int) int {
 
 // buildExternalArgs returns the argv used to launch backend on streamURL at the
 // given volume. ipcAddr, when non-empty, is the address mpv should expose its
-// JSON IPC channel on for runtime volume/mute control.
-func buildExternalArgs(backend string, streamURL string, vol int, ipcAddr string) ([]string, error) {
+// JSON IPC channel on for runtime volume/mute/filter control. fx is rendered
+// as an FFmpeg filter graph for the backends that accept one.
+func buildExternalArgs(backend string, streamURL string, vol int, ipcAddr string, fx dsp.Settings) ([]string, error) {
 	switch backend {
 	case "mpv":
 		// --no-terminal detaches mpv from stdin/stdout entirely, so it can never
@@ -605,13 +685,20 @@ func buildExternalArgs(backend string, streamURL string, vol int, ipcAddr string
 		if ipcAddr != "" {
 			args = append(args, "--input-ipc-server="+ipcAddr)
 		}
+		if af := dsp.MPVAudioFilter(fx); af != "" {
+			args = append(args, "--af="+af)
+		}
 		return append(args, "--", streamURL), nil
 
 	case "vlc", "cvlc":
 		return []string{backend, "-I", "dummy", "--quiet", fmt.Sprintf("--gain=%.2f", float64(vol)/100.0), "--", streamURL}, nil
 
 	case "ffplay":
-		return []string{"ffplay", "-nodisp", "-loglevel", "quiet", "-volume", strconv.Itoa(vol), "--", streamURL}, nil
+		args := []string{"ffplay", "-nodisp", "-loglevel", "quiet", "-volume", strconv.Itoa(vol)}
+		if graph := dsp.LavfiGraph(fx); graph != "" {
+			args = append(args, "-af", graph)
+		}
+		return append(args, "--", streamURL), nil
 
 	case "mplayer":
 		// -slave turns mplayer's stdin into a real command channel and stops it
@@ -642,7 +729,11 @@ func (m *Manager) playExternal(ctx context.Context, backend string, st radio.Sta
 		}
 	}
 
-	argv, err := buildExternalArgs(backend, st.URL, vol, ipcAddr)
+	m.mu.Lock()
+	fx := m.dspSettings.Clone()
+	m.mu.Unlock()
+
+	argv, err := buildExternalArgs(backend, st.URL, vol, ipcAddr, fx)
 	if err != nil {
 		ipc.Cleanup()
 		m.setError(err.Error())
