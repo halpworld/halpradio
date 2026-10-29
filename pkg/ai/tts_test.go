@@ -109,3 +109,22 @@ func TestLocalTTSEngineSilentAndCancellation(t *testing.T) {
 		t.Errorf("expected canceled error when context is already canceled")
 	}
 }
+
+func TestBuildMacOSSayArgsDistinctVoicesPerPersonaAndModel(t *testing.T) {
+	chillArgs := buildMacOSSayArgs("Hello late night", "late-night-chill", "en_US-lessac-medium")
+	retroArgs := buildMacOSSayArgs("Hello retro", "retro-80s", "en_US-ryan-medium")
+	bbcArgs := buildMacOSSayArgs("Hello BBC", "bbc-presenter", "en_GB-alan-medium")
+
+	if strings.Join(chillArgs, " ") == strings.Join(retroArgs, " ") {
+		t.Errorf("expected distinct macOS say args for chill vs retro, got %v", chillArgs)
+	}
+	if strings.Join(retroArgs, " ") == strings.Join(bbcArgs, " ") {
+		t.Errorf("expected distinct macOS say args for retro vs bbc, got %v", retroArgs)
+	}
+
+	// Selecting a voice model overrides effective persona voice
+	overrideArgs := buildMacOSSayArgs("Hello override", "late-night-chill", "en_US-ryan-medium")
+	if !strings.Contains(strings.Join(overrideArgs, " "), "-r 194") {
+		t.Errorf("expected en_US-ryan-medium model selection to use retro-80s rate 194, got %v", overrideArgs)
+	}
+}

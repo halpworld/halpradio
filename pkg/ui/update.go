@@ -798,6 +798,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.Config.AIDJVoiceModel = msg.ModelID
+		if spec, ok := ai.GetVoiceModelSpec(msg.ModelID); ok && spec.PersonaID != "" && msg.ModelID != "kokoro-en-v0_19" {
+			m.Config.AIDJPersona = spec.PersonaID
+		}
 		_ = util.SaveConfig(m.Config)
 		m.ensureDJ()
 		m.refreshDJInstalledVoices()
@@ -3298,6 +3301,9 @@ func (m Model) handleDJModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "p":
 		m.Config.AIDJPersona = ai.NextPersonaID(m.Config.AIDJPersona)
+		if m.Config.AIDJVoiceModel != "kokoro-en-v0_19" {
+			m.Config.AIDJVoiceModel = ai.VoiceModelForPersona(m.Config.AIDJPersona)
+		}
 		persona := m.ensureDJ().Persona()
 		_ = util.SaveConfig(m.Config)
 		m.DJModalStatus = fmt.Sprintf("✓ DJ Persona: %s", persona.Name)
@@ -3339,6 +3345,9 @@ func (m Model) handleDJModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.StatusMessage = m.DJModalStatus
 		case 1:
 			m.Config.AIDJPersona = ai.NextPersonaID(m.Config.AIDJPersona)
+			if m.Config.AIDJVoiceModel != "kokoro-en-v0_19" {
+				m.Config.AIDJVoiceModel = ai.VoiceModelForPersona(m.Config.AIDJPersona)
+			}
 			persona := m.ensureDJ().Persona()
 			_ = util.SaveConfig(m.Config)
 			m.DJModalStatus = fmt.Sprintf("✓ DJ Persona: %s", persona.Name)
@@ -3354,6 +3363,9 @@ func (m Model) handleDJModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if idx >= 0 && idx < len(models) {
 				spec := models[idx]
 				m.Config.AIDJVoiceModel = spec.ID
+				if spec.PersonaID != "" && spec.ID != "kokoro-en-v0_19" {
+					m.Config.AIDJPersona = spec.PersonaID
+				}
 				m.ensureDJ()
 				m.refreshDJInstalledVoices()
 				_ = util.SaveConfig(m.Config)
