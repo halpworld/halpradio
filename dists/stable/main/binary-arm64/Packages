@@ -34,3 +34,21 @@ MD5sum: 15426960821a9a66e397437e9df08503
 SHA1: 798cc23ee056d8e066420f57494ba8f66190d3e1
 SHA256: 55ee54bb834b3cffe88c674bbea3f6294e1e34e607678e4ff8147d9c9ce36120
 
+Package: halpradio
+Version: 0.8.1
+Section: sound
+Priority: optional
+Architecture: arm64
+Maintainer: halpworld <https://github.com/halpworld>
+Installed-Size: 14882
+Depends: ca-certificates
+Recommends: mpv
+Suggests: vlc
+Homepage: https://github.com/halpworld/halpradio
+Description: LazyVim-inspired Terminal Internet Radio Streamer
+Filename: pool/main/halpradio_0.8.1_linux_arm64.deb
+Size: 5492122
+MD5sum: 59745ba566e3aae5f3ed29adef12398c
+SHA1: 7ec716cbaabd634b4839acb1029414117d0a830f
+SHA256: e31947380a97822760f343e20714ed16defda23ece02b976b758d05316edc10c
+

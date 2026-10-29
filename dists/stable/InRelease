@@ -9,35 +9,35 @@ Version: 1.0
 Architectures: amd64 arm64
 Components: main
 Description: halpradio Official APT Repository
-Date: Thu, 29 Oct 2026 10:30:55 UTC
+Date: Thu, 29 Oct 2026 11:51:07 UTC
 MD5Sum:
- 14a7565fe46c88c1d36aca1e408d037e     1116 main/binary-amd64/Packages
- ab0382038266ebd774309b57a3257b17      523 main/binary-amd64/Packages.gz
- 91a6edf7db939b23ed610df0022e83f9     1116 main/binary-arm64/Packages
- f12e25cca2520383376adc45468224f8      520 main/binary-arm64/Packages.gz
+ 39e911c8691e2f21b84a35f1e564d808     1674 main/binary-amd64/Packages
+ 62737bd1d91e9cd9eb62a62f8c25f7df      632 main/binary-amd64/Packages.gz
+ 9947e9ef17c0f0e7a284f8d727611e96     1674 main/binary-arm64/Packages
+ 9c4e76b2d4bde8f073a8d00ca7444c02      632 main/binary-arm64/Packages.gz
 SHA1:
- bfefffa1ff8167caae102cb0e330bd9eb5c4fb6e     1116 main/binary-amd64/Packages
- 68d9e1719d690f687eb1fd139948afdc82937aa2      523 main/binary-amd64/Packages.gz
- a2ce6cec65c3fc437c9d7981d66b8e32aa55017f     1116 main/binary-arm64/Packages
- cb1bc81f1620a564a6d054158e0f0c2f6ec822ed      520 main/binary-arm64/Packages.gz
+ 012f2584e63e4599f1dd69b5962650313942fa42     1674 main/binary-amd64/Packages
+ bcb29809b5b23627c2613ff75fbc43d88a5b9e6a      632 main/binary-amd64/Packages.gz
+ 02a8f65bd8a18a37b5d49db8af52806c6260bf9c     1674 main/binary-arm64/Packages
+ 15f0d8ffecd486b4040189d0c59c2f50666f573c      632 main/binary-arm64/Packages.gz
 SHA256:
- 79f49bf28b4aa131eb98d9d161ddc4d811eb4c9d8c3d7db9c284f101634d4e4d     1116 main/binary-amd64/Packages
- a287af34125a27e26564755fc75b62787b52003fd300fa7281b545a3f76d17fe      523 main/binary-amd64/Packages.gz
- d5e8a7353a8f514dbffb0543a19b7818b7634414a736fee7f0618d915aeaa8b1     1116 main/binary-arm64/Packages
- 2581bfca3fc39754892d87b51f80f3fe464a092f63fedd4ed09fb86816a5c2ee      520 main/binary-arm64/Packages.gz
+ 936e2ca2bf1c4b154c914d2c6779bcb2d903e9af8961f05e01090c6cd7af6182     1674 main/binary-amd64/Packages
+ d8f53f077ac2e18d5548a309eebb09f41c2a7d0892bd6ed30c97cf33336562e1      632 main/binary-amd64/Packages.gz
+ 824479a3c08dcdc1e9c2556dea086c65e86e130a7849e5790d4bc5d638a4d84e     1674 main/binary-arm64/Packages
+ 9f41ab66e12a09e360884bec97fb7d096065af76b47c16658f4c5df6591f8df0      632 main/binary-arm64/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iQIzBAEBCgAdFiEEyk3Xfu73RuhxU4nNF0xNTDiM/voFAmrjIF8ACgkQF0xNTDiM
-/vraYg//c0HEGnxJ2af1w6SRdJLCheCpYxA05PSaWKTKlgCmMTpvoQfPGTE2+PKu
-GIUf9lRQavKLPPt8Y0QKnaqSNKMnddqwnc1el5xQ6iU5JjfXBeO4FQWKB/bDHO2T
-Q8BA/tNeiljnnA8OJUGEQvQBjTAJl9UOwl0iht8LjoTrwpmvdi2Pc8QI5A2ndaZy
-Cn4jSn5D050yz+1eFmmhduQ+sUxDMyXIf24D0NHg89ZY2kb6nFyVKDu4/CaMY98N
-LtxCOwFvtRNCkWFOICyPSpbwJPxyT/l/l0/aQYS28Is1UReaIc4cY78OpAmBiftF
-M9TNPYiVinIAACXGf/N0EUqlYQw/sCY8stF/xvuZDm4xmD9UWKSj0NFCeI5gBHcJ
-S9JfSMgJouoiz4k7jFKtSy5h6lz5kJvxVXeOkCQYepUdCaMaffYrfApO25J+E1f0
-vejaKQ8xgVCai4gtrF4RMOgukaiiRqO3SVvEX0zaH4AsKKFh/ZnaX5EPS9i6RKtr
-9nQ2z2WfD/9c897dTZqMAvV4ncj/q4nU+4I7aW1IU3STwB6pPIEmgUpyWeK53ZP3
-kbBOlxjpwP8Vq7GyJ90z8uvtBM78cclDK+3SgO7vU82RMmieIBnyxbv7uAjvemY5
-HfrNbD9UNtn3s+raRl/8tE/i7rDXi/zDFAtq228h7Q+ZHY1c44M=
-=OwKM
+iQIzBAEBCgAdFiEEyk3Xfu73RuhxU4nNF0xNTDiM/voFAmrjMysACgkQF0xNTDiM
+/vryTA//ZFjX8xb4k3H9sW+3SEYe6VTMQy/Sxegm5Nqc85iRf9T9jw5mTUzP6Y7I
+xpjhig6Y04yDI/S12xQyhEpp/KYDw7IJB+gEqf3/JRosDJT5scK9HBmbbb5eTG2M
+pjtoT0Wqevs7ytsRGOWC2/9qiVL82T5PB4H3yMyfmB8ZjUDlLKZLglxfe8UwHNmE
+SVgkg1YF7mFK16u2pQdj8EXAokZYtnvegYKu3v+o4dZthkawEUG82Tc37NVRYAbI
+07iVupVDmt2lmdPBzUN0U1DxvFne+9I1QNELz3DzRzhCaJgw7N5NAcVSa8XpaGOy
+C3C0zGz4qOStvzXSzPdyrsN6xFjaIgRNGlwAWfe6f55KT1kD5wkE9gizhqXfDxqv
+olTt44IJYVjp+Fj/awyr8h+6F5J+Eqpe9xfHyqSg6ITb5TDn5rxQjIutzP8Z2sY2
+d1hmqYD4YtBrHTrrNc1X4QGJB85oBfBoEMWIEk97VxKX1BHriGIxbVTRawv/A9MN
+3YGcKpNlLY+QvLQel95xEmk1qQmTadgmyNje5d/bSwfnW+7n7cj5JgdeZvRb92v9
+cvPFAXzHISPjtZAN3+wkzsUkSlTKt2Dp4tsKajbJQuuFIZnek69iwZ8uzKpz7NQe
+v7jNP0YSzU2s2cPkAPBc+3lSuQyA9KI81Y6HqKV9dXg/wtZUbRA=
+=pATa
 -----END PGP SIGNATURE-----
