@@ -75,6 +75,14 @@ var CountryCentroids = map[string]GeoPoint{
 	"UA": {Lat: 50.4501, Lon: 30.5234},   // Kyiv / Ukraine
 	"RO": {Lat: 44.4268, Lon: 26.1025},   // Bucharest / Romania
 	"HU": {Lat: 47.4979, Lon: 19.0402},   // Budapest / Hungary
+	"TW": {Lat: 25.0330, Lon: 121.5654},  // Taipei / Taiwan
+	"HK": {Lat: 22.3193, Lon: 114.1694},  // Hong Kong
+	"RU": {Lat: 55.7558, Lon: 37.6173},   // Moscow / Russia
+	"GH": {Lat: 5.6037, Lon: -0.1870},    // Accra / Ghana
+	"MA": {Lat: 33.5731, Lon: -7.5898},   // Casablanca / Morocco
+	"AE": {Lat: 25.2048, Lon: 55.2708},   // Dubai / UAE
+	"SA": {Lat: 24.7136, Lon: 46.6753},   // Riyadh / Saudi Arabia
+	"LB": {Lat: 33.8938, Lon: 35.5018},   // Beirut / Lebanon
 }
 
 // MajorCityCoordinates provides precise coordinates for world broadcast metropolitan hubs.
@@ -160,6 +168,42 @@ var MajorCityCoordinates = map[string]GeoPoint{
 	"johannesburg":   {Lat: -26.2041, Lon: 28.0473},
 	"cape town":      {Lat: -33.9249, Lon: 18.4241},
 	"cairo":          {Lat: 30.0444, Lon: 31.2357},
+	"durban":         {Lat: -29.8587, Lon: 31.0218},
+	"pretoria":       {Lat: -25.7479, Lon: 28.2293},
+	"lagos":          {Lat: 6.5244, Lon: 3.3792},
+	"nairobi":        {Lat: -1.2921, Lon: 36.8219},
+	"accra":          {Lat: 5.6037, Lon: -0.1870},
+	"casablanca":     {Lat: 33.5731, Lon: -7.5898},
+
+	// Middle East
+	"dubai":     {Lat: 25.2048, Lon: 55.2708},
+	"abu dhabi": {Lat: 24.4539, Lon: 54.3773},
+	"sharjah":   {Lat: 25.3463, Lon: 55.4209},
+	"riyadh":    {Lat: 24.7136, Lon: 46.6753},
+	"makkah":    {Lat: 21.3891, Lon: 39.8579},
+	"tel aviv":  {Lat: 32.0853, Lon: 34.7818},
+	"jerusalem": {Lat: 31.7683, Lon: 35.2137},
+	"nazareth":  {Lat: 32.6996, Lon: 35.3035},
+	"istanbul":  {Lat: 41.0082, Lon: 28.9784},
+	"ankara":    {Lat: 39.9334, Lon: 32.8597},
+	"beirut":    {Lat: 33.8938, Lon: 35.5018},
+
+	// Eastern Europe, Nordics & Germany
+	"kyiv":           {Lat: 50.4501, Lon: 30.5234},
+	"moscow":         {Lat: 55.7558, Lon: 37.6173},
+	"st. petersburg": {Lat: 59.9311, Lon: 30.3609},
+	"reykjavík":      {Lat: 64.1466, Lon: -21.9426},
+	"lillehammer":    {Lat: 61.1153, Lon: 10.4662},
+	"köln":           {Lat: 50.9375, Lon: 6.9603},
+	"münchen":        {Lat: 48.1351, Lon: 11.5820},
+	"mannheim":       {Lat: 49.4875, Lon: 8.4660},
+	"baden-baden":    {Lat: 48.7606, Lon: 8.2398},
+
+	// East & Southeast Asia
+	"singapore":     {Lat: 1.3521, Lon: 103.8198},
+	"taoyuan":       {Lat: 24.9936, Lon: 121.3010},
+	"lantau island": {Lat: 22.2662, Lon: 113.9417},
+	"kahoku":        {Lat: 36.7197, Lon: 136.7067},
 }
 
 // GeocodeStation resolves geographic latitude/longitude and normalized city name for a Station.

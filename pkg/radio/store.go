@@ -399,6 +399,8 @@ func FilterWithLocation(stations []Station, query string, genre string, activity
 			matchGenre := strings.Contains(strings.ToLower(st.Genre), q)
 			matchCountryCode := strings.Contains(strings.ToLower(st.Country), q)
 			matchCountryName := strings.Contains(strings.ToLower(st.CountryName()), q)
+			matchCountryNative := st.MatchesCountryNativeName(q)
+			matchLanguage := strings.Contains(strings.ToLower(st.Language), q)
 			matchCity := strings.Contains(strings.ToLower(st.City), q)
 			matchState := strings.Contains(strings.ToLower(st.State), q)
 			matchBroadcast := strings.Contains(strings.ToLower(st.Broadcast), q) ||
@@ -420,7 +422,7 @@ func FilterWithLocation(stations []Station, query string, genre string, activity
 				}
 			}
 
-			if !matchName && !matchGenre && !matchCountryCode && !matchCountryName && !matchCity && !matchState && !matchActivity && !matchBroadcast {
+			if !matchName && !matchGenre && !matchCountryCode && !matchCountryName && !matchCountryNative && !matchLanguage && !matchCity && !matchState && !matchActivity && !matchBroadcast {
 				continue
 			}
 		}

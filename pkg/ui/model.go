@@ -146,6 +146,9 @@ type Model struct {
 	Countries       []radio.CountryInfo
 	SelectedCountry string
 	CountryIndex    int
+	// LocaleCountry is the listener's country from their locale; it is
+	// listed first on the Country tab.
+	LocaleCountry string
 
 	Genres        []string
 	SelectedGenre string
@@ -319,6 +322,8 @@ func NewModel(
 	tm.PomodoroCfg = pomoCfg
 	tm.SleepCfg = sleepCfg
 
+	localeCountry := radio.LocaleCountry()
+
 	m := Model{
 		Store:                      store,
 		Player:                     pm,
@@ -333,7 +338,8 @@ func NewModel(
 		Activities:                 radio.DefaultActivities,
 		SelectedActivity:           "",
 		ActivityIndex:              0,
-		Countries:                  store.GetCountries(),
+		Countries:                  radio.PrioritizeCountry(store.GetCountries(), localeCountry),
+		LocaleCountry:              localeCountry,
 		SelectedCountry:            "",
 		CountryIndex:               0,
 		Genres:                     store.GetCategories(),
@@ -465,7 +471,7 @@ func (m *Model) RefreshStations() {
 		selectedCountry = m.SelectedCountry
 	}
 
-	m.Countries = m.Store.GetCountries()
+	m.Countries = radio.PrioritizeCountry(m.Store.GetCountries(), m.LocaleCountry)
 	m.Genres = m.Store.GetCategories()
 
 	// Update Globe spatial clusters
