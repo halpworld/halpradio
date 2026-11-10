@@ -45,7 +45,13 @@ func TestHugeStringsRenderQuickly(t *testing.T) {
 	start := time.Now()
 	_ = RenderStationList([]radio.Station{{ID: "x", Name: huge, Genre: huge, URL: "http://example.com/"}}, 0, "", 100, 20, true, th)
 	lines := wrapPlain(huge, 60)
-	if d := time.Since(start); d > 3*time.Second {
+	// Linear code takes ~0.1 s (~1.6 s under -race); the quadratic version
+	// took minutes, so a generous race budget still catches a regression.
+	budget := 3 * time.Second
+	if raceEnabled {
+		budget = 20 * time.Second
+	}
+	if d := time.Since(start); d > budget {
 		t.Fatalf("rendering a 200k-rune name and wrapping it took %v", d)
 	}
 	if len(lines) != 200000*2/60+1 {

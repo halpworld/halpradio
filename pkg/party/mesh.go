@@ -299,7 +299,12 @@ func (c *TCPPeerConn) Close() error {
 	return nil
 }
 
+// writeFrame refuses a body no peer would accept (readFrame caps every frame
+// at maxDataFrame), which also keeps the length prefix and allocation in range.
 func writeFrame(w io.Writer, body []byte) error {
+	if len(body) > maxDataFrame {
+		return fmt.Errorf("frame length %d exceeds %d", len(body), maxDataFrame)
+	}
 	buf := make([]byte, 4+len(body))
 	binary.BigEndian.PutUint32(buf[:4], uint32(len(body)))
 	copy(buf[4:], body)

@@ -220,3 +220,24 @@ func waitFor(t *testing.T, d time.Duration, cond func() bool) {
 	}
 	t.Fatalf("condition not met within %v", d)
 }
+
+// writeFrame must refuse a body larger than any peer accepts before it
+// allocates, and a frame at the limit must round-trip through readFrame.
+func TestWriteFrameBounds(t *testing.T) {
+	var sink strings.Builder
+	if err := writeFrame(&sink, make([]byte, maxDataFrame+1)); err == nil {
+		t.Fatal("writeFrame accepted an oversized body")
+	}
+	if sink.Len() != 0 {
+		t.Fatalf("oversized frame wrote %d bytes", sink.Len())
+	}
+	body := make([]byte, maxDataFrame)
+	body[0], body[maxDataFrame-1] = 1, 2
+	if err := writeFrame(&sink, body); err != nil {
+		t.Fatalf("writeFrame at the limit: %v", err)
+	}
+	got, err := readFrame(strings.NewReader(sink.String()), maxDataFrame)
+	if err != nil || len(got) != maxDataFrame || got[0] != 1 || got[maxDataFrame-1] != 2 {
+		t.Fatalf("round trip failed: len=%d err=%v", len(got), err)
+	}
+}

@@ -39,6 +39,10 @@ const (
 	flashPerSecond = 2
 )
 
+// compileTimeout is the deadline NewSandbox uses. It is CompileTimeout
+// except in race-detector test builds, which compile 5-20x slower.
+var compileTimeout = CompileTimeout
+
 type hookCall struct {
 	name    string
 	payload []byte
@@ -195,7 +199,7 @@ func NewSandbox(
 	}
 
 	// Compile the guest wasm module
-	compiled, err := compileGuest(sCtx, r, wasmBytes, CompileTimeout)
+	compiled, err := compileGuest(sCtx, r, wasmBytes, compileTimeout)
 	if err != nil {
 		r.Close(context.Background())
 		cancel()
