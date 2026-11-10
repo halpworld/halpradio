@@ -25,6 +25,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/theme"
 	"github.com/halpworld/halpradio/pkg/timer"
+	"github.com/halpworld/halpradio/pkg/ui/components"
 	"github.com/halpworld/halpradio/pkg/ui/components/tuner"
 	"github.com/halpworld/halpradio/pkg/util"
 )
@@ -39,7 +40,9 @@ func describeUpdateMsg(msg tea.Msg) (label string, quiet bool) {
 	case tea.MouseMsg:
 		return "MouseMsg", true
 	case tea.KeyMsg:
-		return fmt.Sprintf("KeyMsg %q", msg.String()), false
+		// Typed text (search queries, chat, room codes, API keys) is logged
+		// as a length only (LOC-4).
+		return "KeyMsg " + debuglog.RedactKey(msg.String(), msg.Type == tea.KeyRunes, msg.Paste), false
 	case tea.WindowSizeMsg:
 		return fmt.Sprintf("WindowSizeMsg %dx%d", msg.Width, msg.Height), false
 	default:
@@ -63,6 +66,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
 		m.Height = msg.Height
+		// The permission prompt's scroll range depends on the size.
+		m.updateApprovalSeen()
 		// Artwork is rasterised to a fixed cell grid, so a resize has to
 		// re-encode it at the new dimensions.
 		m.renderArt()
@@ -158,38 +163,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(tickCmds...)
 
 	case PartyPlaybackSyncMsg:
-		sp := party.SyncPayload(msg)
-		st := m.Store.FindStationByID(sp.StationID)
-		if st == nil {
-			st = &radio.Station{
-				ID:      sp.StationID,
-				Name:    sp.StationName,
-				URL:     sp.StreamURL,
-				Genre:   sp.Genre,
-				Country: sp.Country,
-				Bitrate: sp.Bitrate,
-				Codec:   sp.Codec,
-			}
+		return m.handlePartySync(party.SyncPayload(msg))
+
+	case partySyncFlushMsg:
+		m.partyFlushPending = false
+		return m.flushPartySync()
+
+	case partySyncCheckedMsg:
+		if msg.seq != m.partySyncSeq {
+			return m, nil // a newer sync arrived meanwhile
 		}
-		if sp.Status == "playing" {
-			m.cancelDJAnnouncement()
-			_ = m.Player.Play(*st)
-			m.PlayingID = st.ID
-			m.StatusMessage = fmt.Sprintf("📻 Party sync: %s", st.Name)
-			m.SyncDesktop()
-		} else if sp.Status == "paused" {
-			m.cancelDJAnnouncement()
-			_ = m.Player.Pause()
-			m.PlayingID = ""
-			m.StatusMessage = fmt.Sprintf("⏸️ Party paused: %s", st.Name)
-			m.SyncDesktop()
-		} else if sp.Status == "stopped" {
-			m.cancelDJAnnouncement()
-			_ = m.Player.Stop()
-			m.PlayingID = ""
-			m.StatusMessage = "⏹️ Party audio stopped"
-			m.SyncDesktop()
+		if msg.err != nil {
+			m.StatusMessage = "Party sync refused: " + msg.err.Error()
+			return m, nil
 		}
+		m.playPartyStation(msg.station)
 		return m, nil
 
 	case PartyReactionMsg:
@@ -210,13 +198,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if roomName == "" {
 			roomName = "team-focus"
 		}
-		nick := msg.Nickname
-		if nick == "" {
-			nick = m.Config.PartyNickname
-		}
-		if nick == "" {
-			nick = "host"
-		}
+		nick := partyOwnNick(msg.Nickname, m.Config.PartyNickname, "host")
 		djPass := party.DJPassHostOnly
 		if msg.DJPass == "open" {
 			djPass = party.DJPassOpenDemocracy
@@ -234,7 +216,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if curr := m.Player.CurrentStation(); curr != nil {
 				_ = m.PartySession.BroadcastStationChange(curr.ID, curr.Name, curr.URL, curr.Genre, curr.Country, curr.Codec, curr.Bitrate, string(m.Player.Status()))
 			}
-			m.StatusMessage = fmt.Sprintf("✓ Created party room %s!", sess.FormattedCode())
+			m.StatusMessage = partyCreatedText(sess)
 			m.SyncDesktop()
 		} else {
 			m.StatusMessage = fmt.Sprintf("Party create error: %v", err)
@@ -245,27 +227,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.PartySession != nil {
 			_ = m.PartySession.Close()
 		}
-		code := party.NormalizeRoomCode(msg.RoomCode)
-		nick := msg.Nickname
-		if nick == "" {
-			nick = m.Config.PartyNickname
+		if _, _, err := party.ParseInvite(msg.RoomCode); err != nil {
+			m.StatusMessage = "Party join error: " + err.Error()
+			return m, nil
 		}
-		if nick == "" {
-			nick = "listener"
-		}
-		sess, err := party.NewPartySession(party.SessionConfig{
-			RoomCode: code,
+		nick := partyOwnNick(msg.Nickname, m.Config.PartyNickname, "listener")
+		sess, err := party.JoinWithInvite(msg.RoomCode, party.SessionConfig{
 			Nickname: nick,
-			IsHost:   false,
 			Port:     0,
 		})
 		if err == nil {
 			m.PartySession = sess
 			m.SetupPartyHandlers(sess)
-			if msg.Address != "" {
-				_ = sess.ConnectDirect(msg.Address)
-			}
-			m.StatusMessage = fmt.Sprintf("✓ Connected to party room %s!", sess.FormattedCode())
+			m.StatusMessage = partyJoinedText(sess)
 			m.SyncDesktop()
 		} else {
 			m.StatusMessage = fmt.Sprintf("Party join error: %v", err)
@@ -294,41 +268,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case PartyStatusFlashMsg:
-		m.StatusMessage = string(msg)
+		m.StatusMessage = m.partyFlashText(string(msg))
 		return m, nil
 
 	case PluginRegistryLoadedMsg:
 		if msg.Err != nil {
-			m.PluginStatusMsg = fmt.Sprintf("Registry error: %v", msg.Err)
+			m.PluginStatusMsg = "Registry error: " + util.SanitizeDisplay(msg.Err.Error(), 200)
 		} else {
 			m.PluginRegistryList = msg.Plugins
 			m.PluginStatusMsg = ""
 		}
 		return m, nil
 
-	case PluginInstalledMsg:
-		if msg.Err != nil {
-			m.PluginStatusMsg = fmt.Sprintf("Install error: %v", msg.Err)
+	case pluginApprovedMsg:
+		if msg.err != nil {
+			m.StatusMessage = pluginErrorText(msg.name, msg.err)
+			m.PluginStatusMsg = m.StatusMessage
 		} else {
-			m.PluginStatusMsg = fmt.Sprintf("✓ Plugin %s installed!", msg.PluginID)
-			if m.PluginMgr != nil {
-				if info, ok := m.PluginMgr.GetPlugin(msg.PluginID); ok {
-					m.ApprovalPlugin = info
-					m.ShowPermissionApproval = true
-				}
-			}
+			m.StatusMessage = fmt.Sprintf("✓ Permissions approved for %s", msg.name)
+			m.PluginStatusMsg = m.StatusMessage
 		}
 		return m, nil
 
+	case PluginInstalledMsg:
+		return m.handlePluginInstalled(msg), nil
+
 	case PluginFlashMsg:
-		m.StatusMessage = string(msg)
+		// Plugin text is labelled as such so it cannot pass as halpradio's
+		// own status (FR-A-9).
+		m.StatusMessage = m.pluginFlashLabel(string(msg)) + string(msg)
 		return m, nil
 
 	case PluginNotificationMsg:
+		label := m.pluginNotificationLabel(msg.Title)
 		if m.Config.SongNotifications && m.Desktop != nil {
-			m.Desktop.NotifySong(msg.Title, msg.Message)
+			m.Desktop.NotifySong(label+msg.Title, msg.Message)
 		}
-		m.StatusMessage = fmt.Sprintf("[%s] %s", msg.Title, msg.Message)
+		m.StatusMessage = fmt.Sprintf("%s%s: %s", label, msg.Title, msg.Message)
 		return m, nil
 
 	case ThemeRegistryLoadedMsg:
@@ -471,6 +447,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		msg.Result = sanitizeIdentified(msg.Result)
 		m.IdentifiedResult = msg.Result
 		simpleTitle := msg.Result.SimpleTitle()
 		fullDisplay := msg.Result.FullDisplay()
@@ -657,8 +634,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case CatalogUpdatedMsg:
 		if msg.Updated {
 			m.Store.ReloadBundledFromCache()
-			m.Genres = m.Store.GetCategories()
-			m.RefreshStations()
+			m.RefreshStations() // also clamps GenreIndex/CountryIndex (TTY-11)
 			m.StatusMessage = fmt.Sprintf("Station catalog updated (%d stations)", msg.StationsCount)
 		}
 		return m, nil
@@ -671,11 +647,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.IsFetchingLyrics = false
 		m.LyricsScroll = 0
 		if msg.Err != nil && !errors.Is(msg.Err, lyrics.ErrNotFound) {
-			// Providers were unreachable rather than empty-handed. Drop the
-			// track key so reopening the drawer retries instead of showing a
-			// permanent "no lyrics" verdict.
+			// Providers were unreachable rather than empty-handed. Keep the
+			// track key so syncNowPlaying does not resend the lookup on every
+			// metadata tick (NET-7); reopening the drawer retries.
 			m.LyricsSheet = nil
-			m.LyricsTrackKey = ""
+			m.LyricsLookupFailed = true
 			m.LyricsStatus = "Lyrics providers unreachable — press L again to retry"
 			return m, nil
 		}
@@ -703,7 +679,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil && !errors.Is(msg.Err, art.ErrNotFound) {
 			m.Cover = nil
 			m.ArtLines = nil
-			m.ArtTrackKey = ""
+			m.ArtLookupFailed = true // keep ArtTrackKey: no retry per tick (NET-7)
 			m.ArtStatus = "Cover art providers unreachable — press A again to retry"
 			return m, nil
 		}
@@ -713,7 +689,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ArtStatus = "No cover art found for this track"
 			return m, nil
 		}
-		m.Cover = msg.Cover
+		m.Cover = sanitizeCover(msg.Cover)
 		m.ArtStatus = ""
 		m.ArtCols, m.ArtRows = 0, 0
 		m.renderArt()
@@ -731,10 +707,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.LinerNotesStatus = "Showing offline station metadata"
 			return m, nil
 		}
-		m.LinerNotes = msg.Notes
+		m.LinerNotes = sanitizeLinerNotes(msg.Notes)
 		m.LinerNotesStatus = ""
 		if m.ShowLinerNotes {
-			m.StatusMessage = fmt.Sprintf("📖 Loaded liner notes (%s)", msg.Notes.Source)
+			m.StatusMessage = fmt.Sprintf("📖 Loaded liner notes (%s)", m.LinerNotes.Source)
 		}
 		return m, nil
 
@@ -749,17 +725,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.DJBannerActive = true
 		m.DJBannerFading = false
 		if msg.Persona != "" {
-			m.DJBannerPersona = msg.Persona
+			m.DJBannerPersona = util.SanitizeDisplay(msg.Persona, 64)
 		} else {
 			m.DJBannerPersona = dj.Persona().Name
 		}
 		if msg.Engine != "" {
-			m.DJBannerEngine = msg.Engine
+			m.DJBannerEngine = util.SanitizeDisplay(msg.Engine, 64)
 		} else {
 			m.DJBannerEngine = dj.EngineLabel()
 		}
 		if strings.TrimSpace(msg.Script) != "" {
-			m.DJBannerScript = msg.Script
+			m.DJBannerScript = sanitizeDJScript(msg.Script)
 		}
 		m.DJBannerUntil = time.Now().Add(30 * time.Second)
 		return m, m.speakDJScriptCmd(m.DJAnnounceSeq, msg.TrackKey, m.DJBannerScript)
@@ -809,21 +785,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		if m.ShowWhichKey {
+		// One priority order for drawing and for keys (see activeModal).
+		switch m.activeModal() {
+		case modalApproval:
+			return m.handlePermissionApprovalKey(msg)
+
+		case modalWhichKey:
 			if key.Matches(msg, m.KeyMap.Clear) || key.Matches(msg, m.KeyMap.Help) || key.Matches(msg, m.KeyMap.Quit) {
 				m.ShowWhichKey = false
 			}
 			return m, nil
-		}
 
-		if m.ShowPRExport {
+		case modalPRExport:
 			if key.Matches(msg, m.KeyMap.Clear) || key.Matches(msg, m.KeyMap.PlayPause) || key.Matches(msg, m.KeyMap.Quit) {
 				m.ShowPRExport = false
 			}
 			return m, nil
-		}
 
-		if m.ShowArtModal {
+		case modalArt:
 			switch {
 			case key.Matches(msg, m.KeyMap.Quit):
 				m.cancelDJAnnouncement()
@@ -842,38 +821,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.renderArt()
 			}
 			return m, nil
-		}
 
-		if m.ShowThemePicker {
+		case modalThemePicker:
 			return m.handleThemePickerKey(msg)
-		}
-
-		if m.ShowAddModal {
+		case modalAdd:
 			return m.handleAddModalKey(msg)
-		}
-
-		if m.ShowTimerModal {
+		case modalTimer:
 			return m.handleTimerModalKey(msg)
-		}
-
-		if m.ShowPermissionApproval {
-			return m.handlePermissionApprovalKey(msg)
-		}
-
-		if m.ShowPluginModal {
-			return m.handlePluginModalKey(msg)
-		}
-
-		if m.ShowPartyModal {
-			return m.handlePartyModalKey(msg)
-		}
-
-		if m.ShowDJModal {
-			return m.handleDJModalKey(msg)
-		}
-
-		if m.ShowEQModal {
+		case modalEQ:
 			return m.handleEQModalKey(msg)
+		case modalParty:
+			return m.handlePartyModalKey(msg)
+		case modalPlugin:
+			return m.handlePluginModalKey(msg)
+		case modalDJ:
+			return m.handleDJModalKey(msg)
 		}
 
 		if m.IsChatting {
@@ -956,9 +918,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.openEQModal()
 
 		case key.Matches(msg, m.KeyMap.Plugins):
-			m.ShowPluginModal = true
-			m.PluginCursor = 0
-			m.PluginStatusMsg = ""
+			m.openPluginModal()
 			return m, m.fetchRegistryCmd()
 
 		case msg.String() == "tab":
@@ -1622,7 +1582,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				st := m.Stations[m.SelectedIndex]
 				if m.PlayingID == st.ID && m.Player.Status() == player.StatusPlaying {
 					if m.PartySession != nil && m.PartySession.IsActive() && !m.PartySession.CanChangeStation() {
-						m.StatusMessage = fmt.Sprintf("🚫 DJ Pass is Host Only (@%s is DJ)", m.PartySession.HostNickname())
+						m.StatusMessage = fmt.Sprintf("🚫 DJ Pass is Host Only (%s is DJ)", components.PartyHostLabel(m.PartySession.HostNickname(), m.PartySession.HostFingerprint()))
 						return m, nil
 					}
 					m.cancelDJAnnouncement()
@@ -1635,7 +1595,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				} else {
 					if m.PartySession != nil && m.PartySession.IsActive() && !m.PartySession.CanChangeStation() {
-						m.StatusMessage = fmt.Sprintf("🚫 DJ Pass is Host Only (@%s is DJ)", m.PartySession.HostNickname())
+						m.StatusMessage = fmt.Sprintf("🚫 DJ Pass is Host Only (%s is DJ)", components.PartyHostLabel(m.PartySession.HostNickname(), m.PartySession.HostFingerprint()))
 						return m, nil
 					}
 					m.cancelDJAnnouncement()
@@ -1696,6 +1656,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+			// The text comes from stream metadata and ends up pasted into
+			// shells and chats: drop control characters first (TTY-10).
+			trackToCopy = util.SanitizeDisplay(trackToCopy, 500)
 			if trackToCopy != "" {
 				_ = util.CopyToClipboard(trackToCopy)
 				m.StatusMessage = fmt.Sprintf("📋 Copied '%s' to clipboard!", trackToCopy)
@@ -1873,7 +1836,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if len(m.Stations) > 0 && m.SelectedIndex < len(m.Stations) {
 				st := m.Stations[m.SelectedIndex]
 				m.ExportStation = st
-				snippet := st.ToYAMLSnippet()
+				snippet := util.SanitizeMultiline(st.ToYAMLSnippet(), 2048, 200)
 				_ = util.CopyToClipboard(snippet)
 				m.ShowPRExport = true
 			}
@@ -2743,10 +2706,15 @@ func (m Model) handleAddModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			Codec:     "MP3",
 			Source:    "local",
 		}
-		_ = m.Store.AddOrUpdateLocalStation(st)
+		if err := m.Store.AddOrUpdateLocalStation(st); err != nil {
+			// The store validates the URL and fields again; keep the form
+			// open and say why instead of claiming the station was saved.
+			m.AddErrMsg = util.SanitizeDisplay("Could not save station: "+err.Error(), 200)
+			return m, nil
+		}
 		m.ShowAddModal = false
 		m.RefreshStations()
-		m.StatusMessage = fmt.Sprintf("Saved custom station '%s'", st.Name)
+		m.StatusMessage = fmt.Sprintf("Saved custom station '%s'", util.SanitizeDisplay(st.Name, 100))
 	case "backspace":
 		val := m.AddInputs[m.AddFocusIdx]
 		if len(val) > 0 {
@@ -2767,26 +2735,31 @@ func (m Model) searchRadioBrowserCmd(query string) tea.Cmd {
 	}
 }
 
-func (m Model) handlePermissionApprovalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
-	switch msg.String() {
-	case "y", "enter":
-		if m.PluginMgr != nil && m.ApprovalPlugin.Manifest.ID != "" {
-			_ = m.PluginMgr.ApprovePermissions(m.ApprovalPlugin.Manifest.ID, true)
-			_ = m.PluginMgr.EnablePlugin(m.ApprovalPlugin.Manifest.ID)
-			m.StatusMessage = fmt.Sprintf("✓ Permissions approved for %s", m.ApprovalPlugin.Manifest.Name)
-		}
-		m.ShowPermissionApproval = false
-	case "n", "esc", "q":
-		if m.PluginMgr != nil && m.ApprovalPlugin.Manifest.ID != "" {
-			_ = m.PluginMgr.ApprovePermissions(m.ApprovalPlugin.Manifest.ID, false)
-			_ = m.PluginMgr.DisablePlugin(m.ApprovalPlugin.Manifest.ID)
-			m.StatusMessage = fmt.Sprintf("Plugin %s kept disabled", m.ApprovalPlugin.Manifest.Name)
-		}
-		m.ShowPermissionApproval = false
-	}
-	return m, nil
+// pluginApprovedMsg reports the result of approving (and enabling) the
+// plugin shown in the permission modal.
+type pluginApprovedMsg struct {
+	id   string
+	name string
+	err  error
 }
 
+// pluginErrorText turns a plugin manager error into a status line.
+func pluginErrorText(name string, err error) string {
+	switch {
+	case errors.Is(err, plugin.ErrApprovalStale):
+		return fmt.Sprintf("Not approved: %s changed after you reviewed it. Open its permissions (p) and review again.", name)
+	case errors.Is(err, plugin.ErrNotApproved):
+		return fmt.Sprintf("%s needs permission approval first.", name)
+	case errors.Is(err, plugin.ErrPluginsDisabled):
+		return "Plugins are disabled (plugins_enabled: false in config.yaml)."
+	}
+	return fmt.Sprintf("Plugin %s error: %s", name, util.SanitizeDisplay(err.Error(), 200))
+}
+
+// handlePluginModalKey handles the plugin manager. On the installed tab the
+// keys act on m.PluginSelectedID, never on a row index, so a list that
+// changes under the cursor cannot redirect Enter, p or x to another plugin
+// (FR-A-4).
 func (m Model) handlePluginModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	var installed []plugin.PluginInfo
 	if m.PluginMgr != nil {
@@ -2809,22 +2782,29 @@ func (m Model) handlePluginModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		m.PluginCursor = 0
 		m.PluginStatusMsg = ""
+		if m.PluginModalTab == 0 {
+			m.selectPluginRow(installed, 0)
+		}
 		if m.PluginModalTab == 1 && len(m.PluginRegistryList) == 0 {
 			return m, m.fetchRegistryCmd()
 		}
 		return m, nil
 
 	case "j", "down":
-		maxLen := len(installed)
-		if m.PluginModalTab == 1 {
-			maxLen = len(m.PluginRegistryList)
+		if m.PluginModalTab == 0 {
+			m.selectPluginRow(installed, m.pluginCursorFor(installed)+1)
+			return m, nil
 		}
-		if maxLen > 0 && m.PluginCursor < maxLen-1 {
+		if n := len(m.PluginRegistryList); n > 0 && m.PluginCursor < n-1 {
 			m.PluginCursor++
 		}
 		return m, nil
 
 	case "k", "up":
+		if m.PluginModalTab == 0 {
+			m.selectPluginRow(installed, m.pluginCursorFor(installed)-1)
+			return m, nil
+		}
 		if m.PluginCursor > 0 {
 			m.PluginCursor--
 		}
@@ -2833,26 +2813,35 @@ func (m Model) handlePluginModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "space", "enter":
 		if m.PluginModalTab == 0 {
 			// Installed plugins tab: toggle enable/disable or prompt perms
-			if len(installed) > 0 && m.PluginCursor < len(installed) {
-				p := installed[m.PluginCursor]
-				if !p.State.PermissionsApproved {
-					m.ApprovalPlugin = p
-					m.ShowPermissionApproval = true
-					return m, nil
+			p, ok := m.selectedPlugin(installed)
+			if !ok {
+				return m, nil
+			}
+			if !p.State.PermissionsApproved {
+				m.openApproval(p)
+				return m, nil
+			}
+			name := util.SanitizeDisplay(p.Manifest.Name, 60)
+			if p.State.Enabled {
+				_ = m.PluginMgr.DisablePlugin(p.Manifest.ID)
+				m.PluginStatusMsg = fmt.Sprintf("Disabled %s", name)
+			} else if err := m.PluginMgr.EnablePlugin(p.Manifest.ID); err != nil {
+				m.PluginStatusMsg = pluginErrorText(name, err)
+				if errors.Is(err, plugin.ErrNotApproved) {
+					// The binary or permissions changed since approval:
+					// show the current ones for review.
+					if fresh, ok := m.PluginMgr.GetPlugin(p.Manifest.ID); ok {
+						m.openApproval(fresh)
+					}
 				}
-				if p.State.Enabled {
-					_ = m.PluginMgr.DisablePlugin(p.Manifest.ID)
-					m.PluginStatusMsg = fmt.Sprintf("Disabled %s", p.Manifest.Name)
-				} else {
-					_ = m.PluginMgr.EnablePlugin(p.Manifest.ID)
-					m.PluginStatusMsg = fmt.Sprintf("Enabled %s", p.Manifest.Name)
-				}
+			} else {
+				m.PluginStatusMsg = fmt.Sprintf("Enabled %s", name)
 			}
 		} else {
 			// Registry tab: install plugin
 			if len(m.PluginRegistryList) > 0 && m.PluginCursor < len(m.PluginRegistryList) {
 				reg := m.PluginRegistryList[m.PluginCursor]
-				m.PluginStatusMsg = fmt.Sprintf("⏳ Downloading and installing %s...", reg.Name)
+				m.PluginStatusMsg = fmt.Sprintf("⏳ Downloading and installing %s...", util.SanitizeDisplay(reg.Name, 60))
 				return m, m.installPluginCmd(reg)
 			}
 		}
@@ -2861,24 +2850,26 @@ func (m Model) handlePluginModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "i":
 		if m.PluginModalTab == 1 && len(m.PluginRegistryList) > 0 && m.PluginCursor < len(m.PluginRegistryList) {
 			reg := m.PluginRegistryList[m.PluginCursor]
-			m.PluginStatusMsg = fmt.Sprintf("⏳ Installing %s...", reg.Name)
+			m.PluginStatusMsg = fmt.Sprintf("⏳ Installing %s...", util.SanitizeDisplay(reg.Name, 60))
 			return m, m.installPluginCmd(reg)
 		}
 
 	case "p":
-		if m.PluginModalTab == 0 && len(installed) > 0 && m.PluginCursor < len(installed) {
-			p := installed[m.PluginCursor]
-			m.ApprovalPlugin = p
-			m.ShowPermissionApproval = true
+		if m.PluginModalTab == 0 {
+			if p, ok := m.selectedPlugin(installed); ok {
+				m.openApproval(p)
+			}
 		}
 
 	case "d", "x":
-		if m.PluginModalTab == 0 && len(installed) > 0 && m.PluginCursor < len(installed) {
-			p := installed[m.PluginCursor]
-			_ = m.PluginMgr.UninstallPlugin(p.Manifest.ID)
-			m.PluginStatusMsg = fmt.Sprintf("Uninstalled %s", p.Manifest.Name)
-			if m.PluginCursor > 0 && m.PluginCursor >= len(m.PluginMgr.GetPlugins()) {
-				m.PluginCursor--
+		if m.PluginModalTab == 0 {
+			if p, ok := m.selectedPlugin(installed); ok {
+				_ = m.PluginMgr.UninstallPlugin(p.Manifest.ID)
+				m.PluginStatusMsg = fmt.Sprintf("Uninstalled %s", util.SanitizeDisplay(p.Manifest.Name, 60))
+				if m.PendingApprovalID == p.Manifest.ID {
+					m.PendingApprovalID = ""
+				}
+				m.selectPluginRow(m.PluginMgr.GetPlugins(), m.PluginCursor)
 			}
 		}
 
@@ -2887,15 +2878,18 @@ func (m Model) handlePluginModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.PluginStatusMsg = "⏳ Checking for plugin updates..."
 			return m, m.fetchRegistryCmd()
 		}
-		if m.PluginModalTab == 0 && len(installed) > 0 && m.PluginCursor < len(installed) {
-			p := installed[m.PluginCursor]
+		if m.PluginModalTab == 0 {
+			p, ok := m.selectedPlugin(installed)
+			if !ok {
+				return m, nil
+			}
 			for _, reg := range m.PluginRegistryList {
 				if reg.ID == p.Manifest.ID {
-					m.PluginStatusMsg = fmt.Sprintf("⏳ Updating %s...", reg.Name)
+					m.PluginStatusMsg = fmt.Sprintf("⏳ Updating %s...", util.SanitizeDisplay(reg.Name, 60))
 					return m, m.installPluginCmd(reg)
 				}
 			}
-			m.PluginStatusMsg = fmt.Sprintf("Plugin %s not found in registry", p.Manifest.Name)
+			m.PluginStatusMsg = fmt.Sprintf("Plugin %s not found in registry", util.SanitizeDisplay(p.Manifest.Name, 60))
 		}
 	}
 
@@ -3050,11 +3044,10 @@ func (m *Model) identifyTrackCmd() tea.Cmd {
 	stName := st.Name
 	stURL := st.URL
 	cand := m.Player.CurrentTrack()
-	client := m.FingerprintClient
-	if client == nil {
-		client = fingerprint.NewClient(m.Config.AcoustidAPIKey)
-		m.FingerprintClient = client
+	if m.FingerprintClient == nil {
+		m.FingerprintClient = fingerprint.NewClient(m.Config.AcoustidAPIKey)
 	}
+	client := identifyClientFor(m.FingerprintClient, *st)
 
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -3101,8 +3094,8 @@ func (m Model) handlePartyModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		case "esc", "enter", "q":
 			m.ShowPartyModal = false
 		case "c", "y":
-			_ = util.CopyToClipboard(m.PartySession.FormattedCode())
-			m.PartyStatusMsg = "✓ Copied room code to clipboard!"
+			_ = util.CopyToClipboard(m.PartySession.Invite())
+			m.PartyStatusMsg = "✓ Copied the invite to the clipboard. " + components.PartyInviteNote
 		case "d":
 			if m.PartySession.IsHost() {
 				newMode, err := m.PartySession.ToggleDJPass()
@@ -3148,10 +3141,11 @@ func (m Model) handlePartyModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			if len(m.PartyInputs) > 0 && strings.TrimSpace(m.PartyInputs[0]) != "" {
 				roomName = strings.TrimSpace(m.PartyInputs[0])
 			}
-			nick := m.Config.PartyNickname
-			if len(m.PartyInputs) > 1 && strings.TrimSpace(m.PartyInputs[1]) != "" {
-				nick = strings.TrimSpace(m.PartyInputs[1])
+			nick := ""
+			if len(m.PartyInputs) > 1 {
+				nick = m.PartyInputs[1]
 			}
+			nick = partyOwnNick(nick, m.Config.PartyNickname, "host")
 			djPass := party.DJPassHostOnly
 			if len(m.PartyInputs) > 2 && m.PartyInputs[2] == "open" {
 				djPass = party.DJPassOpenDemocracy
@@ -3175,7 +3169,7 @@ func (m Model) handlePartyModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				_ = m.PartySession.BroadcastStationChange(curr.ID, curr.Name, curr.URL, curr.Genre, curr.Country, curr.Codec, curr.Bitrate, string(m.Player.Status()))
 			}
 			m.ShowPartyModal = false
-			m.StatusMessage = fmt.Sprintf("✓ Created party room %s!", sess.FormattedCode())
+			m.StatusMessage = partyCreatedText(sess)
 
 		case "backspace":
 			if m.PartyInputFocus < 2 && len(m.PartyInputs[m.PartyInputFocus]) > 0 {
@@ -3201,20 +3195,19 @@ func (m Model) handlePartyModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		case "enter":
 			code := ""
 			if len(m.PartyInputs) > 0 {
-				code = party.NormalizeRoomCode(m.PartyInputs[0])
+				code = m.PartyInputs[0]
 			}
-			if len(code) != 6 {
-				m.PartyStatusMsg = "Room code must be 6 characters (e.g. 8X2K9P)"
+			if _, _, err := party.ParseInvite(code); err != nil {
+				m.PartyStatusMsg = err.Error()
 				return m, nil
 			}
-			nick := m.Config.PartyNickname
-			if len(m.PartyInputs) > 1 && strings.TrimSpace(m.PartyInputs[1]) != "" {
-				nick = strings.TrimSpace(m.PartyInputs[1])
+			nick := ""
+			if len(m.PartyInputs) > 1 {
+				nick = m.PartyInputs[1]
 			}
-			sess, err := party.NewPartySession(party.SessionConfig{
-				RoomCode: code,
+			nick = partyOwnNick(nick, m.Config.PartyNickname, "listener")
+			sess, err := party.JoinWithInvite(code, party.SessionConfig{
 				Nickname: nick,
-				IsHost:   false,
 				Port:     0,
 			})
 			if err != nil {
@@ -3222,13 +3215,18 @@ func (m Model) handlePartyModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 
-			m.PartySession = sess
 			m.SetupPartyHandlers(sess)
 			if len(m.PartyInputs) > 2 && strings.TrimSpace(m.PartyInputs[2]) != "" {
-				_ = sess.ConnectDirect(strings.TrimSpace(m.PartyInputs[2]))
+				if err := sess.ConnectDirect(strings.TrimSpace(m.PartyInputs[2])); err != nil {
+					// Keep the form open so the address can be corrected.
+					_ = sess.Close()
+					m.PartyStatusMsg = "Could not connect: " + util.SanitizeDisplay(err.Error(), 200)
+					return m, nil
+				}
 			}
+			m.PartySession = sess
 			m.ShowPartyModal = false
-			m.StatusMessage = fmt.Sprintf("✓ Connected to party room %s!", sess.FormattedCode())
+			m.StatusMessage = partyJoinedText(sess)
 
 		case "backspace":
 			if len(m.PartyInputs[m.PartyInputFocus]) > 0 {
@@ -3236,8 +3234,16 @@ func (m Model) handlePartyModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				m.PartyInputs[m.PartyInputFocus] = string(runes[:len(runes)-1])
 			}
 		default:
-			if len(msg.String()) == 1 {
-				m.PartyInputs[m.PartyInputFocus] += msg.String()
+			// Typed or pasted text; an invite is 39 characters.
+			add := ""
+			switch msg.Type {
+			case tea.KeyRunes:
+				add = string(msg.Runes)
+			case tea.KeySpace:
+				add = " "
+			}
+			if add != "" && len([]rune(m.PartyInputs[m.PartyInputFocus]+add)) <= partyJoinInputMax {
+				m.PartyInputs[m.PartyInputFocus] += add
 			}
 		}
 		return m, nil
@@ -3247,25 +3253,19 @@ func (m Model) handlePartyModalKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		case "esc":
 			m.ShowPartyModal = false
 		case "1":
-			m.PartyModalScreen = 1
-			m.PartyInputFocus = 0
-			m.PartyStatusMsg = ""
+			m.enterPartyFormScreen(1)
 		case "2":
-			m.PartyModalScreen = 2
-			m.PartyInputFocus = 0
-			m.PartyStatusMsg = ""
+			m.enterPartyFormScreen(2)
 		case "j", "down":
 			m.PartyModalCursor = (m.PartyModalCursor + 1) % 2
 		case "k", "up":
 			m.PartyModalCursor = (m.PartyModalCursor + 1) % 2
 		case "enter":
 			if m.PartyModalCursor == 0 {
-				m.PartyModalScreen = 1
+				m.enterPartyFormScreen(1)
 			} else {
-				m.PartyModalScreen = 2
+				m.enterPartyFormScreen(2)
 			}
-			m.PartyInputFocus = 0
-			m.PartyStatusMsg = ""
 		}
 		return m, nil
 	}
@@ -3328,7 +3328,7 @@ func (m Model) handleDJModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			modelID = "en_US-lessac-medium"
 		}
 		m.IsDownloadingVoice = true
-		m.DJModalStatus = fmt.Sprintf("⬇ Downloading %s from HuggingFace…", modelID)
+		m.DJModalStatus = fmt.Sprintf("⬇ Downloading %s (sherpa-onnx runtime + voice from github.com/k2-fsa/sherpa-onnx, SHA-256 verified)…", modelID)
 		m.StatusMessage = m.DJModalStatus
 		return m, m.downloadVoiceModelCmd(modelID)
 
@@ -3343,6 +3343,9 @@ func (m Model) handleDJModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 				_, _, m.DJAnnouncedTrackKey = m.buildDJTrackContext()
 				m.DJModalStatus = "✓ Auto AI Radio DJ enabled"
+				if w := m.djOllamaWarning(); w != "" {
+					m.DJModalStatus = w
+				}
 			} else {
 				m.DJModalStatus = "Auto AI Radio DJ set to on-demand ([d])"
 			}
@@ -3384,4 +3387,52 @@ func (m Model) handleDJModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+// identifyClientFor returns a per-request copy of base whose private-address
+// policy follows the station's provenance, captured where its URL is read:
+// stations the user added or typed may be sampled on the LAN, directory,
+// bundled and party stations stay strict. The copy shares the cache.
+func identifyClientFor(base *fingerprint.Client, st radio.Station) *fingerprint.Client {
+	c := *base
+	allowed := radio.UserSource(st.Source)
+	url := st.URL
+	c.AllowPrivate = func(streamURL string) bool {
+		return allowed && streamURL == url
+	}
+	return &c
+}
+
+// partyJoinInputMax caps a party form field; it holds a full invite.
+const partyJoinInputMax = 64
+
+// partyOwnNick is the user's own party nickname: the typed one, else the
+// configured one, else def. Anything that reads as a fingerprint is
+// replaced with "…", so it cannot pass for a host fingerprint.
+func partyOwnNick(typed, configured, def string) string {
+	for _, n := range []string{typed, configured} {
+		if n = strings.TrimSpace(components.StripFingerprintRuns(n)); n != "" {
+			return n
+		}
+	}
+	return def
+}
+
+// partyCreatedText gives the invite to share and the host's own
+// fingerprint, which guests joining by bare code compare.
+func partyCreatedText(sess *party.PartySession) string {
+	return fmt.Sprintf("✓ Created party room! Invite: %s (it also pins you as host). You are host %s (%s)",
+		sess.Invite(), components.PartyHostLabel(sess.Nickname(), sess.Fingerprint()), components.PartyHostCheckHint)
+}
+
+// partyJoinedText names the followed host by fingerprint once it is known.
+func partyJoinedText(sess *party.PartySession) string {
+	if fp := sess.HostFingerprint(); fp != "" {
+		return fmt.Sprintf("✓ Connected to party room %s! %s", sess.FormattedCode(),
+			PartyFollowingHostText(components.PartyHostLabel(sess.HostNickname(), fp), sess.HostPinned()))
+	}
+	if sess.HostPin() != "" {
+		return fmt.Sprintf("✓ Connected to party room %s! Waiting for the host from your invite", sess.FormattedCode())
+	}
+	return fmt.Sprintf("✓ Connected to party room %s! Waiting for the host; check its fingerprint when it appears", sess.FormattedCode())
 }

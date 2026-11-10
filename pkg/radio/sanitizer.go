@@ -11,6 +11,9 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/halpworld/halpradio/pkg/radio/netguard"
+	"github.com/halpworld/halpradio/pkg/util"
 )
 
 // SanitizedResult represents the outcome of cleaning a raw stream title.
@@ -51,7 +54,21 @@ var (
 )
 
 // SanitizeTrackTitle cleans promotional noise, URLs, jingles, and spam from remote stream titles.
+// Its text results are finally passed through util.SanitizeDisplay so they
+// are terminal-safe under the same rules as every other remote string.
 func SanitizeTrackTitle(rawTitle string, stationName string) SanitizedResult {
+	res := sanitizeTrackTitle(rawTitle, stationName)
+	res.CleanTitle = util.SanitizeDisplay(res.CleanTitle, maxTrackTitleRunes)
+	res.OriginalTitle = util.SanitizeDisplay(res.OriginalTitle, maxTrackTitleRunes)
+	res.Artist = util.SanitizeDisplay(res.Artist, maxTrackTitleRunes)
+	res.Title = util.SanitizeDisplay(res.Title, maxTrackTitleRunes)
+	return res
+}
+
+// maxTrackTitleRunes caps every text field of a SanitizedResult.
+const maxTrackTitleRunes = 1024
+
+func sanitizeTrackTitle(rawTitle string, stationName string) SanitizedResult {
 	orig := strings.TrimSpace(rawTitle)
 	if orig == "" {
 		return SanitizedResult{
@@ -337,6 +354,12 @@ type MusicBrainzRecordingMatch struct {
 	Confidence float64 `json:"confidence"`
 }
 
+// maxMusicBrainzBytes caps a MusicBrainz search response.
+const maxMusicBrainzBytes = 1 << 20
+
+// musicBrainzHTTPClient applies the shared redirect and address policy.
+var musicBrainzHTTPClient = netguard.NewClient(6 * time.Second)
+
 // ValidateCandidateWithMusicBrainz verifies a candidate song title against the public MusicBrainz API.
 func ValidateCandidateWithMusicBrainz(ctx context.Context, artist, title string) (*MusicBrainzRecordingMatch, error) {
 	artist = strings.TrimSpace(artist)
@@ -359,8 +382,7 @@ func ValidateCandidateWithMusicBrainz(ctx context.Context, artist, title string)
 	}
 	req.Header.Set("User-Agent", "halpradio/1.0 (https://github.com/halpworld/halpradio)")
 
-	client := &http.Client{Timeout: 6 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := musicBrainzHTTPClient.Do(req.WithContext(netguard.WithOrigin(ctx, endpoint)))
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +407,11 @@ func ValidateCandidateWithMusicBrainz(ctx context.Context, artist, title string)
 		} `json:"recordings"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	body, err := netguard.ReadLimited(resp.Body, maxMusicBrainzBytes)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, err
 	}
 
@@ -408,11 +434,11 @@ func ValidateCandidateWithMusicBrainz(ctx context.Context, artist, title string)
 	}
 
 	return &MusicBrainzRecordingMatch{
-		ID:         top.ID,
+		ID:         util.SanitizeDisplay(top.ID, 64),
 		Score:      top.Score,
-		Title:      top.Title,
-		Artist:     matchedArtist,
-		Album:      album,
+		Title:      util.SanitizeDisplay(top.Title, 300),
+		Artist:     util.SanitizeDisplay(matchedArtist, 300),
+		Album:      util.SanitizeDisplay(album, 300),
 		Year:       year,
 		Confidence: float64(top.Score) / 100.0,
 	}, nil

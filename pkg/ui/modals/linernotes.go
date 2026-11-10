@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/halpworld/halpradio/pkg/ai"
 	"github.com/halpworld/halpradio/pkg/theme"
+	"github.com/halpworld/halpradio/pkg/util"
 )
 
 // LinerNotesDrawerInput bundles everything the Interactive Liner Notes & Artist
@@ -61,6 +62,15 @@ type DJSettingsModalInput struct {
 // full-width overlay on narrow terminals) displaying artist biography, album
 // context, discography highlights, track trivia, and AI DJ quick controls.
 func RenderLinerNotesDrawer(in LinerNotesDrawerInput, th theme.Theme) string {
+	// Defence in depth: Update already sanitizes what it stores, but this
+	// drawer must never print escape sequences whatever it is handed.
+	in.Notes = SanitizeLinerNotes(in.Notes)
+	in.Status = util.SanitizeDisplay(in.Status, 300)
+	in.TrackLabel = util.SanitizeDisplay(in.TrackLabel, 300)
+	in.StationName = util.SanitizeDisplay(in.StationName, 200)
+	in.Genre = util.SanitizeDisplay(in.Genre, 100)
+	in.Country = util.SanitizeDisplay(in.Country, 64)
+	in.ArtSource = util.SanitizeDisplay(in.ArtSource, 64)
 	width := in.Width
 	if width < 20 {
 		width = 20
@@ -298,6 +308,9 @@ func renderLinerNotesFooter(width int, th theme.Theme) []string {
 // RenderDJBanner renders the live broadcast banner above the player bar when the
 // Local AI Radio DJ is announcing a track or smoothly fading volume back to 100%.
 func RenderDJBanner(in DJBannerInput, th theme.Theme) string {
+	in.Persona = util.SanitizeDisplay(in.Persona, 64)
+	in.Engine = util.SanitizeDisplay(in.Engine, 64)
+	in.Script = util.SanitizeMultiline(in.Script, 2000, 40)
 	width := in.Width
 	if width <= 0 {
 		width = 80
@@ -503,7 +516,7 @@ func RenderDJSettingsModal(in DJSettingsModalInput, th theme.Theme) string {
 		}
 		isSelected := strings.EqualFold(in.SelectedVoiceID, m.ID)
 
-		statusTag := mutedStyle.Render(fmt.Sprintf("[Download ~%s from HuggingFace]", m.SizeLabel))
+		statusTag := mutedStyle.Render(fmt.Sprintf("[Download ~%s from GitHub, SHA-256 verified]", m.SizeLabel))
 		if installed {
 			statusTag = onStyle.Render("[Installed ✓]")
 		}
@@ -532,7 +545,7 @@ func RenderDJSettingsModal(in DJSettingsModalInput, th theme.Theme) string {
 	if height > 22 {
 		lines = append(lines, "")
 	}
-	lines = append(lines, secStyle.Render(truncate("📦 OPT-IN LOCAL ONNX VOICE MODELS (HuggingFace):", innerW)))
+	lines = append(lines, secStyle.Render(truncate("📦 OPT-IN VOICES (sherpa-onnx runtime + voice from github.com/k2-fsa/sherpa-onnx, SHA-256 verified):", innerW)))
 	lines = append(lines, voiceRows...)
 
 	if in.Status != "" {
@@ -570,21 +583,61 @@ func truncate(s string, maxW int) string {
 	if maxW <= 0 {
 		return ""
 	}
-	if lipgloss.Width(s) <= maxW {
+	head, rest := fitWidth(s, maxW)
+	if rest == "" {
 		return s
 	}
-	runes := []rune(s)
 	if maxW <= 1 {
-		return string(runes[:1])
+		return head
 	}
-	var b strings.Builder
-	for _, r := range runes {
-		if lipgloss.Width(b.String()+string(r))+1 > maxW {
+	head, _ = fitWidth(s, maxW-1)
+	return head + "…"
+}
+
+// fitWidth returns the longest prefix of s (cut at a rune boundary) whose
+// display width is at most max columns, and the rest.
+//
+// TTY-7: the old helpers re-measured the whole string for every rune they
+// removed, so one huge station name or lyric line froze View(). This looks
+// only at the first 4*max+16 runes (a fitting prefix longer than that would
+// be mostly zero-width runes; cutting it earlier is harmless) and
+// binary-searches the cut point, measuring candidates with lipgloss.Width so
+// grapheme clusters such as emoji + VS16 are counted the way lipgloss
+// renders them. Cost: O(max log max), independent of len(s).
+func fitWidth(s string, max int) (string, string) {
+	if max <= 0 {
+		return "", s
+	}
+	limit := 4*max + 16
+	bounds := make([]int, 0, limit+1)
+	whole := true
+	for i := range s {
+		if len(bounds) > limit {
+			whole = false
 			break
 		}
-		b.WriteRune(r)
+		bounds = append(bounds, i)
 	}
-	return b.String() + "…"
+	if whole {
+		if lipgloss.Width(s) <= max {
+			return s, ""
+		}
+		bounds = append(bounds, len(s))
+	}
+	last := len(bounds) - 1
+	if lipgloss.Width(s[:bounds[last]]) <= max {
+		return s[:bounds[last]], s[bounds[last]:]
+	}
+	lo, hi := 0, last // s[:bounds[lo]] fits, s[:bounds[hi]] does not
+	for hi-lo > 1 {
+		mid := (lo + hi) / 2
+		if lipgloss.Width(s[:bounds[mid]]) <= max {
+			lo = mid
+		} else {
+			hi = mid
+		}
+	}
+	return s[:bounds[lo]], s[bounds[lo]:]
 }
 
 func truncateRendered(s string, maxW int) string {

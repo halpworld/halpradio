@@ -1,74 +1,152 @@
 name: Release
 
+# Releases are cut only by pushing a v* tag. There is deliberately no
+# workflow_dispatch trigger: a manual run on an already-tagged commit must not
+# be able to rebuild or replace a published release.
 on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag to release (e.g. v1.0.0)'
-        required: false
-        type: string
 
 permissions:
-  contents: write
-  packages: write
-  issues: write
-  pages: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Primary key fingerprint of the APT archive signing key in keys/.
+  # Update together with keys/ when the key is rotated.
+  APT_SIGNING_KEY_FPR: B2B5AB2619FF9D6A7EA630CA79E31FF22916CAAE
 
 jobs:
   goreleaser:
-    name: Build & Release
+    name: Build, sign & release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write     # create the GitHub release and upload assets
+      id-token: write     # keyless cosign signing + build provenance
+      attestations: write # store build provenance attestations
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: 'go.mod'
-          cache: true
+          # No shared module/build cache: a cache entry written by another
+          # workflow run must not be able to influence release binaries.
+          cache: false
+
+      - name: Verify module graph is tidy and untampered
+        run: |
+          go mod tidy -diff
+          go mod verify
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: 'v3.1.4'
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          syft-version: 'v1.57.1'
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v7
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           distribution: goreleaser
-          version: '~> v2'
+          version: 'v2.19.0'
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
-      - name: Import GPG key for APT signing
-        env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-        run: |
-          if [ -n "$GPG_PRIVATE_KEY" ]; then
-            echo "$GPG_PRIVATE_KEY" | gpg --batch --import
-          else
-            echo "ℹ️ No GPG_PRIVATE_KEY secret set, skipping GPG import"
-          fi
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: ./dist/checksums.txt
 
-      - name: Checkout gh-pages branch to preserve package pool
-        uses: actions/checkout@v7
-        continue-on-error: true
+      - name: Hand .deb packages to the APT job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-debs
+          path: |
+            dist/*.deb
+            dist/checksums.txt
+          if-no-files-found: error
+          retention-days: 1
+
+  apt:
+    name: Build & sign APT repository
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the regenerated repository to gh-pages
+    # Only first-party actions and repository scripts run in this job, and the
+    # signing key exists only inside the single "Build and sign" step.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download this release's .deb packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-debs
+          path: release-debs
+
+      - name: Checkout gh-pages
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: gh-pages
           path: apt-repo
 
-      - name: Build APT Repository
+      - name: Build and sign APT repository
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
         run: |
-          mkdir -p apt-repo
-          ./scripts/build_apt_repo.sh dist apt-repo
+          set -euo pipefail
+          if [ -z "${GPG_PRIVATE_KEY}" ]; then
+            echo "::error::GPG_PRIVATE_KEY is not set; refusing to publish an unsigned APT repository"
+            exit 1
+          fi
+          GNUPGHOME="$(mktemp -d)"
+          export GNUPGHOME
+          chmod 700 "${GNUPGHOME}"
+          cleanup() {
+            gpgconf --kill all >/dev/null 2>&1 || true
+            rm -rf "${GNUPGHOME}"
+          }
+          trap cleanup EXIT
+          printf '%s\n' "${GPG_PRIVATE_KEY}" | gpg --batch --quiet --import
+          unset GPG_PRIVATE_KEY
+          CHECKSUMS_FILE=release-debs/checksums.txt \
+          SIGNING_KEY_FPR="${APT_SIGNING_KEY_FPR}" \
+            ./scripts/build_apt_repo.sh release-debs apt-repo
 
-      - name: Deploy APT repository to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./apt-repo
-          publish_branch: gh-pages
-          keep_files: true
+      - name: Publish to gh-pages
+        working-directory: apt-repo
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to publish."
+            exit 0
+          fi
+          git commit -m "apt: publish ${TAG}"
+          git push origin HEAD:gh-pages

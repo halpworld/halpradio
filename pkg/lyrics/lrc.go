@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/halpworld/halpradio/pkg/util"
 )
 
 var (
@@ -25,7 +27,9 @@ var (
 // An [offset:NNN] tag (milliseconds) shifts every timestamp accordingly: a
 // positive offset delays the lines, a negative one advances them, and no
 // timestamp is ever shifted below zero. Lines that carry a timestamp but no
-// text are preserved, because they mark instrumental gaps.
+// text are preserved, because they mark instrumental gaps. Line text is
+// stripped of terminal control sequences and capped (maxLineRunes), and at
+// most maxLines lines are kept.
 func ParseLRC(raw string) []Line {
 	if strings.TrimSpace(raw) == "" {
 		return nil
@@ -55,8 +59,11 @@ func ParseLRC(raw string) []Line {
 			continue
 		}
 
-		text := strings.TrimSpace(lrcWordStampRe.ReplaceAllString(rest, ""))
+		text := util.SanitizeDisplay(lrcWordStampRe.ReplaceAllString(rest, ""), maxLineRunes)
 		for _, at := range stamps {
+			if len(lines) >= maxLines {
+				break
+			}
 			lines = append(lines, Line{At: at, Text: text})
 		}
 	}
@@ -132,7 +139,7 @@ func fractionToDuration(frac string) time.Duration {
 }
 
 // plainToLines converts an unsynced lyric blob into untimed lines, trimming
-// leading and trailing blank lines.
+// leading and trailing blank lines. Each line is sanitized like ParseLRC's.
 func plainToLines(raw string) []Line {
 	if strings.TrimSpace(raw) == "" {
 		return nil
@@ -150,9 +157,12 @@ func plainToLines(raw string) []Line {
 		return nil
 	}
 
+	if end-start > maxLines {
+		end = start + maxLines
+	}
 	out := make([]Line, 0, end-start)
 	for _, f := range fields[start:end] {
-		out = append(out, Line{Text: strings.TrimSpace(f)})
+		out = append(out, Line{Text: util.SanitizeDisplay(f, maxLineRunes)})
 	}
 	return out
 }

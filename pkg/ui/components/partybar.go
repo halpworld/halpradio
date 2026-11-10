@@ -4,20 +4,172 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/halpworld/halpradio/pkg/party"
 	"github.com/halpworld/halpradio/pkg/player"
 	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/theme"
+	"github.com/halpworld/halpradio/pkg/util"
 )
 
+// nickBrackets removes square brackets, and look-alikes, from nicknames.
+var nickBrackets = strings.NewReplacer("[", "", "]", "", "［", "", "］", "", "⟦", "", "⟧", "", "〚", "", "〛", "", "⁅", "", "⁆", "")
+
+// partyNickMax is the longest nickname shown in a peer label.
+const partyNickMax = 24
+
+// fingerprintSymbol reports whether r counts as a fingerprint symbol for
+// party.ContainsFingerprint (it matches case-insensitively, so a few
+// non-ASCII letters that upper-case to ASCII count too).
+func fingerprintSymbol(r rune) bool {
+	return party.ContainsFingerprint(strings.Repeat(string(r), party.FingerprintLen))
+}
+
+// fingerprintSeparator is skipped by party.ContainsFingerprint inside a run.
+func fingerprintSeparator(r rune) bool { return r == '-' || unicode.IsSpace(r) }
+
+// StripFingerprintRuns replaces every part of s that party.ContainsFingerprint
+// would read as a fingerprint (16 or more alphabet symbols, ignoring case,
+// spaces and dashes) with "…", so a nickname cannot carry a fingerprint of
+// its own.
+func StripFingerprintRuns(s string) string {
+	if !party.ContainsFingerprint(s) {
+		return s
+	}
+	rs := []rune(s)
+	var b strings.Builder
+	for i := 0; i < len(rs); {
+		if !fingerprintSymbol(rs[i]) {
+			b.WriteRune(rs[i])
+			i++
+			continue
+		}
+		// A run starts at a symbol and goes on through symbols and
+		// separators; trailing separators are not part of it.
+		j, last := i, i
+		for j < len(rs) && (fingerprintSymbol(rs[j]) || fingerprintSeparator(rs[j])) {
+			if fingerprintSymbol(rs[j]) {
+				last = j
+			}
+			j++
+		}
+		run := string(rs[i : last+1])
+		if party.ContainsFingerprint(run) {
+			b.WriteString("…")
+		} else {
+			b.WriteString(run)
+		}
+		i = last + 1
+	}
+	return b.String()
+}
+
+// CleanPartyNick is a peer nickname as it may be shown: printable, without
+// square brackets (or look-alikes) or fingerprint-like runs, at most
+// partyNickMax characters, never empty.
+func CleanPartyNick(nick string) string {
+	n := nickBrackets.Replace(util.SanitizeDisplay(nick, 256))
+	n = StripFingerprintRuns(n)
+	n = strings.TrimSpace(util.SanitizeDisplay(n, partyNickMax))
+	if n == "" {
+		n = "a peer"
+	}
+	return n
+}
+
+// PartyVerifiedSuffix follows the host label when the host was verified by
+// the fingerprint in the invite the user joined with.
+const PartyVerifiedSuffix = " ✓ verified by invite"
+
+// PartyHostLabel is the sanitized "[XXXX-XXXX-XXXX-XXXX] @nick" label for a
+// party peer. The fingerprint identifies the peer's key, so guests can check
+// that the host they follow is the one on the host's own screen. It comes
+// first and is never cut; the nickname is cleaned by CleanPartyNick so it
+// cannot imitate a fingerprint, and it is the part that gets shortened. An
+// empty fingerprint gives "@nick" alone.
+func PartyHostLabel(nick, fingerprint string) string {
+	label := "@" + CleanPartyNick(nick)
+	// The fingerprint is never shortened.
+	if fp := util.SanitizeDisplay(fingerprint, 64); fp != "" {
+		label = "[" + fp + "] " + label
+	}
+	return label
+}
+
+// SessionHostLabel is the label of the host sess follows: with
+// PartyVerifiedSuffix when the invite's pin verified it. On the host it is
+// the user's own label.
+func SessionHostLabel(sess *party.PartySession) string {
+	if sess == nil {
+		return PartyHostLabel("", "")
+	}
+	if sess.IsHost() {
+		return PartyHostLabel(sess.Nickname(), sess.Fingerprint())
+	}
+	label := PartyHostLabel(sess.HostNickname(), sess.HostFingerprint())
+	if sess.HostPinned() {
+		label += PartyVerifiedSuffix
+	}
+	return label
+}
+
+// FitPartyHostLabel shortens a PartyHostLabel (optionally ending in
+// PartyVerifiedSuffix) to maxW cells. The nickname is shortened first, then
+// the verified text becomes " ✓", then the nickname is dropped; the
+// fingerprint is never cut.
+func FitPartyHostLabel(label string, maxW int) string {
+	if lipgloss.Width(label) <= maxW {
+		return label
+	}
+	fp, rest := "", label
+	if strings.HasPrefix(label, "[") {
+		if i := strings.Index(label, "] @"); i > 0 {
+			fp, rest = label[:i+2], label[i+2:]
+		}
+	}
+	suffix := ""
+	if strings.HasSuffix(rest, PartyVerifiedSuffix) {
+		suffix, rest = PartyVerifiedSuffix, strings.TrimSuffix(rest, PartyVerifiedSuffix)
+	}
+	if fp == "" {
+		return truncate(rest, max(maxW-lipgloss.Width(suffix), 1)) + suffix
+	}
+	for _, sfx := range []string{suffix, strings.TrimSuffix(suffix, " verified by invite")} {
+		room := maxW - lipgloss.Width(fp) - lipgloss.Width(sfx)
+		if lipgloss.Width(rest) <= room {
+			return fp + rest + sfx
+		}
+		if room >= 4 { // "@" + one rune + "..."
+			return fp + truncate(rest, room) + sfx
+		}
+	}
+	return strings.TrimSpace(fp) + strings.TrimSuffix(suffix, " verified by invite")
+}
+
+// isPartyHostLabel reports whether s is already a PartyHostLabel.
+func isPartyHostLabel(s string) bool {
+	return strings.HasPrefix(s, "@") || (strings.HasPrefix(s, "[") && strings.Contains(s, "] @"))
+}
+
+// PartyHostCheckHint is shown next to the host's own fingerprint.
+const PartyHostCheckHint = "tell guests to check this"
+
+// PartyManualCheckHint follows a host label that no invite verified.
+const PartyManualCheckHint = "check it matches the fingerprint on the host's screen"
+
+// PartyInviteNote is said once wherever the invite is shared.
+const PartyInviteNote = "Share the invite: it also pins the host, so guests need no fingerprint check."
+
 // RenderPartyBar renders the synchronized terminal party room player bar with
-// animal DJ visualizer, floating ASCII reactions, and mini-chat.
+// animal DJ visualizer, floating ASCII reactions, and mini-chat. invite is
+// what guests join with (PartySession.Invite: the room code and the host's
+// fingerprint).
 func RenderPartyBar(
-	roomCode string,
+	invite string,
 	roomName string,
-	hostNick string,
+	hostLabel string, // from PartyHostLabel
 	isHost bool,
 	djPass party.DJPassMode,
 	listenerCount int,
@@ -49,8 +201,8 @@ func RenderPartyBar(
 		innerW = 20
 	}
 
-	// 1. Top Header Line: Room Code & Listeners & Volume
-	roomBadge := fmt.Sprintf("👥 TERMINAL PARTY ROOM: %s (%d Listeners)", party.FormatRoomCode(roomCode), listenerCount)
+	// 1. Top Header Line: Invite & Listeners & Volume
+	invite = util.SanitizeDisplay(invite, 64)
 	roomStyle := lipgloss.NewStyle().Bold(true).Foreground(th.Primary)
 
 	var volText string
@@ -65,20 +217,51 @@ func RenderPartyBar(
 	}
 	volStyle := lipgloss.NewStyle().Foreground(th.Highlight)
 
-	renderedRoom := roomStyle.Render(roomBadge)
 	renderedVol := volStyle.Render(volText)
 
-	spaceTop := innerW - lipgloss.Width(renderedRoom) - lipgloss.Width(renderedVol)
-	if spaceTop < 1 {
-		spaceTop = 1
+	// The invite is never cut: the volume, then the wording, give way first.
+	var lineTop string
+	for _, badge := range []string{
+		fmt.Sprintf("👥 TERMINAL PARTY ROOM · Invite: %s (%d Listeners)", invite, listenerCount),
+		fmt.Sprintf("👥 Invite: %s (%d)", invite, listenerCount),
+		"👥 Invite: " + invite,
+		invite,
+	} {
+		renderedRoom := roomStyle.Render(badge)
+		if space := innerW - lipgloss.Width(renderedRoom) - lipgloss.Width(renderedVol); space >= 1 {
+			lineTop = renderedRoom + strings.Repeat(" ", space) + renderedVol
+			break
+		}
+		if lipgloss.Width(renderedRoom) <= innerW {
+			lineTop = renderedRoom
+			break
+		}
 	}
-	lineTop := renderedRoom + strings.Repeat(" ", spaceTop) + renderedVol
+	if lineTop == "" {
+		// Too narrow for the whole invite: show the room code; the party
+		// manager (Ctrl+p) shows the invite.
+		code, _, _ := strings.Cut(invite, "/")
+		lineTop = roomStyle.Render(truncate(code, innerW))
+	}
 
 	// 2. Host & Station Info
-	hostDisplay := "@" + hostNick
-	if isHost {
-		hostDisplay += " (You 👑)"
+	hostDisplay := hostLabel
+	if !isPartyHostLabel(hostDisplay) {
+		hostDisplay = PartyHostLabel(hostLabel, "")
 	}
+	hostPrefix := "Host: "
+	if lipgloss.Width(hostPrefix)+lipgloss.Width(hostDisplay) > innerW && innerW < 30 {
+		hostPrefix = ""
+	}
+	hostRoom := innerW - lipgloss.Width(hostPrefix)
+	if isHost {
+		if own := hostDisplay + " (You 👑, " + PartyHostCheckHint + ")"; lipgloss.Width(own) <= hostRoom {
+			hostDisplay = own
+		} else {
+			hostDisplay = FitPartyHostLabel(hostDisplay, hostRoom-lipgloss.Width(" (You 👑)")) + " (You 👑)"
+		}
+	}
+	hostDisplay = FitPartyHostLabel(hostDisplay, hostRoom)
 	hostStyle := lipgloss.NewStyle().Foreground(th.Secondary).Bold(true)
 
 	djPassBadge := "[DJ: Host Only]"
@@ -93,14 +276,18 @@ func RenderPartyBar(
 	}
 	stStyle := lipgloss.NewStyle().Bold(true).Foreground(th.Foreground)
 
-	lineInfoLeft := fmt.Sprintf("Host: %s  |  Station: %s  %s",
-		hostStyle.Render(hostDisplay),
-		stStyle.Render(stName),
-		djPassStyle.Render(djPassBadge),
-	)
-
-	// Truncate info line if needed
-	lineInfo := truncate(lineInfoLeft, innerW)
+	// The host label is fitted above; only the station part is cut.
+	lineInfo := hostPrefix + hostStyle.Render(hostDisplay)
+	if rest := innerW - lipgloss.Width(lineInfo); rest > 0 {
+		tail := fmt.Sprintf("  |  Station: %s  %s", stStyle.Render(stName), djPassStyle.Render(djPassBadge))
+		if lipgloss.Width(tail) > rest {
+			tail = truncate(tail, rest)
+			if rest < 8 {
+				tail = ""
+			}
+		}
+		lineInfo += tail
+	}
 
 	// 3. Middle Line: Animal DJ Visualizer + Floating ASCII Reactions
 	isPlaying := (status == player.PlayStatus(player.StatusPlaying))
@@ -135,7 +322,7 @@ func RenderPartyBar(
 			senderStyle = lipgloss.NewStyle().Foreground(th.Muted)
 		}
 
-		tok := fmt.Sprintf("%s %s", emojiStyle.Render(r.Emoji), senderStyle.Render("("+r.Sender+")"))
+		tok := fmt.Sprintf("%s %s", emojiStyle.Render(r.Emoji), senderStyle.Render("("+CleanPartyNick(r.Sender)+")"))
 		reactionTokens = append(reactionTokens, tok)
 	}
 
@@ -160,7 +347,7 @@ func RenderPartyBar(
 	} else if len(recentChat) > 0 && time.Since(recentChat[len(recentChat)-1].Timestamp) < 6*time.Second {
 		// Show active chat bubble if message arrived within 6 seconds
 		lastMsg := recentChat[len(recentChat)-1]
-		chatBubble := fmt.Sprintf("💬 @%s: %s", lastMsg.Sender, lastMsg.Message)
+		chatBubble := fmt.Sprintf("💬 @%s: %s", CleanPartyNick(lastMsg.Sender), lastMsg.Message)
 		chatStyle := lipgloss.NewStyle().Foreground(th.Highlight).Bold(true)
 		legendStyle := lipgloss.NewStyle().Foreground(th.Muted)
 		lineBottom = chatStyle.Render(truncate(chatBubble, innerW/2)) + "  " +

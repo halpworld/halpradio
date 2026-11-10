@@ -4,7 +4,10 @@ project_name: halpradio
 
 before:
   hooks:
-    - go mod tidy
+    # Never rewrite go.mod/go.sum during a release: fail if the module graph
+    # has drifted from what is committed, or if a cached module was altered.
+    - go mod tidy -diff
+    - go mod verify
 
 builds:
   - id: halpradio
@@ -19,12 +22,18 @@ builds:
     goarch:
       - amd64
       - arm64
+    # Reproducible builds: no local paths in the binary and file times taken
+    # from the tagged commit rather than the build machine's clock.
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags:
       - -s -w -X github.com/halpworld/halpradio/pkg/app.Version={{.Version}}
 
 universal_binaries:
   - id: halpradio
     replace: false
+    mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
   - formats:
@@ -41,6 +50,25 @@ archives:
 
 checksum:
   name_template: "checksums.txt"
+  extra_files:
+    - glob: ./install.sh
+
+# Keyless (Sigstore) signature over checksums.txt. The bundle binds the file to
+# this repository's release workflow at the release tag; see SECURITY.md for
+# the verification command. Requires cosign on PATH and `id-token: write`.
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - "--yes"
+
+# SPDX SBOM for every archive (requires syft on PATH).
+sboms:
+  - artifacts: archive
 
 nfpms:
   - id: halpradio-debs
@@ -97,4 +125,7 @@ changelog:
       - "^chore:"
 
 release:
-  replace_existing_artifacts: true
+  # Never overwrite assets of a published release.
+  replace_existing_artifacts: false
+  extra_files:
+    - glob: ./install.sh

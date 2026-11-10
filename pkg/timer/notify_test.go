@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -114,4 +115,37 @@ func TestRunCommandHookEmpty(t *testing.T) {
 	// Should return early and not panic
 	runCommandHook("", ev)
 	runCommandHook("   ", ev)
+}
+
+func TestDesktopNotificationCommand_NoInterpolation(t *testing.T) {
+	hostile := `x"; do shell script "calc" & "'; Start-Process calc; '` + "’"
+	for _, goos := range []string{"darwin", "linux", "windows"} {
+		name, args, ok := desktopNotificationCommand(goos, "Focus "+hostile, "Done "+hostile)
+		if !ok || name == "" {
+			t.Fatalf("%s: no command", goos)
+		}
+		switch goos {
+		case "darwin":
+			// The script lines are constant; values only appear as argv items.
+			if len(args) != 9 || args[1] != "on run argv" || args[6] != "--" || strings.Contains(args[3], "calc") {
+				t.Fatalf("darwin argv not in on-run-argv form: %q", args)
+			}
+		case "windows":
+			if len(args) != 4 || args[2] != "-EncodedCommand" {
+				t.Fatalf("windows argv not encoded: %q", args)
+			}
+			for _, a := range args {
+				if strings.Contains(a, "calc") || strings.Contains(a, "'") {
+					t.Fatalf("windows argv leaks attacker text: %q", a)
+				}
+			}
+		case "linux":
+			if args[len(args)-3] != "--" {
+				t.Fatalf("linux argv missing --: %q", args)
+			}
+		}
+	}
+	if _, _, ok := desktopNotificationCommand("plan9", "a", "b"); ok {
+		t.Fatal("unsupported OS should not produce a command")
+	}
 }

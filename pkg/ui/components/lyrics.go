@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/halpworld/halpradio/pkg/lyrics"
@@ -351,13 +352,16 @@ func wrapPlain(s string, width int) []string {
 	var out []string
 	current := ""
 	for _, w := range words {
-		for lipgloss.Width(w) > width {
+		for {
 			// Break a word that cannot fit on any line.
+			head, tail := splitAtWidth(w, width)
+			if tail == "" {
+				break
+			}
 			if current != "" {
 				out = append(out, current)
 				current = ""
 			}
-			head, tail := splitAtWidth(w, width)
 			out = append(out, head)
 			w = tail
 		}
@@ -378,17 +382,15 @@ func wrapPlain(s string, width int) []string {
 }
 
 // splitAtWidth cuts s after width display columns.
+// It is linear in the cut length; a first rune wider than width is still
+// emitted alone so the caller always makes progress.
 func splitAtWidth(s string, width int) (string, string) {
-	runes := []rune(s)
-	for i := range runes {
-		if lipgloss.Width(string(runes[:i+1])) > width {
-			if i == 0 {
-				return string(runes[:1]), string(runes[1:])
-			}
-			return string(runes[:i]), string(runes[i:])
-		}
+	head, tail := fitWidth(s, width)
+	if head == "" && tail != "" {
+		_, size := utf8.DecodeRuneInString(tail)
+		return tail[:size], tail[size:]
 	}
-	return s, ""
+	return head, tail
 }
 
 // centerLine pads a pre-rendered line so it sits centred in width columns.

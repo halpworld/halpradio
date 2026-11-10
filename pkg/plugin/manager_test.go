@@ -11,11 +11,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Minimal valid WebAssembly binary
-var minimalWasmBytes = []byte{
-	0x00, 0x61, 0x73, 0x6d, // \0asm (magic)
-	0x01, 0x00, 0x00, 0x00, // version 1
-}
+// Minimal valid plugin: exports a linear memory and an on_init that returns 0.
+// (A module without memory is rejected by NewSandbox.)
+var minimalWasmBytes = wasmBenign
 
 func TestManagerLifecycle(t *testing.T) {
 	tempHome, err := os.MkdirTemp("", "halpradio-plugin-mgr-test-*")

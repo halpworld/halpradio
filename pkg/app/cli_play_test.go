@@ -91,6 +91,7 @@ func TestRunPlayWithDuration(t *testing.T) {
 		ts.URL,
 		"--duration", "150ms",
 		"--volume", "50",
+		"--backend", "native", // no child process (see noSpawnBackend)
 	}, nil, &buf)
 	elapsed := time.Since(start)
 
@@ -155,6 +156,7 @@ func TestRunPlayJSONAndVolumeBounds(t *testing.T) {
 		"--duration", "100ms",
 		"--volume", "150",
 		"--json",
+		"--backend", "native", // no child process (see noSpawnBackend)
 	}, nil, &buf)
 	if err != nil || !done {
 		t.Fatalf("RunPlay --json failed: %v", err)
@@ -213,3 +215,9 @@ func TestRunPlayEmptyCatalogError(t *testing.T) {
 		t.Errorf("Expected error for empty catalog")
 	}
 }
+
+// noSpawnBackend: the RunPlay tests use the in-process native backend. With
+// the default "auto" backend they started a real mpv, and under -race on
+// macOS a forked child can hang in the Network framework's atfork handler
+// before exec; it then outlives the test binary holding its output pipe
+// ("Test I/O incomplete ... WaitDelay expired").

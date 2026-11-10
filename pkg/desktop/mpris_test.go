@@ -1,6 +1,8 @@
 package desktop
 
 import (
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -266,5 +268,21 @@ func TestMPRISMetadataIsStorable(t *testing.T) {
 	}
 	if dest["xesam:title"] != "Some Song" {
 		t.Errorf("expected xesam:title to survive the round-trip, got %v", dest["xesam:title"])
+	}
+}
+
+func TestBuildMPRISMetadata_StripsURLSecretsAndSanitizes(t *testing.T) {
+	meta := BuildMPRISMetadata("Evil‮FM\x1b[2J", "jazz\u0085", "Artist​ - Song\x07", "https://user:pass@stream.example/live?token=SECRET#x")
+	if got := meta["xesam:url"]; got != "https://stream.example/live" {
+		t.Errorf("xesam:url = %v, want credentials and query stripped", got)
+	}
+	for _, v := range []any{meta["xesam:title"], meta["xesam:album"], meta["xesam:artist"], meta["xesam:genre"]} {
+		s := fmt.Sprint(v)
+		if strings.ContainsAny(s, "‮​\x1b\x07\u0085") {
+			t.Errorf("unsanitized MPRIS string: %q", s)
+		}
+	}
+	if _, ok := BuildMPRISMetadata("a", "", "", "::not a url")["xesam:url"]; ok {
+		t.Error("unparseable URL should be omitted")
 	}
 }

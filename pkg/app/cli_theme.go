@@ -74,9 +74,9 @@ func RunThemeCLI(args []string, out io.Writer) (bool, error) {
 				Background(t.Primary).
 				Foreground(t.BadgeText).
 				Bold(true).
-				Render(fmt.Sprintf(" %-18s ", t.Name))
+				Render(fmt.Sprintf(" %-18s ", safe(t.Name)))
 
-			fmt.Fprintf(out, "  %2d. %s %-16s %s\n", i+1, swatch, customTag, t.Description)
+			fmt.Fprintf(out, "  %2d. %s %-16s %s\n", i+1, swatch, customTag, safe(t.Description))
 		}
 
 		fmt.Fprintln(out, "")
@@ -86,7 +86,7 @@ func RunThemeCLI(args []string, out io.Writer) (bool, error) {
 
 		regIndex, err := client.FetchRegistry(ctx)
 		if err != nil {
-			fmt.Fprintf(out, "  (Registry fetch note: %v)\n", err)
+			fmt.Fprintf(out, "  (Registry fetch note: %s)\n", safe(err.Error()))
 		}
 
 		for _, rt := range regIndex.Themes {
@@ -105,9 +105,9 @@ func RunThemeCLI(args []string, out io.Writer) (bool, error) {
 				Background(rt.Primary).
 				Foreground(rt.BadgeText).
 				Bold(true).
-				Render(fmt.Sprintf(" %-18s ", truncate(rt.Name, 18)))
+				Render(fmt.Sprintf(" %-18s ", truncate(safe(rt.Name), 18)))
 
-			fmt.Fprintf(out, "  • %-20s %s %-12s by %-16s (%s)\n", rt.ID, swatch, tag, rt.Author, rt.Category)
+			fmt.Fprintf(out, "  • %-20s %s %-12s by %-16s (%s)\n", safe(rt.ID), swatch, tag, safe(rt.Author), safe(rt.Category))
 		}
 		return true, nil
 
@@ -123,7 +123,7 @@ func RunThemeCLI(args []string, out io.Writer) (bool, error) {
 
 		regIndex, err := client.FetchRegistry(ctx)
 		if regIndex == nil || len(regIndex.Themes) == 0 {
-			fmt.Fprintf(out, "Failed to connect to themes repository: %v\n", err)
+			fmt.Fprintf(out, "Failed to connect to themes repository: %s\n", safe(err.Error()))
 			return false, err
 		}
 
@@ -136,19 +136,19 @@ func RunThemeCLI(args []string, out io.Writer) (bool, error) {
 		}
 
 		if targetTheme == nil {
-			fmt.Fprintf(out, "Theme %q not found in official repository.\n", targetID)
+			fmt.Fprintf(out, "Theme %q not found in official repository.\n", safe(targetID))
 			return false, fmt.Errorf("theme not found: %s", targetID)
 		}
 
-		fmt.Fprintf(out, "Downloading and installing %s by %s...\n", targetTheme.Name, targetTheme.Author)
+		fmt.Fprintf(out, "Downloading and installing %s by %s...\n", safe(targetTheme.Name), safe(targetTheme.Author))
 		if err := client.DownloadAndInstall(ctx, *targetTheme, themesDir); err != nil {
-			fmt.Fprintf(out, "Install error: %v\n", err)
+			fmt.Fprintf(out, "Install error: %s\n", safe(err.Error()))
 			return false, err
 		}
 
 		destPath := filepath.Join(themesDir, targetTheme.ID+".yaml")
-		fmt.Fprintf(out, "✓ Successfully installed %s into %s!\n", targetTheme.Name, destPath)
-		fmt.Fprintf(out, "  To use immediately, run: halpradio -theme %s\n", targetTheme.ID)
+		fmt.Fprintf(out, "✓ Successfully installed %s into %s!\n", safe(targetTheme.Name), safe(destPath))
+		fmt.Fprintf(out, "  To use immediately, run: halpradio -theme %s\n", safe(targetTheme.ID))
 		return true, nil
 
 	case "preview":
@@ -190,7 +190,7 @@ func RunThemeCLI(args []string, out io.Writer) (bool, error) {
 		}
 
 		if targetTh.Name == "" {
-			fmt.Fprintf(out, "Theme %q not found in local catalog or official repository.\n", targetID)
+			fmt.Fprintf(out, "Theme %q not found in local catalog or official repository.\n", safe(targetID))
 			return false, fmt.Errorf("theme not found: %s", targetID)
 		}
 
@@ -219,20 +219,20 @@ func RunThemeCLI(args []string, out io.Writer) (bool, error) {
 			}
 		}
 
-		fmt.Fprintf(out, "🎨 THEME INFO: %s\n", th.Name)
-		fmt.Fprintf(out, "  • ID:          %s\n", th.ID)
-		fmt.Fprintf(out, "  • Author:      %s\n", th.Author)
-		fmt.Fprintf(out, "  • Description: %s\n", th.Description)
-		fmt.Fprintf(out, "  • Primary:     %s\n", string(th.Primary))
-		fmt.Fprintf(out, "  • Secondary:   %s\n", string(th.Secondary))
-		fmt.Fprintf(out, "  • Background:  %s\n", string(th.Background))
-		fmt.Fprintf(out, "  • Foreground:  %s\n", string(th.Foreground))
-		fmt.Fprintf(out, "  • Highlight:   %s\n", string(th.Highlight))
-		fmt.Fprintf(out, "  • Playing:     %s\n", string(th.Playing))
-		fmt.Fprintf(out, "  • Favorite:    %s\n", string(th.Favorite))
-		fmt.Fprintf(out, "  • Border:      %s\n", string(th.Border))
-		fmt.Fprintf(out, "  • Badge:       %s (text: %s)\n", string(th.Badge), string(th.BadgeText))
-		fmt.Fprintf(out, "  • HeaderAscii: %s\n", string(th.HeaderAscii))
+		fmt.Fprintf(out, "🎨 THEME INFO: %s\n", safe(th.Name))
+		fmt.Fprintf(out, "  • ID:          %s\n", safe(th.ID))
+		fmt.Fprintf(out, "  • Author:      %s\n", safe(th.Author))
+		fmt.Fprintf(out, "  • Description: %s\n", safe(th.Description))
+		fmt.Fprintf(out, "  • Primary:     %s\n", safe(string(th.Primary)))
+		fmt.Fprintf(out, "  • Secondary:   %s\n", safe(string(th.Secondary)))
+		fmt.Fprintf(out, "  • Background:  %s\n", safe(string(th.Background)))
+		fmt.Fprintf(out, "  • Foreground:  %s\n", safe(string(th.Foreground)))
+		fmt.Fprintf(out, "  • Highlight:   %s\n", safe(string(th.Highlight)))
+		fmt.Fprintf(out, "  • Playing:     %s\n", safe(string(th.Playing)))
+		fmt.Fprintf(out, "  • Favorite:    %s\n", safe(string(th.Favorite)))
+		fmt.Fprintf(out, "  • Border:      %s\n", safe(string(th.Border)))
+		fmt.Fprintf(out, "  • Badge:       %s (text: %s)\n", safe(string(th.Badge)), safe(string(th.BadgeText)))
+		fmt.Fprintf(out, "  • HeaderAscii: %s\n", safe(string(th.HeaderAscii)))
 		return true, nil
 
 	case "remove", "rm", "uninstall", "delete":
@@ -242,10 +242,10 @@ func RunThemeCLI(args []string, out io.Writer) (bool, error) {
 		}
 		targetID := strings.ToLower(strings.TrimSpace(args[1]))
 		if err := client.Uninstall(targetID, themesDir); err != nil {
-			fmt.Fprintf(out, "Remove error: %v\n", err)
+			fmt.Fprintf(out, "Remove error: %s\n", safe(err.Error()))
 			return false, err
 		}
-		fmt.Fprintf(out, "✓ Successfully removed custom theme %s\n", targetID)
+		fmt.Fprintf(out, "✓ Successfully removed custom theme %s\n", safe(targetID))
 		return true, nil
 
 	case "export":
@@ -258,18 +258,18 @@ func RunThemeCLI(args []string, out io.Writer) (bool, error) {
 		activeTh.ID = name
 		targetPath, err := theme.ExportActiveTheme(themesDir, activeTh)
 		if err != nil {
-			fmt.Fprintf(out, "Export error: %v\n", err)
+			fmt.Fprintf(out, "Export error: %s\n", safe(err.Error()))
 			return false, err
 		}
-		fmt.Fprintf(out, "✓ Exported theme to %s\n", targetPath)
+		fmt.Fprintf(out, "✓ Exported theme to %s\n", safe(targetPath))
 		return true, nil
 
 	default:
 		sugg := SuggestCommand(cmd, []string{"list", "install", "preview", "info", "remove", "export"})
 		if sugg != "" {
-			fmt.Fprintf(out, "Unknown theme command %q. Did you mean %q? Run 'halpradio theme --help'\n", cmd, sugg)
+			fmt.Fprintf(out, "Unknown theme command %q. Did you mean %q? Run 'halpradio theme --help'\n", safe(cmd), sugg)
 		} else {
-			fmt.Fprintf(out, "Unknown theme command %q. Run 'halpradio theme --help'\n", cmd)
+			fmt.Fprintf(out, "Unknown theme command %q. Run 'halpradio theme --help'\n", safe(cmd))
 		}
 		return false, fmt.Errorf("unknown theme command: %s", cmd)
 	}
@@ -281,16 +281,16 @@ func RenderTerminalThemePreview(out io.Writer, targetTh theme.Theme, author, cat
 	header := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(targetTh.Primary).
-		Render(fmt.Sprintf("🎨 THEME PREVIEW: %s", targetTh.Name))
+		Render(fmt.Sprintf("🎨 THEME PREVIEW: %s", safe(targetTh.Name)))
 	if author != "" {
-		header += lipgloss.NewStyle().Foreground(targetTh.Secondary).Render(" by " + author)
+		header += lipgloss.NewStyle().Foreground(targetTh.Secondary).Render(" by " + safe(author))
 	}
 	if category != "" {
-		header += lipgloss.NewStyle().Foreground(targetTh.Muted).Render(" [" + category + "]")
+		header += lipgloss.NewStyle().Foreground(targetTh.Muted).Render(" [" + safe(category) + "]")
 	}
 	fmt.Fprintln(out, header)
 	if targetTh.Description != "" {
-		fmt.Fprintln(out, lipgloss.NewStyle().Foreground(targetTh.Foreground).Italic(true).Render("  "+targetTh.Description))
+		fmt.Fprintln(out, lipgloss.NewStyle().Foreground(targetTh.Foreground).Italic(true).Render("  "+safe(targetTh.Description)))
 	}
 	fmt.Fprintln(out, "")
 

@@ -9,35 +9,98 @@
 #   dists/stable/{Release, Release.gpg, InRelease}
 #   KEY.gpg & halpradio-archive-keyring.gpg
 #   index.html (Landing page with install instructions)
+#
+# Usage:
+#   CHECKSUMS_FILE=dist/checksums.txt SIGNING_KEY_FPR=<40-hex fingerprint> \
+#     scripts/build_apt_repo.sh <deb-src-dir> <repo-dir>
+#
+# Security properties:
+#   - The pool is rebuilt from scratch: only the .deb files of the current
+#     release are indexed and signed. Anything already in <repo-dir> (e.g. a
+#     package pushed to gh-pages by someone without the signing key) is removed
+#     instead of being signed.
+#   - Every .deb must be listed in the release's checksums.txt with a matching
+#     SHA-256, or the script fails.
+#   - Signing requires the key whose fingerprint is SIGNING_KEY_FPR to be in
+#     the keyring; there is no unsigned fallback. The signature is checked with
+#     gpgv against the committed keys/halpradio-archive-keyring.gpg, and only
+#     that committed keyring is published (never a key exported from the CI
+#     keyring).
+#   - Release carries Valid-Until (APT_VALID_DAYS, default 14 days after
+#     Date), so apt refuses a stale or replayed index once it expires. The
+#     repository must therefore be re-signed at least that often, not only
+#     when a release is made.
 # ==============================================================================
 
 set -euo pipefail
 
 DEB_SRC_DIR="${1:-dist}"
 REPO_DIR="${2:-apt-repo}"
+CHECKSUMS_FILE="${CHECKSUMS_FILE:-${DEB_SRC_DIR}/checksums.txt}"
+SIGNING_KEY_FPR="${SIGNING_KEY_FPR:-}"
+APT_VALID_DAYS="${APT_VALID_DAYS:-14}"
+PUBLIC_KEYRING="keys/halpradio-archive-keyring.gpg"
+PUBLIC_KEY_ASC="keys/halpradio.pub.asc"
 
-echo "📦 Initializing APT repository in: ${REPO_DIR}"
+die() {
+  echo "❌ $*" >&2
+  exit 1
+}
+
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+[[ "${SIGNING_KEY_FPR}" =~ ^[0-9A-F]{40}$ ]] ||
+  die "SIGNING_KEY_FPR must be the 40-hex-digit (upper case) fingerprint of the APT signing key"
+[[ "${APT_VALID_DAYS}" =~ ^[1-9][0-9]?$ ]] ||
+  die "APT_VALID_DAYS must be a whole number of days from 1 to 99"
+[ -f "${CHECKSUMS_FILE}" ] || die "checksums file not found: ${CHECKSUMS_FILE}"
+[ -f "${PUBLIC_KEYRING}" ] || die "public keyring not found: ${PUBLIC_KEYRING} (run from the repository root)"
+gpg --batch --list-secret-keys "${SIGNING_KEY_FPR}" >/dev/null 2>&1 ||
+  die "secret key ${SIGNING_KEY_FPR} is not in the keyring; refusing to build an unsigned repository"
+
+shopt -s nullglob
+new_debs=("${DEB_SRC_DIR}"/*.deb)
+shopt -u nullglob
+[ "${#new_debs[@]}" -gt 0 ] || die "no .deb packages found in ${DEB_SRC_DIR}"
+
+# Verify every package against the release checksums before it goes anywhere.
+for deb in "${new_debs[@]}"; do
+  name="$(basename "${deb}")"
+  [[ "${name}" =~ ^[A-Za-z0-9._+~-]+\.deb$ ]] || die "unexpected package file name: ${name}"
+  expected="$(awk -v f="${name}" '$2 == f || $2 == "*" f { print $1 }' "${CHECKSUMS_FILE}")"
+  [[ "${expected}" =~ ^[0-9a-f]{64}$ ]] || die "${name} is not listed (exactly once) in ${CHECKSUMS_FILE}"
+  actual="$(sha256_of "${deb}")"
+  [ "${actual}" = "${expected}" ] || die "SHA-256 mismatch for ${name}: expected ${expected}, got ${actual}"
+  echo "✅ ${name} matches ${CHECKSUMS_FILE}"
+done
+
+echo "📦 Rebuilding APT repository in: ${REPO_DIR}"
+mkdir -p "${REPO_DIR}"
+# Drop everything previously served from the pool and indexes; only this
+# release's verified packages are indexed and signed below.
+rm -rf "${REPO_DIR}/pool" "${REPO_DIR}/dists"
 mkdir -p "${REPO_DIR}/pool/main"
 mkdir -p "${REPO_DIR}/dists/stable/main/binary-amd64"
 mkdir -p "${REPO_DIR}/dists/stable/main/binary-arm64"
 
-# Copy newly built deb packages to pool/main
-if compgen -G "${DEB_SRC_DIR}/*.deb" > /dev/null; then
-  echo "📥 Copying deb packages from ${DEB_SRC_DIR} to ${REPO_DIR}/pool/main/..."
-  cp -v "${DEB_SRC_DIR}"/*.deb "${REPO_DIR}/pool/main/"
-else
-  echo "ℹ️  No new deb packages found in ${DEB_SRC_DIR}, proceeding with existing pool..."
-fi
+echo "📥 Copying verified deb packages to ${REPO_DIR}/pool/main/..."
+cp -v "${new_debs[@]}" "${REPO_DIR}/pool/main/"
 
 # Run metadata indexing via Python (zero external dependencies required)
-python3 - "${REPO_DIR}" << 'EOF'
+python3 - "${REPO_DIR}" "${APT_VALID_DAYS}" << 'EOF'
 import os
 import sys
 import io
 import gzip
 import tarfile
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 repo_dir = sys.argv[1]
 pool_dir = os.path.join(repo_dir, "pool", "main")
@@ -101,8 +164,8 @@ for deb in sorted(deb_files):
     try:
         ctl, md5, sha1, sha256, file_size = parse_ar_deb(deb_path)
     except Exception as e:
-        print(f"⚠️ Error parsing {deb}: {e}")
-        continue
+        print(f"❌ Error parsing {deb}: {e}")
+        sys.exit(1)
 
     # Extract Architecture
     arch = None
@@ -157,7 +220,10 @@ def file_hashes(rel_path):
         hashlib.sha256(data).hexdigest()
     )
 
-date_str = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S UTC")
+valid_days = int(sys.argv[2])
+now = datetime.now(timezone.utc)
+date_str = now.strftime("%a, %d %b %Y %H:%M:%S UTC")
+valid_until_str = (now + timedelta(days=valid_days)).strftime("%a, %d %b %Y %H:%M:%S UTC")
 
 release_content = [
     "Origin: halpradio",
@@ -169,6 +235,7 @@ release_content = [
     "Components: main",
     "Description: halpradio Official APT Repository",
     f"Date: {date_str}",
+    f"Valid-Until: {valid_until_str}",
     "MD5Sum:"
 ]
 
@@ -193,30 +260,27 @@ with open(release_path, "w", encoding="utf-8") as f:
 print(f"✅ Generated {release_path}")
 EOF
 
-# Copy repository keyring / public keys
-if [ -f "keys/halpradio-archive-keyring.gpg" ]; then
-  cp "keys/halpradio-archive-keyring.gpg" "${REPO_DIR}/halpradio-archive-keyring.gpg"
-fi
-if [ -f "keys/halpradio.pub.asc" ]; then
-  cp "keys/halpradio.pub.asc" "${REPO_DIR}/KEY.gpg"
+# Publish only the committed public key material.
+cp "${PUBLIC_KEYRING}" "${REPO_DIR}/halpradio-archive-keyring.gpg"
+if [ -f "${PUBLIC_KEY_ASC}" ]; then
+  cp "${PUBLIC_KEY_ASC}" "${REPO_DIR}/KEY.gpg"
 fi
 
-# GPG Signing
-KEY_ID=$(gpg --list-secret-keys --with-colons 2>/dev/null | grep '^sec' | cut -d: -f5 | head -n 1 || true)
-if [ -n "${KEY_ID}" ]; then
-  echo "🔏 Signing Release file with GPG Key ID: ${KEY_ID}"
-  gpg --batch --yes --armor --detach-sign --default-key "${KEY_ID}" \
-    -o "${REPO_DIR}/dists/stable/Release.gpg" "${REPO_DIR}/dists/stable/Release"
-  gpg --batch --yes --clearsign --default-key "${KEY_ID}" \
-    -o "${REPO_DIR}/dists/stable/InRelease" "${REPO_DIR}/dists/stable/Release"
+# GPG Signing with exactly the expected key (gpg picks its signing subkey);
+# any other key that happens to be in the keyring is never used.
+echo "🔏 Signing Release file with key ${SIGNING_KEY_FPR}"
+gpg --batch --yes --armor --detach-sign --local-user "${SIGNING_KEY_FPR}" \
+  -o "${REPO_DIR}/dists/stable/Release.gpg" "${REPO_DIR}/dists/stable/Release"
+gpg --batch --yes --clearsign --local-user "${SIGNING_KEY_FPR}" \
+  -o "${REPO_DIR}/dists/stable/InRelease" "${REPO_DIR}/dists/stable/Release"
 
-  # Export public keys directly from keyring into repo root
-  gpg --batch --yes --armor --export "${KEY_ID}" > "${REPO_DIR}/KEY.gpg"
-  gpg --batch --yes --export "${KEY_ID}" > "${REPO_DIR}/halpradio-archive-keyring.gpg"
-  echo "✅ InRelease and Release.gpg created and signed."
-else
-  echo "ℹ️  No GPG secret key found in local keyring. Using static public keys from keys/."
-fi
+# Prove that what we publish verifies against the keyring users install.
+gpgv --keyring "${PWD}/${PUBLIC_KEYRING}" \
+  "${REPO_DIR}/dists/stable/Release.gpg" "${REPO_DIR}/dists/stable/Release" ||
+  die "Release.gpg does not verify against ${PUBLIC_KEYRING}"
+gpgv --keyring "${PWD}/${PUBLIC_KEYRING}" "${REPO_DIR}/dists/stable/InRelease" ||
+  die "InRelease does not verify against ${PUBLIC_KEYRING}"
+echo "✅ InRelease and Release.gpg created and verified against ${PUBLIC_KEYRING}."
 
 # Generate stylish index.html landing page for GitHub Pages
 cat > "${REPO_DIR}/index.html" << 'EOF'

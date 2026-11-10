@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/halpworld/halpradio/pkg/radio/netguard"
 )
 
 const (
@@ -50,11 +52,24 @@ type Client struct {
 	LRCLibBaseURL  string // default "https://lrclib.net"
 	NetEaseBaseURL string // default "https://music.163.com"
 	HTTPClient     *http.Client
+	// DisableNetEase skips the NetEase Cloud Music fallback, so track titles
+	// are only sent to LRCLIB.
+	DisableNetEase bool
+
+	// limiter throttles lookups per provider; nil (a zero-value Client)
+	// means no throttle.
+	limiter *netguard.Limiter
+
+	failMu   sync.Mutex
+	failures map[string]time.Time
+	inflight map[string]*fetchCall // guarded by failMu
 
 	cacheDir string
 	mem      *memCache
 	memOnce  sync.Once
 	diskMu   sync.Mutex
+	// diskWrites counts cache writes (guarded by diskMu) to pace pruning.
+	diskWrites int
 }
 
 // NewClient returns a Client caching sheets under cacheDir (created lazily).
@@ -63,7 +78,8 @@ func NewClient(cacheDir string) *Client {
 	return &Client{
 		LRCLibBaseURL:  DefaultLRCLibBaseURL,
 		NetEaseBaseURL: DefaultNetEaseBaseURL,
-		HTTPClient:     &http.Client{Timeout: DefaultTimeout},
+		HTTPClient:     netguard.NewClient(DefaultTimeout),
+		limiter:        netguard.NewLimiter(limiterBurst, limiterInterval),
 		cacheDir:       strings.TrimSpace(cacheDir),
 		mem:            newMemCache(memCapacity, memTTL, negativeTTL),
 	}
@@ -85,7 +101,12 @@ func (c *Client) CacheDir() string {
 //
 // When every provider failed to answer at all (network or server errors) the
 // returned error wraps those failures instead of ErrNotFound, and the outcome
-// is not negatively cached.
+// is not negatively cached; the same key is not retried for failureTTL.
+//
+// Track titles go to third parties, so lookups are throttled per provider
+// (limiterBurst at once, then one per limiterInterval; a throttled provider
+// counts as a failure) and concurrent calls for one key share one round.
+// Everything a provider returns is sanitized before it is cached or returned.
 func (c *Client) Fetch(ctx context.Context, artist, title, album string, duration time.Duration) (*Sheet, error) {
 	if c == nil {
 		return nil, ErrNotFound
@@ -115,19 +136,91 @@ func (c *Client) Fetch(ctx context.Context, artist, title, album string, duratio
 		return sheet.clone(), nil
 	}
 
+	// A key whose providers all failed a moment ago is not retried yet, so
+	// a flapping title cannot turn into a request loop.
+	if c.recentlyFailed(key) {
+		return nil, fmt.Errorf("lyrics: providers failed recently; retry later")
+	}
+
+	// Concurrent lookups of the same key share one provider round.
+	call, leader := c.joinInflight(key)
+	if !leader {
+		select {
+		case <-call.done:
+			if call.sheet != nil {
+				return call.sheet.clone(), nil
+			}
+			return nil, call.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	sheet, err := c.fetchProviders(ctx, key, artist, title, album, duration, queryArtist, queryTitle, queryAlbum)
+	c.finishInflight(key, call, sheet, err)
+	if sheet != nil {
+		return sheet.clone(), nil
+	}
+	return nil, err
+}
+
+// fetchCall is one in-flight provider round that concurrent Fetch calls for
+// the same key wait on.
+type fetchCall struct {
+	done  chan struct{}
+	sheet *Sheet
+	err   error
+}
+
+func (c *Client) joinInflight(key string) (*fetchCall, bool) {
+	c.failMu.Lock()
+	defer c.failMu.Unlock()
+	if call, ok := c.inflight[key]; ok {
+		return call, false
+	}
+	if c.inflight == nil {
+		c.inflight = make(map[string]*fetchCall)
+	}
+	call := &fetchCall{done: make(chan struct{})}
+	c.inflight[key] = call
+	return call, true
+}
+
+func (c *Client) finishInflight(key string, call *fetchCall, sheet *Sheet, err error) {
+	c.failMu.Lock()
+	delete(c.inflight, key)
+	c.failMu.Unlock()
+	if sheet != nil {
+		call.sheet = sheet.clone()
+	}
+	call.err = err
+	close(call.done)
+}
+
+// fetchProviders asks the providers in order and caches the outcome.
+func (c *Client) fetchProviders(ctx context.Context, key, artist, title, album string, duration time.Duration, queryArtist, queryTitle, queryAlbum string) (*Sheet, error) {
 	var failures []error
+	allowed := map[string]bool{}
+	allow := func(provider string) bool {
+		if v, ok := allowed[provider]; ok {
+			return v
+		}
+		v := c.limiter.Allow(provider)
+		allowed[provider] = v
+		return v
+	}
 
 	providers := []struct {
-		name string
-		run  func() (*Sheet, error)
+		name     string
+		provider string
+		run      func() (*Sheet, error)
 	}{
-		{"lrclib.get", func() (*Sheet, error) {
+		{"lrclib.get", "lrclib", func() (*Sheet, error) {
 			return c.lrclibGet(ctx, queryArtist, queryTitle, queryAlbum, duration)
 		}},
-		{"lrclib.search", func() (*Sheet, error) {
+		{"lrclib.search", "lrclib", func() (*Sheet, error) {
 			return c.lrclibSearch(ctx, queryArtist, queryTitle, duration)
 		}},
-		{"netease", func() (*Sheet, error) {
+		{"netease", "netease", func() (*Sheet, error) {
 			return c.netEase(ctx, queryArtist, queryTitle, duration)
 		}},
 	}
@@ -135,6 +228,15 @@ func (c *Client) Fetch(ctx context.Context, artist, title, album string, duratio
 	for _, p := range providers {
 		if err := ctx.Err(); err != nil {
 			return nil, err
+		}
+		if p.provider == "netease" && c.DisableNetEase {
+			continue
+		}
+		if !allow(p.provider) {
+			// Throttled: count it as a failure so the miss is not
+			// negatively cached.
+			failures = append(failures, fmt.Errorf("%s: throttled", p.name))
+			continue
 		}
 
 		sheet, err := p.run()
@@ -147,6 +249,7 @@ func (c *Client) Fetch(ctx context.Context, artist, title, album string, duratio
 		}
 
 		applyRequestMetadata(sheet, artist, title, album, duration)
+		sanitizeSheet(sheet)
 		c.memCacheRef().putSheet(key, sheet)
 		c.writeDisk(key, sheet)
 		return sheet.clone(), nil
@@ -155,11 +258,37 @@ func (c *Client) Fetch(ctx context.Context, artist, title, album string, duratio
 	if len(failures) > 0 {
 		// Do not remember a negative result that was caused by a transport or
 		// server failure rather than by a genuine miss.
+		c.markFailed(key)
 		return nil, fmt.Errorf("lyrics: no provider answered: %w", errors.Join(failures...))
 	}
 
 	c.memCacheRef().putNegative(key)
 	return nil, ErrNotFound
+}
+
+// recentlyFailed reports whether every provider failed for key within
+// failureTTL.
+func (c *Client) recentlyFailed(key string) bool {
+	c.failMu.Lock()
+	defer c.failMu.Unlock()
+	at, ok := c.failures[key]
+	if !ok {
+		return false
+	}
+	if time.Since(at) > failureTTL {
+		delete(c.failures, key)
+		return false
+	}
+	return true
+}
+
+func (c *Client) markFailed(key string) {
+	c.failMu.Lock()
+	defer c.failMu.Unlock()
+	if c.failures == nil || len(c.failures) >= maxFailures {
+		c.failures = make(map[string]time.Time)
+	}
+	c.failures[key] = time.Now()
 }
 
 // applyRequestMetadata fills in any metadata the provider did not report,
@@ -194,7 +323,7 @@ func (c *Client) httpClient() *http.Client {
 	if c.HTTPClient != nil {
 		return c.HTTPClient
 	}
-	return &http.Client{Timeout: DefaultTimeout}
+	return netguard.NewClient(DefaultTimeout)
 }
 
 func (c *Client) lrclibBase() string {
@@ -214,7 +343,7 @@ func (c *Client) netEaseBase() string {
 // getJSON performs a GET request and decodes the JSON body into out. A 404 or
 // 204 response yields errNoMatch; an undecodable body yields errBadShape.
 func (c *Client) getJSON(ctx context.Context, rawURL string, headers map[string]string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	req, err := http.NewRequestWithContext(netguard.WithOrigin(ctx, rawURL), http.MethodGet, rawURL, nil)
 	if err != nil {
 		return err
 	}
@@ -236,7 +365,11 @@ func (c *Client) getJSON(ctx context.Context, rawURL string, headers map[string]
 		return fmt.Errorf("lyrics: %s returned HTTP %d", req.URL.Host, resp.StatusCode)
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	body, err := netguard.ReadLimited(resp.Body, maxBodyBytes)
+	if err != nil {
+		return fmt.Errorf("%w: %v", errBadShape, err)
+	}
+	if err := json.Unmarshal(body, out); err != nil {
 		return fmt.Errorf("%w: %v", errBadShape, err)
 	}
 	return nil
@@ -280,16 +413,16 @@ func (t lrcLibTrack) toSheet() *Sheet {
 	if t.Instrumental {
 		sheet.Instrumental = true
 		sheet.Lines = []Line{{Text: InstrumentalMarker}}
-		return sheet
+		return sanitizeSheet(sheet)
 	}
 	if lines := ParseLRC(t.SyncedLyrics); len(lines) > 0 {
 		sheet.Lines = lines
 		sheet.Synced = true
-		return sheet
+		return sanitizeSheet(sheet)
 	}
 	if lines := plainToLines(t.PlainLyrics); len(lines) > 0 {
 		sheet.Lines = lines
-		return sheet
+		return sanitizeSheet(sheet)
 	}
 	return nil
 }
@@ -346,6 +479,9 @@ func (c *Client) lrclibSearch(ctx context.Context, artist, title string, duratio
 		return nil, err
 	}
 
+	if len(candidates) > maxSearchCandidates {
+		candidates = candidates[:maxSearchCandidates]
+	}
 	best := pickLRCLibCandidate(candidates, duration)
 	if best == nil {
 		return nil, nil
@@ -451,7 +587,11 @@ func (c *Client) netEase(ctx context.Context, artist, title string, duration tim
 		return nil, err
 	}
 
-	song := pickNetEaseSong(search.Result.Songs, artist, title, duration)
+	songs := search.Result.Songs
+	if len(songs) > maxSearchCandidates {
+		songs = songs[:maxSearchCandidates]
+	}
+	song := pickNetEaseSong(songs, artist, title, duration)
 	if song == nil {
 		return nil, nil
 	}
@@ -489,11 +629,11 @@ func (c *Client) netEase(ctx context.Context, artist, title string, duration tim
 	if lines := ParseLRC(raw); len(lines) > 0 && lines[len(lines)-1].At > 0 {
 		sheet.Lines = lines
 		sheet.Synced = true
-		return sheet, nil
+		return sanitizeSheet(sheet), nil
 	}
 	if lines := plainToLines(raw); len(lines) > 0 {
 		sheet.Lines = lines
-		return sheet, nil
+		return sanitizeSheet(sheet), nil
 	}
 	return nil, nil
 }

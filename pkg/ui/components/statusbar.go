@@ -5,9 +5,14 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/halpworld/halpradio/pkg/theme"
+	"github.com/halpworld/halpradio/pkg/util"
 )
 
 func RenderStatusBar(searchQuery string, message string, activeTab int, width int, th theme.Theme, activeTuner ...bool) string {
+	// Status lines are built from station names, ICY titles, plugin and
+	// party messages and error text, so the sink sanitizes them all (TTY-9).
+	searchQuery = util.SanitizeDisplay(searchQuery, 200)
+	message = util.SanitizeDisplay(message, 500)
 	if searchQuery != "" {
 		searchStyle := lipgloss.NewStyle().
 			Background(th.Highlight).

@@ -25,15 +25,15 @@ func (m Model) View() string {
 		height = 24
 	}
 
-	if m.ShowWhichKey {
+	// One priority order for drawing and for keys (see activeModal).
+	switch m.activeModal() {
+	case modalApproval:
+		return artClear + components.RenderPermissionApproval(m.approvalInput(), m.Theme)
+	case modalWhichKey:
 		return artClear + components.RenderWhichKeyOverlay(width, height, m.Theme)
-	}
-
-	if m.ShowPRExport {
+	case modalPRExport:
 		return artClear + components.RenderPRExportModal(m.ExportStation, width, height, m.Theme)
-	}
-
-	if m.ShowArtModal {
+	case modalArt:
 		return artClear + components.RenderAlbumArtModal(components.AlbumArtModalInput{
 			Cover:      m.Cover,
 			Lines:      m.ArtLines,
@@ -44,9 +44,7 @@ func (m Model) View() string {
 			Width:      width,
 			Height:     height,
 		}, m.Theme)
-	}
-
-	if m.ShowThemePicker {
+	case modalThemePicker:
 		installed := theme.GetAllThemes()
 		cursor := m.ThemeCursor
 		if m.ThemeModalTab == 1 {
@@ -65,13 +63,9 @@ func (m Model) View() string {
 			height,
 			m.Theme,
 		)
-	}
-
-	if m.ShowAddModal {
+	case modalAdd:
 		return artClear + components.RenderAddStationModal(m.AddInputs, m.AddFocusIdx, m.AddErrMsg, width, height, m.Theme)
-	}
-
-	if m.ShowTimerModal {
+	case modalTimer:
 		return artClear + components.RenderTimerModal(
 			m.Timer,
 			m.TimerModalScreen,
@@ -85,9 +79,7 @@ func (m Model) View() string {
 			height,
 			m.Theme,
 		)
-	}
-
-	if m.ShowEQModal {
+	case modalEQ:
 		in := components.EqualizerModalInput{
 			Settings:     m.DSP,
 			SelectedBand: m.EQBand,
@@ -100,9 +92,7 @@ func (m Model) View() string {
 			in.MeterLUFS, in.MeterGainDB, in.MeterOK = m.Player.DSPMeter()
 		}
 		return artClear + components.RenderEqualizerModal(in, m.Theme)
-	}
-
-	if m.ShowPartyModal {
+	case modalParty:
 		return artClear + components.RenderPartyManagerModal(
 			m.PartySession,
 			m.PartyModalScreen,
@@ -114,13 +104,7 @@ func (m Model) View() string {
 			height,
 			m.Theme,
 		)
-	}
-
-	if m.ShowPermissionApproval {
-		return artClear + components.RenderPermissionApprovalModal(m.ApprovalPlugin, width, height, m.Theme)
-	}
-
-	if m.ShowPluginModal {
+	case modalPlugin:
 		var installed []plugin.PluginInfo
 		if m.PluginMgr != nil {
 			installed = m.PluginMgr.GetPlugins()
@@ -129,15 +113,13 @@ func (m Model) View() string {
 			installed,
 			m.PluginRegistryList,
 			m.PluginModalTab,
-			m.PluginCursor,
+			m.pluginCursorFor(installed),
 			m.PluginStatusMsg,
 			width,
 			height,
 			m.Theme,
 		)
-	}
-
-	if m.ShowDJModal {
+	case modalDJ:
 		activeLabel := ""
 		if m.DJ != nil {
 			activeLabel = m.DJ.EngineLabel()
@@ -172,9 +154,9 @@ func (m Model) View() string {
 	var playerBarView string
 	if m.PartySession != nil && m.PartySession.IsActive() {
 		playerBarView = components.RenderPartyBar(
-			m.PartySession.RoomCode(),
+			m.PartySession.Invite(),
 			m.PartySession.RoomName(),
-			m.PartySession.HostNickname(),
+			components.SessionHostLabel(m.PartySession),
 			m.PartySession.IsHost(),
 			m.PartySession.DJPass(),
 			m.PartySession.PeerCount(),
@@ -208,7 +190,7 @@ func (m Model) View() string {
 	}
 	playerBarHeight := lipgloss.Height(playerBarView)
 
-	statusBarView := components.RenderStatusBar(m.SearchQuery, m.StatusMessage, m.ActiveTab, width, m.Theme, isTunerActive)
+	statusBarView := components.RenderStatusBar(m.SearchQuery, m.statusLine(), m.ActiveTab, width, m.Theme, isTunerActive)
 	statusBarHeight := lipgloss.Height(statusBarView)
 
 	var djBannerView string

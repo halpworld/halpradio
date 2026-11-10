@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/halpworld/halpradio/pkg/debuglog"
 	"github.com/halpworld/halpradio/pkg/desktop"
 	"github.com/halpworld/halpradio/pkg/party"
 	"github.com/halpworld/halpradio/pkg/util"
@@ -70,6 +72,70 @@ func TestPartyJoinValidation(t *testing.T) {
 	_, _, err = RunParty([]string{"join", "123"}, nil, buf)
 	if err == nil {
 		t.Errorf("expected error when joining with short room code")
+	}
+
+	// 3. Legacy 6-character code from protocol v1: readable error, no IPC.
+	buf.Reset()
+	_, _, err = RunParty([]string{"join", "8X2K9P"}, nil, buf)
+	if !errors.Is(err, party.ErrLegacyRoomCode) {
+		t.Errorf("expected ErrLegacyRoomCode for a 6-character code, got %v", err)
+	}
+	if !strings.Contains(buf.String(), "older halpradio") {
+		t.Errorf("expected a readable legacy-code message, got: %s", buf.String())
+	}
+
+	// 4. Custom code on create is validated as well.
+	buf.Reset()
+	_, _, err = RunParty([]string{"create", "--code", "8X2K9P"}, nil, buf)
+	if !errors.Is(err, party.ErrLegacyRoomCode) {
+		t.Errorf("expected create --code to reject a legacy code, got %v", err)
+	}
+}
+
+// LOC-4: the room code is the room secret and must not reach the debug log.
+func TestPartyAppDoesNotLogRoomCode(t *testing.T) {
+	logFile := filepath.Join(t.TempDir(), "debug.log")
+	if _, err := debuglog.Init(logFile); err != nil {
+		t.Fatalf("debuglog.Init: %v", err)
+	}
+	defer debuglog.Close()
+
+	cfg := util.DefaultConfig()
+	cfg.SongNotifications = false
+	cfg.IPCEnabled = false
+	cfg.MPRISEnabled = false
+	cfg.DiscordRPC = false
+	cfg.PlayerBackend = "mock"
+
+	code := party.GenerateRoomCode()
+	appInst, err := setupPartyApp(party.SessionConfig{RoomCode: code, IsHost: true}, []byte("stations: []\n"), cfg, new(bytes.Buffer))
+	if err != nil {
+		t.Fatalf("setupPartyApp failed: %v", err)
+	}
+	if appInst.Player != nil {
+		_ = appInst.Player.Close()
+	}
+	if appInst.Desktop != nil {
+		_ = appInst.Desktop.Close()
+	}
+	if appInst.PluginMgr != nil {
+		_ = appInst.PluginMgr.Close()
+	}
+	if appInst.PartySession != nil {
+		_ = appInst.PartySession.Close()
+	}
+	debuglog.Close()
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("reading debug log: %v", err)
+	}
+	stripped := strings.ReplaceAll(code, "-", "")
+	if strings.Contains(string(data), code) || strings.Contains(string(data), stripped) {
+		t.Fatalf("room code written to debug log:\n%s", data)
+	}
+	if !strings.Contains(string(data), "party app started") {
+		t.Fatalf("expected the party start line in the debug log, got:\n%s", data)
 	}
 }
 
@@ -246,7 +312,7 @@ stations:
 	_ = listener.Close()
 
 	sessionCfg := party.SessionConfig{
-		RoomCode: "7K9P2X",
+		RoomCode: "7k9p2xqmhf4dwnr8",
 		RoomName: "dev-sync",
 		Nickname: "test-dj",
 		IsHost:   true,
@@ -277,8 +343,8 @@ stations:
 	if appInst.PartySession == nil {
 		t.Fatalf("expected PartySession to be initialized on appInst")
 	}
-	if appInst.PartySession.RoomCode() != "7K9P2X" {
-		t.Errorf("expected room code 7K9P2X, got %s", appInst.PartySession.RoomCode())
+	if appInst.PartySession.RoomCode() != "7K9P-2XQM-HF4D-WNR8" {
+		t.Errorf("expected room code 7K9P-2XQM-HF4D-WNR8, got %s", appInst.PartySession.RoomCode())
 	}
 	if !appInst.PartySession.IsHost() {
 		t.Errorf("expected appInst to be room host")

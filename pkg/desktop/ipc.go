@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -16,64 +15,55 @@ import (
 	"github.com/halpworld/halpradio/pkg/util"
 )
 
-// SanitizeString strips ASCII control characters (including ANSI CSI & OSC escape codes) and limits max length.
+// SanitizeString makes untrusted text safe for terminals, IPC payloads and
+// Discord fields. ESC-introduced sequences (CSI, OSC, two-byte escapes) are
+// removed whole so their parameters do not leak as text; everything else is
+// delegated to util.SanitizeDisplay (C0/C1 controls, DEL, bidi and
+// zero-width format runes dropped, whitespace collapsed, capped at maxLen
+// runes).
 func SanitizeString(s string, maxLen int) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return ""
-	}
+	return util.SanitizeDisplay(stripEscapeSequences(s), maxLen)
+}
 
+// stripEscapeSequences removes 7-bit ESC-introduced control sequences.
+func stripEscapeSequences(s string) string {
+	if !strings.Contains(s, "\x1b") {
+		return s
+	}
 	var b strings.Builder
 	b.Grow(len(s))
-
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if c == 0x1b { // ESC
-			if i+1 < len(s) {
-				next := s[i+1]
-				if next == '[' { // CSI sequence: \x1b[ ... [A-Za-z]
-					i += 2
-					for i < len(s) && (s[i] < 'A' || (s[i] > 'Z' && s[i] < 'a') || s[i] > 'z') {
-						i++
-					}
-					continue
-				} else if next == ']' { // OSC sequence: \x1b] ... (BEL \x07 or ST \x1b\\)
-					i += 2
-					for i < len(s) {
-						if s[i] == 0x07 {
-							break
-						}
-						if s[i] == 0x1b && i+1 < len(s) && s[i+1] == '\\' {
-							i++
-							break
-						}
-						i++
-					}
-					continue
-				} else {
-					// 2-byte escape sequence: \x1b<char>
-					i++
-					continue
-				}
+		if c != 0x1b {
+			b.WriteByte(c)
+			continue
+		}
+		if i+1 >= len(s) {
+			continue
+		}
+		switch s[i+1] {
+		case '[': // CSI: ESC [ params final-byte
+			i += 2
+			for i < len(s) && (s[i] < 0x40 || s[i] > 0x7e) {
+				i++
 			}
-			continue
+		case ']', 'P', '_', '^': // OSC / DCS / APC / PM: up to BEL or ST
+			i += 2
+			for i < len(s) {
+				if s[i] == 0x07 {
+					break
+				}
+				if s[i] == 0x1b && i+1 < len(s) && s[i+1] == '\\' {
+					i++
+					break
+				}
+				i++
+			}
+		default: // two-byte escape
+			i++
 		}
-
-		// Strip ASCII control characters (0x00 - 0x1F except printable, and 0x7F DEL)
-		if c < 0x20 || c == 0x7f {
-			continue
-		}
-		b.WriteByte(c)
 	}
-
-	res := b.String()
-	if maxLen > 0 {
-		runes := []rune(res)
-		if len(runes) > maxLen {
-			res = string(runes[:maxLen])
-		}
-	}
-	return strings.TrimSpace(res)
+	return b.String()
 }
 
 // PartyInfo holds snapshot state for party listening rooms.
@@ -147,29 +137,65 @@ type ActionHandler func(action MediaAction) (*PlaybackInfo, error)
 // PayloadActionHandler processes an action with optional payload and returns the current playback state.
 type PayloadActionHandler func(action MediaAction, payload string) (*PlaybackInfo, error)
 
+// ErrIPCAlreadyRunning is returned by StartIPCServer when another live
+// halpradio instance already answers on the socket path. The existing socket is
+// left alone instead of being unlinked and taken over.
+var ErrIPCAlreadyRunning = errors.New("another halpradio instance is already listening on the IPC socket")
+
+// maxIPCConns bounds concurrently served IPC connections.
+const maxIPCConns = 16
+
 // IPCServer provides local Unix socket IPC for CLI and media key control.
 type IPCServer struct {
 	mu             sync.Mutex
 	listener       net.Listener
 	socketPath     string
+	socketInfo     os.FileInfo // identity of the socket we created, for Close
 	handler        ActionHandler
 	payloadHandler PayloadActionHandler
 	closed         bool
+	sem            chan struct{}
 }
 
-// GetDefaultSocketPath returns the standard path for the halpradio IPC socket.
+// GetDefaultSocketPath returns the standard path for the halpradio IPC socket,
+// or "" when no per-user config directory is available. There is deliberately
+// no fallback to a shared temp directory.
 func GetDefaultSocketPath() string {
 	configDir := util.GetConfigDir()
-	if configDir != "" {
-		_ = os.MkdirAll(configDir, 0700)
-		return filepath.Join(configDir, "ipc.sock")
+	if configDir == "" {
+		return ""
 	}
+	_ = os.MkdirAll(configDir, 0700)
+	return filepath.Join(configDir, "ipc.sock")
+}
 
-	tempDir := os.TempDir()
-	if runtime.GOOS != "windows" {
-		return filepath.Join(tempDir, fmt.Sprintf("halpradio-%d.sock", os.Getuid()))
+// prepareSocketPath makes socketPath free for a new listener without ever
+// hijacking a live instance: a socket that accepts a connection means another
+// halpradio is running (ErrIPCAlreadyRunning); a dead socket owned by the
+// current user is removed; anything else (regular file, symlink, foreign
+// owner) is refused.
+func prepareSocketPath(socketPath string) error {
+	fi, err := os.Lstat(socketPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
 	}
-	return filepath.Join(tempDir, "halpradio-ipc.sock")
+	if err != nil {
+		return fmt.Errorf("inspect socket %s: %w", socketPath, err)
+	}
+	if fi.Mode()&os.ModeSocket == 0 {
+		return fmt.Errorf("refusing to replace %s: not a socket (%s)", socketPath, fi.Mode().Type())
+	}
+	if !isOwnedByCurrentUser(fi) {
+		return fmt.Errorf("refusing to replace %s: socket is owned by another user", socketPath)
+	}
+	if conn, err := net.DialTimeout("unix", socketPath, 200*time.Millisecond); err == nil {
+		_ = conn.Close()
+		return ErrIPCAlreadyRunning
+	}
+	if err := os.Remove(socketPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove stale socket %s: %w", socketPath, err)
+	}
+	return nil
 }
 
 // StartIPCServerWithPayload starts listening on the specified socket path with a PayloadActionHandler.
@@ -177,22 +203,31 @@ func StartIPCServerWithPayload(socketPath string, handler PayloadActionHandler) 
 	if socketPath == "" {
 		socketPath = GetDefaultSocketPath()
 	}
+	if socketPath == "" {
+		return nil, errors.New("no per-user config directory for the IPC socket")
+	}
+	if err := checkSocketDir(filepath.Dir(socketPath)); err != nil {
+		return nil, err
+	}
+	if err := prepareSocketPath(socketPath); err != nil {
+		return nil, err
+	}
 
-	// Remove stale socket if present
-	_ = os.Remove(socketPath)
-
-	listener, err := net.Listen("unix", socketPath)
+	// listenPrivate creates the socket with owner-only permissions from the
+	// start (bound inside a fresh 0700 directory, then renamed into place on
+	// Unix), so there is no window with a permissive mode.
+	listener, err := listenPrivate(socketPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to listen on socket %s: %w", socketPath, err)
 	}
-
-	// Restrict socket permissions so only the owner process can connect
-	_ = os.Chmod(socketPath, 0600)
+	info, _ := os.Lstat(socketPath)
 
 	server := &IPCServer{
 		listener:       listener,
 		socketPath:     socketPath,
+		socketInfo:     info,
 		payloadHandler: handler,
+		sem:            make(chan struct{}, maxIPCConns),
 	}
 
 	go server.serve()
@@ -211,19 +246,47 @@ func StartIPCServer(socketPath string, handler ActionHandler) (*IPCServer, error
 }
 
 func (s *IPCServer) serve() {
+	var backoff time.Duration
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
 			s.mu.Lock()
 			closed := s.closed
 			s.mu.Unlock()
-			if closed {
+			if closed || errors.Is(err, net.ErrClosed) {
 				return
 			}
+			// Persistent errors (EMFILE, ...) must not spin a core: back off
+			// exponentially from 5 ms up to 1 s, as net/http does.
+			if backoff == 0 {
+				backoff = 5 * time.Millisecond
+			} else {
+				backoff *= 2
+			}
+			if backoff > time.Second {
+				backoff = time.Second
+			}
+			time.Sleep(backoff)
+			continue
+		}
+		backoff = 0
+
+		// Only the user who owns this process may drive it.
+		if err := checkPeerCredentials(conn); err != nil {
+			_ = conn.Close()
 			continue
 		}
 
-		go s.handleConn(conn)
+		select {
+		case s.sem <- struct{}{}:
+		default:
+			_ = conn.Close() // too many concurrent clients
+			continue
+		}
+		go func() {
+			defer func() { <-s.sem }()
+			s.handleConn(conn)
+		}()
 	}
 }
 
@@ -307,8 +370,12 @@ func (s *IPCServer) Close() error {
 	if s.listener != nil {
 		err = s.listener.Close()
 	}
+	// Remove the path only if it is still the socket this server created,
+	// so closing never unlinks another instance's socket.
 	if s.socketPath != "" {
-		_ = os.Remove(s.socketPath)
+		if cur, statErr := os.Lstat(s.socketPath); statErr == nil && s.socketInfo != nil && os.SameFile(cur, s.socketInfo) {
+			_ = os.Remove(s.socketPath)
+		}
 	}
 	return err
 }
@@ -322,6 +389,9 @@ func SendIPCCommand(socketPath string, action string) (*IPCResponse, error) {
 func SendIPCCommandWithPayload(socketPath string, action string, payload string) (*IPCResponse, error) {
 	if socketPath == "" {
 		socketPath = GetDefaultSocketPath()
+	}
+	if socketPath == "" {
+		return nil, errors.New("halpradio is not currently running (no config directory)")
 	}
 
 	fi, err := os.Lstat(socketPath)

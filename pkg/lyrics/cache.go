@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/halpworld/halpradio/pkg/radio/netguard"
 )
 
 const (
@@ -268,7 +270,9 @@ func (c *Client) readDisk(key string) *Sheet {
 		return nil
 	}
 
-	sheet := entry.Sheet.toSheet()
+	// The cache file was filled from third-party data (and may predate
+	// sanitising, or have been edited): clean it again on every read.
+	sheet := sanitizeSheet(entry.Sheet.toSheet())
 	if sheet.IsEmpty() {
 		return nil
 	}
@@ -316,4 +320,12 @@ func (c *Client) writeDisk(key string, sheet *Sheet) {
 	if err := os.Rename(tmpName, path); err != nil {
 		_ = os.Remove(tmpName)
 	}
+
+	// Keep the cache bounded: entries older than diskTTL and, beyond
+	// diskMaxBytes, the oldest entries are removed. Checked on the first
+	// write and then every pruneEvery writes.
+	if c.diskWrites%pruneEvery == 0 {
+		netguard.PruneDir(c.cacheDir, diskTTL, diskMaxBytes, ".json")
+	}
+	c.diskWrites++
 }

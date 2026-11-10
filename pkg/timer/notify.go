@@ -10,6 +10,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/halpworld/halpradio/pkg/desktop"
+	"github.com/halpworld/halpradio/pkg/util"
 )
 
 var (
@@ -103,29 +106,24 @@ func RingTerminalBell() {
 }
 
 func defaultDesktopNotification(title, message string) {
+	name, args, ok := desktopNotificationCommand(runtime.GOOS, title, message)
+	if !ok {
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
+	_ = exec.CommandContext(ctx, name, args...).Run()
+}
 
-	switch runtime.GOOS {
-	case "darwin":
-		// macOS AppleScript notification (silent banner without alert sound)
-		script := fmt.Sprintf(`display notification %q with title %q`, message, title)
-		cmd := exec.CommandContext(ctx, "osascript", "-e", script)
-		_ = cmd.Run()
-
-	case "linux":
-		// Linux desktop notification via notify-send (silent hint suppresses sound on notification daemons)
-		cmd := exec.CommandContext(ctx, "notify-send", "-a", "halpradio", "-u", "normal", "-h", "boolean:suppress-sound:true", title, message)
-		_ = cmd.Run()
-
-	case "windows":
-		// Windows PowerShell Toast Notification (silent audio attribute suppresses chime)
-		cleanTitle := strings.ReplaceAll(title, "'", "''")
-		cleanMsg := strings.ReplaceAll(message, "'", "''")
-		psScript := fmt.Sprintf(`[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null; $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02); $textNodes = $template.GetElementsByTagName('text'); $textNodes.Item(0).AppendChild($template.CreateTextNode('%s')) > $null; $textNodes.Item(1).AppendChild($template.CreateTextNode('%s')) > $null; $audio = $template.CreateElement('audio'); $audio.SetAttribute('silent', 'true'); $template.DocumentElement.AppendChild($audio) > $null; $toast = [Windows.UI.Notifications.ToastNotification]::new($template); [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('halpradio').Show($toast);`, cleanTitle, cleanMsg)
-		cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psScript)
-		_ = cmd.Run()
-	}
+// desktopNotificationCommand builds the notification argv through the shared
+// pkg/desktop builder, so timer and song notifications use one code path in
+// which no value is ever interpolated into AppleScript or PowerShell source
+// (osascript "on run argv", notify-send "--" with an escaped body, PowerShell
+// -EncodedCommand with base64-embedded values).
+func desktopNotificationCommand(goos, title, message string) (string, []string, bool) {
+	title = util.SanitizeDisplay(title, 256)
+	message = util.SanitizeDisplay(message, 1024)
+	return desktop.NotificationCommand(goos, title, message)
 }
 
 func defaultCommandHookRunner(hookCmd string, ev Event) {

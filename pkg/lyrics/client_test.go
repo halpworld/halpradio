@@ -107,6 +107,9 @@ func emptyArrayHandler(w http.ResponseWriter, _ *http.Request) {
 func testClient(cacheDir string, lrclib, netease *recordingServer) *Client {
 	c := NewClient(cacheDir)
 	c.HTTPClient = &http.Client{Timeout: 5 * time.Second}
+	// The provider throttle has its own tests; most tests fetch many keys
+	// back to back and would trip it.
+	c.limiter = nil
 	if lrclib != nil {
 		c.LRCLibBaseURL = lrclib.URL
 	} else {
@@ -641,7 +644,12 @@ func TestFetchProviderFailure(t *testing.T) {
 		t.Errorf("error should name the failing providers: %v", err)
 	}
 
-	// A failure is not cached negatively: the next call retries.
+	// A failure is not cached negatively: once the short failure window
+	// (which stops a flapping title from looping) has passed, the next call
+	// retries.
+	c.failMu.Lock()
+	c.failures = nil
+	c.failMu.Unlock()
 	before := lrclib.hits.Load()
 	_, _ = c.Fetch(context.Background(), "Daft Punk", "Voyager", "", 0)
 	if lrclib.hits.Load() == before {

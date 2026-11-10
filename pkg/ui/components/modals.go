@@ -10,6 +10,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/theme"
 	"github.com/halpworld/halpradio/pkg/timer"
+	"github.com/halpworld/halpradio/pkg/util"
 )
 
 func RenderPRExportModal(st radio.Station, width int, height int, th theme.Theme) string {
@@ -82,6 +83,11 @@ func RenderThemePickerModal(
 	height int,
 	th theme.Theme,
 ) string {
+	// LOC-2: registry and theme-file strings are sanitized at the source
+	// (pkg/theme); sanitize again here so no other path can reach the
+	// terminal with escape sequences.
+	statusMsg = util.SanitizeDisplay(statusMsg, 300)
+	searchQuery = util.SanitizeDisplay(searchQuery, 100)
 	boxWidth := 76
 	if width < 80 {
 		boxWidth = width - 4
@@ -182,7 +188,7 @@ func RenderThemePickerModal(
 				Background(t.Primary).
 				Foreground(t.BadgeText).
 				Bold(true).
-				Render(" " + t.Name + " ")
+				Render(" " + util.SanitizeDisplay(t.Name, 64) + " ")
 
 			customTag := ""
 			if t.IsCustom {
@@ -291,16 +297,16 @@ func RenderThemePickerModal(
 					Background(rt.Primary).
 					Foreground(rt.BadgeText).
 					Bold(true).
-					Render(" " + truncate(rt.Name, 18) + " ")
+					Render(" " + truncate(util.SanitizeDisplay(rt.Name, 64), 18) + " ")
 
 				catStr := ""
 				if rt.Category != "" {
-					catStr = lipgloss.NewStyle().Foreground(th.Muted).Render(" (" + rt.Category + ")")
+					catStr = lipgloss.NewStyle().Foreground(th.Muted).Render(" (" + util.SanitizeDisplay(rt.Category, 32) + ")")
 				}
 
 				authorStr := ""
 				if rt.Author != "" {
-					authorStr = lipgloss.NewStyle().Foreground(th.Secondary).Render(" by " + rt.Author)
+					authorStr = lipgloss.NewStyle().Foreground(th.Secondary).Render(" by " + util.SanitizeDisplay(rt.Author, 64))
 				}
 
 				row := fmt.Sprintf("%s%s %s%s%s", cursorSym, colorSample, statusBadge, catStr, authorStr)
@@ -416,14 +422,14 @@ func renderThemePreviewCard(targetTh theme.Theme, isPreviewActive bool, boxWidth
 	)
 
 	var lines []string
-	headerText := lipgloss.NewStyle().Bold(true).Foreground(targetTh.Primary).Render("Preview: " + targetTh.Name)
+	headerText := lipgloss.NewStyle().Bold(true).Foreground(targetTh.Primary).Render("Preview: " + util.SanitizeDisplay(targetTh.Name, 64))
 	if targetTh.Author != "" && cardW > 40 {
-		headerText += lipgloss.NewStyle().Foreground(targetTh.Secondary).Render(" by " + targetTh.Author)
+		headerText += lipgloss.NewStyle().Foreground(targetTh.Secondary).Render(" by " + util.SanitizeDisplay(targetTh.Author, 64))
 	}
 	lines = append(lines, headerText)
 
 	if height > 24 && targetTh.Description != "" {
-		lines = append(lines, lipgloss.NewStyle().Foreground(targetTh.Foreground).Italic(true).Render(truncate(targetTh.Description, cardW-4)))
+		lines = append(lines, lipgloss.NewStyle().Foreground(targetTh.Foreground).Italic(true).Render(truncate(util.SanitizeDisplay(targetTh.Description, 256), cardW-4)))
 	}
 
 	lines = append(lines, swatches)
@@ -885,6 +891,15 @@ func RenderPluginManagerModal(
 		Bold(true).
 		Foreground(th.Primary).
 		Align(lipgloss.Center)
+	// Manifest and registry text is third-party data: sanitize it all.
+	sd := util.SanitizeDisplay
+	sdList := func(items []string) string {
+		out := make([]string, 0, len(items))
+		for _, it := range items {
+			out = append(out, sd(it, 120))
+		}
+		return strings.Join(out, ", ")
+	}
 
 	// Tab header
 	tab1Style := lipgloss.NewStyle().Padding(0, 1)
@@ -928,29 +943,35 @@ func RenderPluginManagerModal(
 					statusBadge = lipgloss.NewStyle().Foreground(th.Muted).Render("[○ Disabled]")
 				}
 
-				row := fmt.Sprintf("%s%-24s %s  v%s", curStr, truncate(p.Manifest.Name, 24), statusBadge, p.Manifest.Version)
+				row := fmt.Sprintf("%s%-24s %s  v%s", curStr, truncate(sd(p.Manifest.Name, 60), 24), statusBadge, sd(p.Manifest.Version, 20))
 				if isSelected {
 					row = lipgloss.NewStyle().Background(th.Border).Foreground(th.Highlight).Bold(true).Render(row)
 					// Build details
 					var permDetails []string
 					if len(p.Manifest.Permissions.Network) > 0 {
-						permDetails = append(permDetails, fmt.Sprintf("🌐 Network: %s", strings.Join(p.Manifest.Permissions.Network, ", ")))
+						permDetails = append(permDetails, fmt.Sprintf("🌐 Network: %s", sdList(p.Manifest.Permissions.Network)))
 					} else {
 						permDetails = append(permDetails, "🌐 Network: Denied (Sandboxed)")
 					}
 					if p.Manifest.Permissions.HasStorage() {
-						permDetails = append(permDetails, "💾 Storage: ~/.config/halpradio/plugins_data/"+p.Manifest.ID+"/")
+						permDetails = append(permDetails, "💾 Storage: ~/.config/halpradio/plugins_data/"+sd(p.Manifest.ID, 64)+"/")
 					}
 					if len(p.Manifest.Permissions.Events) > 0 {
-						permDetails = append(permDetails, fmt.Sprintf("⚡ Events: %s", strings.Join(p.Manifest.Permissions.Events, ", ")))
+						permDetails = append(permDetails, fmt.Sprintf("⚡ Events: %s", sdList(p.Manifest.Permissions.Events)))
 					}
 
-					selectedDetails = lipgloss.JoinVertical(
-						lipgloss.Left,
-						lipgloss.NewStyle().Bold(true).Foreground(th.Secondary).Render("Description: ")+lipgloss.NewStyle().Foreground(th.Foreground).Render(p.Manifest.Description),
-						lipgloss.NewStyle().Foreground(th.Muted).Render("Author: "+p.Manifest.Author+" | ID: "+p.Manifest.ID),
+					details := []string{
+						lipgloss.NewStyle().Bold(true).Foreground(th.Secondary).Render("Description: ") + lipgloss.NewStyle().Foreground(th.Foreground).Render(sd(p.Manifest.Description, 300)),
+						lipgloss.NewStyle().Foreground(th.Muted).Render("Author: " + sd(p.Manifest.Author, 60) + " | ID: " + sd(p.Manifest.ID, 64)),
 						strings.Join(permDetails, " | "),
-					)
+					}
+					if p.ApprovalNote != "" {
+						details = append(details, lipgloss.NewStyle().Foreground(th.Favorite).Bold(true).Render("Approval: "+sd(p.ApprovalNote, 200)))
+					}
+					if p.LastError != "" {
+						details = append(details, lipgloss.NewStyle().Foreground(th.Favorite).Render("Last error: "+sd(p.LastError, 200)))
+					}
+					selectedDetails = lipgloss.JoinVertical(lipgloss.Left, details...)
 				} else {
 					row = lipgloss.NewStyle().Foreground(th.Foreground).Render(row)
 				}
@@ -981,25 +1002,25 @@ func RenderPluginManagerModal(
 					badge = lipgloss.NewStyle().Foreground(th.Playing).Bold(true).Render("[Installed]")
 				}
 
-				row := fmt.Sprintf("%s%-24s %s  v%s  by %s", curStr, truncate(reg.Name, 24), badge, reg.Version, reg.Author)
+				row := fmt.Sprintf("%s%-24s %s  v%s  by %s", curStr, truncate(sd(reg.Name, 60), 24), badge, sd(reg.Version, 20), sd(reg.Author, 40))
 				if isSelected {
 					row = lipgloss.NewStyle().Background(th.Border).Foreground(th.Highlight).Bold(true).Render(row)
 					var permDetails []string
 					if len(reg.Permissions.Network) > 0 {
-						permDetails = append(permDetails, fmt.Sprintf("🌐 Network: %s", strings.Join(reg.Permissions.Network, ", ")))
+						permDetails = append(permDetails, fmt.Sprintf("🌐 Network: %s", sdList(reg.Permissions.Network)))
 					}
 					if reg.Permissions.HasStorage() {
 						permDetails = append(permDetails, "💾 Storage: Local Sandbox")
 					}
 					if len(reg.Permissions.Events) > 0 {
-						permDetails = append(permDetails, fmt.Sprintf("⚡ Events: %s", strings.Join(reg.Permissions.Events, ", ")))
+						permDetails = append(permDetails, fmt.Sprintf("⚡ Events: %s", sdList(reg.Permissions.Events)))
 					}
 
 					selectedDetails = lipgloss.JoinVertical(
 						lipgloss.Left,
-						lipgloss.NewStyle().Bold(true).Foreground(th.Secondary).Render("Description: ")+lipgloss.NewStyle().Foreground(th.Foreground).Render(reg.Description),
+						lipgloss.NewStyle().Bold(true).Foreground(th.Secondary).Render("Description: ")+lipgloss.NewStyle().Foreground(th.Foreground).Render(sd(reg.Description, 300)),
 						strings.Join(permDetails, " | "),
-						lipgloss.NewStyle().Foreground(th.Muted).Render("Homepage: "+reg.Homepage),
+						lipgloss.NewStyle().Foreground(th.Muted).Render("Homepage: "+sd(reg.Homepage, 200)),
 					)
 				} else {
 					row = lipgloss.NewStyle().Foreground(th.Foreground).Render(row)
@@ -1044,7 +1065,7 @@ func RenderPluginManagerModal(
 		elements = append(elements, "")
 	}
 	if statusMsg != "" {
-		elements = append(elements, lipgloss.NewStyle().Foreground(th.Playing).Bold(true).Render(statusMsg))
+		elements = append(elements, lipgloss.NewStyle().Foreground(th.Playing).Bold(true).Render(sd(statusMsg, 300)))
 	}
 	elements = append(elements, lipgloss.NewStyle().Foreground(th.Muted).Render(helpText))
 
@@ -1059,68 +1080,6 @@ func RenderPluginManagerModal(
 		Padding(padY, 2).
 		Width(boxWidth).
 		Render(lipgloss.JoinVertical(lipgloss.Left, elements...))
-
-	return PlaceOverlay(modalBox, width, height)
-}
-
-func RenderPermissionApprovalModal(p plugin.PluginInfo, width int, height int, th theme.Theme) string {
-	boxWidth := 66
-	if width < 70 {
-		boxWidth = width - 4
-	}
-
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(th.Secondary).
-		Align(lipgloss.Center)
-
-	var reqItems []string
-	if len(p.Manifest.Permissions.Network) > 0 {
-		reqItems = append(reqItems, lipgloss.NewStyle().Foreground(th.Highlight).Render("🌐 Network Access: ")+lipgloss.NewStyle().Foreground(th.Foreground).Render(strings.Join(p.Manifest.Permissions.Network, ", ")))
-	} else {
-		reqItems = append(reqItems, lipgloss.NewStyle().Foreground(th.Muted).Render("🌐 Network Access: None (Isolated)"))
-	}
-
-	if p.Manifest.Permissions.HasStorage() {
-		reqItems = append(reqItems, lipgloss.NewStyle().Foreground(th.Highlight).Render("💾 Sandboxed Storage: ")+lipgloss.NewStyle().Foreground(th.Foreground).Render("~/.config/halpradio/plugins_data/"+p.Manifest.ID+"/"))
-	}
-
-	if len(p.Manifest.Permissions.Events) > 0 {
-		reqItems = append(reqItems, lipgloss.NewStyle().Foreground(th.Highlight).Render("⚡ Lifecycle Events: ")+lipgloss.NewStyle().Foreground(th.Foreground).Render(strings.Join(p.Manifest.Permissions.Events, ", ")))
-	}
-
-	warningNote := lipgloss.NewStyle().
-		Foreground(th.Muted).
-		Italic(true).
-		Render("Plugins run inside an isolated Wazero WebAssembly sandbox.\nPermissions grant capability-based access to the declared endpoints.")
-
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		titleStyle.Render("🛡️  SECURITY PERMISSION APPROVAL"),
-		"",
-		lipgloss.NewStyle().Bold(true).Foreground(th.Primary).Render(fmt.Sprintf("Plugin: %s (v%s)", p.Manifest.Name, p.Manifest.Version)),
-		lipgloss.NewStyle().Foreground(th.Muted).Render(fmt.Sprintf("Author: %s | ID: %s", p.Manifest.Author, p.Manifest.ID)),
-		"",
-		lipgloss.NewStyle().Bold(true).Foreground(th.Foreground).Render("Requested Capabilities:"),
-		strings.Join(reqItems, "\n"),
-		"",
-		warningNote,
-		"",
-		lipgloss.NewStyle().Foreground(th.Playing).Bold(true).Render("[ y / Enter ] Approve Permissions & Enable"),
-		lipgloss.NewStyle().Foreground(th.Favorite).Render("[ n / Esc ] Keep Disabled (Deny)"),
-	)
-
-	padY := 1
-	if height < 24 {
-		padY = 0
-	}
-
-	modalBox := lipgloss.NewStyle().
-		Border(lipgloss.DoubleBorder()).
-		BorderForeground(th.Secondary).
-		Padding(padY, 2).
-		Width(boxWidth).
-		Render(content)
 
 	return PlaceOverlay(modalBox, width, height)
 }
@@ -1144,6 +1103,10 @@ func RenderPartyManagerModal(
 	if boxWidth < 38 {
 		boxWidth = 38
 	}
+	// The join form holds a full invite (39 characters) where it can.
+	if screen == 2 && (session == nil || !session.IsActive()) {
+		boxWidth = max(boxWidth, min(56, width-2))
+	}
 
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(th.Primary).Align(lipgloss.Center)
 	descStyle := lipgloss.NewStyle().Foreground(th.Muted)
@@ -1165,7 +1128,7 @@ func RenderPartyManagerModal(
 				tag += " (You)"
 			}
 			pingText := fmt.Sprintf("%dms", p.PingMs)
-			line := fmt.Sprintf("  • @%-16s %-14s %s", p.Nickname, tag, lipgloss.NewStyle().Foreground(th.Muted).Render(pingText))
+			line := fmt.Sprintf("  • %-30s %-14s %s", PartyHostLabel(p.Nickname, party.PeerFingerprint(p.ID)), tag, lipgloss.NewStyle().Foreground(th.Muted).Render(pingText))
 			if p.ID == session.PeerID() {
 				line = activeStyle.Render(line)
 			}
@@ -1189,11 +1152,13 @@ func RenderPartyManagerModal(
 
 		content = lipgloss.JoinVertical(
 			lipgloss.Left,
-			titleStyle.Render(fmt.Sprintf("👥 TERMINAL PARTY ROOM: %s", session.FormattedCode())),
+			titleStyle.Render("👥 TERMINAL PARTY ROOM"),
 			"",
 			statusLine+
-				fmt.Sprintf("  Room Name:   %s", lipgloss.NewStyle().Foreground(th.Foreground).Bold(true).Render(session.RoomName())),
-			fmt.Sprintf("  Host:        @%s", lipgloss.NewStyle().Foreground(th.Secondary).Bold(true).Render(session.HostNickname())),
+				fmt.Sprintf("  Invite:      %s", lipgloss.NewStyle().Foreground(th.Primary).Bold(true).Render(util.SanitizeDisplay(session.Invite(), 64))),
+			descStyle.Render("               "+PartyInviteNote),
+			fmt.Sprintf("  Room Name:   %s", lipgloss.NewStyle().Foreground(th.Foreground).Bold(true).Render(session.RoomName())),
+			fmt.Sprintf("  Host:        %s", lipgloss.NewStyle().Foreground(th.Secondary).Bold(true).Render(partyHostLine(session))),
 			fmt.Sprintf("  DJ Pass:     %s", lipgloss.NewStyle().Foreground(th.Playing).Render(djPassText)),
 			fmt.Sprintf("  Station:     %s", lipgloss.NewStyle().Foreground(th.Foreground).Render(stName)),
 			"",
@@ -1202,7 +1167,7 @@ func RenderPartyManagerModal(
 			"",
 			lipgloss.NewStyle().Foreground(th.Border).Render(strings.Repeat("─", boxWidth-6)),
 			"",
-			lipgloss.NewStyle().Foreground(th.Foreground).Render("  [ c ] Copy Room Code to Clipboard"),
+			lipgloss.NewStyle().Foreground(th.Foreground).Render("  [ c ] Copy Invite to Clipboard"),
 			lipgloss.NewStyle().Foreground(th.Foreground).Render("  [ d ] Toggle DJ Pass (Host only)"),
 			lipgloss.NewStyle().Foreground(th.Favorite).Render("  [ l ] Leave Party Room"),
 			lipgloss.NewStyle().Foreground(th.Muted).Render("  [ Esc ] Close Manager (Continue Listening)"),
@@ -1287,6 +1252,14 @@ func RenderPartyManagerModal(
 				boxSt = boxSt.BorderForeground(th.Border)
 			}
 			txt := val
+			// Long input (an invite in a narrow box) shows its end.
+			if room := boxWidth - 14; lipgloss.Width(txt) > room && room > 4 {
+				rs := []rune(txt)
+				for lipgloss.Width(string(rs)) > room-1 {
+					rs = rs[1:]
+				}
+				txt = "…" + string(rs)
+			}
 			if txt == "" {
 				txt = lipgloss.NewStyle().Foreground(th.Muted).Italic(true).Render(placeholder)
 			}
@@ -1319,8 +1292,9 @@ func RenderPartyManagerModal(
 			titleStyle.Render("🔗 JOIN PARTY ROOM"),
 			"",
 			statusLine+
-				labelStyle.Render("6-Character Room Code:"),
-			inputBox(0, codeVal, "e.g. 8X2K9P or #8X2K9P"),
+				labelStyle.Render("Invite or Room Code:"),
+			inputBox(0, codeVal, "e.g. "+party.FormatInvite(party.ExampleRoomCode, party.ExampleFingerprint)),
+			descStyle.Render("  The full invite (CODE/FINGERPRINT) also verifies the host."),
 			"",
 			labelStyle.Render("Your Nickname:"),
 			inputBox(1, nickVal, "e.g. listener"),
@@ -1337,7 +1311,7 @@ func RenderPartyManagerModal(
 		// Screen 0: Initial Welcome & Selection
 		menuItems := []string{
 			"🎉  Create a Party Room (Become DJ)",
-			"🔗  Join a Party Room with Code",
+			"🔗  Join a Party Room with an Invite or Code",
 		}
 		var renderedItems []string
 		for i, item := range menuItems {
@@ -1359,7 +1333,7 @@ func RenderPartyManagerModal(
 			"",
 			statusLine+
 				descStyle.Render("Synchronized peer-to-peer radio rooms with live ASCII reactions."),
-			descStyle.Render("No third-party audio servers. Fully end-to-end encrypted."),
+			descStyle.Render("Control messages are encrypted with a key derived from the room code; audio comes straight from the station."),
 			"",
 			strings.Join(renderedItems, "\n\n"),
 			"",
@@ -1383,4 +1357,22 @@ func RenderPartyManagerModal(
 		Render(content)
 
 	return PlaceOverlay(modalBox, width, height)
+}
+
+// partyHostLine is the host label for the party manager: "[fp] @nick", or
+// the user's own fingerprint with a check hint when they are the host.
+func partyHostLine(session *party.PartySession) string {
+	if session.IsHost() {
+		return SessionHostLabel(session) + " (You, " + PartyHostCheckHint + ")"
+	}
+	if session.HostFingerprint() == "" {
+		if session.HostPin() != "" {
+			return PartyHostLabel(session.HostNickname(), "") + " (waiting for the host from your invite)"
+		}
+		return PartyHostLabel(session.HostNickname(), "") + " (waiting for the host)"
+	}
+	if session.HostPinned() {
+		return SessionHostLabel(session)
+	}
+	return SessionHostLabel(session) + " (" + PartyManualCheckHint + ")"
 }

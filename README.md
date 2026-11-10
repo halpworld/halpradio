@@ -34,13 +34,18 @@ halpradio
 
 ### One-Line Shell Installer (macOS & Linux)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/halpworld/halpradio/main/install.sh | bash
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/halpworld/halpradio/main/install.sh | bash
 halpradio
 ```
+The installer checks the download against the release's `checksums.txt` and, if [`cosign`](https://docs.sigstore.dev/cosign/system_config/installation/) is installed, the release signature. Prefer to read it first? See [Method 3](#method-3-one-line-installer-script-macos--linux).
 
-### 🐳 Instant Container Run (Docker)
+### 🐳 Container (Docker)
+No prebuilt image is published yet: build one from this repository's `Dockerfile`.
 ```bash
-docker run --rm -it --device /dev/snd halpworld/halpradio:latest
+git clone https://github.com/halpworld/halpradio.git && cd halpradio
+docker build -t halpradio .
+# The container runs as an unprivileged user; --group-add gives it the host's audio group.
+docker run --rm -it --device /dev/snd --group-add "$(getent group audio | cut -d: -f3)" halpradio
 ```
 
 ---
@@ -78,7 +83,7 @@ docker run --rm -it --device /dev/snd halpworld/halpradio:latest
 | **Linux MPRIS v2 & Media Keys** | ✅ **Native D-Bus + `playerctl`** | ❌ None | ❌ None | ❌ None | ⚠️ Basic MPRIS |
 | **Song Change Desktop Notifications** | ✅ **Native macOS/Linux/Win + Dedupe** | ❌ None | ❌ None | ❌ None | ❌ None |
 | **CLI & Hotkey Remote (`halpradio remote`)** | ✅ **macOS Shortcuts, Raycast, tmux** | ❌ None | ❌ None | ❌ None | ⚠️ Socket |
-| **Terminal Party Line (`Ctrl+p`)** | ✅ **P2P Mesh Sync, E2EE Rooms & Reactions** | ❌ None | ❌ None | ❌ None | ❌ None |
+| **Terminal Party Line (`Ctrl+p`)** | ✅ **P2P Mesh Sync, Encrypted Rooms & Reactions** | ❌ None | ❌ None | ❌ None | ❌ None |
 | **Local AI Radio DJ & Liner Notes (`i`/`d`/`D`)** | ✅ **100% Local TTS, Audio Ducking & Bio Drawer** | ❌ None | ❌ None | ❌ None | ❌ None |
 | **Acoustic Fingerprinting (`I`)** | ✅ **Chromaprint / AcoustID + Ad Strip** | ❌ None | ❌ None | ❌ None | ❌ None |
 | **10-Band EQ & R128 Loudness (`E`)** | ✅ **Pure Go DSP: Presets, Crossfeed, Lo-Fi Tape** | ❌ None | ❌ None | ❌ None | ⚠️ Basic EQ |
@@ -170,12 +175,16 @@ brew upgrade halpradio
 
 ### Method 2: Debian / Ubuntu / Linux Mint / Pop!_OS (`apt install`)
 
-Install via the official APT repository:
+> **Not yet available.** The APT repository below is built by the release workflow but is not being served yet (`https://halpworld.github.io/halpradio/` returns 404), so these commands currently fail. Until it is live, use the standalone `.deb` further down, the installer script, or Homebrew.
+
+Once the repository is live, install via the official APT repository (it carries the latest release only):
 
 ```bash
 # 1. Download official GPG archive signing key
 sudo mkdir -p /etc/apt/keyrings
 curl -fsSL https://halpworld.github.io/halpradio/halpradio-archive-keyring.gpg | sudo tee /etc/apt/keyrings/halpradio-archive-keyring.gpg > /dev/null
+# Check the fingerprint: B2B5 AB26 19FF 9D6A 7EA6  30CA 79E3 1FF2 2916 CAAE
+gpg --show-keys /etc/apt/keyrings/halpradio-archive-keyring.gpg
 
 # 2. Add repository to APT sources
 echo "deb [signed-by=/etc/apt/keyrings/halpradio-archive-keyring.gpg] https://halpworld.github.io/halpradio stable main" | sudo tee /etc/apt/sources.list.d/halpradio.list
@@ -185,8 +194,9 @@ sudo apt update
 sudo apt install halpradio
 ```
 
-Or install standalone `.deb` package directly:
+Or install a standalone `.deb` package downloaded from the [Releases](https://github.com/halpworld/halpradio/releases) page, after checking it against that release's `checksums.txt` (see [Verifying a download](#verifying-a-download)):
 ```bash
+sha256sum --ignore-missing -c checksums.txt
 sudo apt install ./halpradio_*_linux_amd64.deb
 ```
 
@@ -194,11 +204,21 @@ sudo apt install ./halpradio_*_linux_amd64.deb
 
 ### Method 3: One-Line Installer Script (macOS & Linux)
 
-Automatically detects your OS and architecture (`arm64` / `amd64`), downloads the latest release binary, and installs it to `/usr/local/bin`:
+Detects your OS and architecture (`arm64` / `amd64`), downloads the latest release, verifies the archive's SHA-256 against the release's `checksums.txt` (and the Sigstore signature on that file when `cosign` is installed), then installs the binary to `/usr/local/bin` (or `~/.local/bin` if that is not writable). It stops on any mismatch and never falls back to another version.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/halpworld/halpradio/main/install.sh | bash
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/halpworld/halpradio/main/install.sh | bash
 ```
+
+Or download it, read it, then run it:
+
+```bash
+curl --proto '=https' --tlsv1.2 -fsSLO https://raw.githubusercontent.com/halpworld/halpradio/main/install.sh
+less install.sh
+bash install.sh
+```
+
+Options: `VERSION=v0.8.1 bash install.sh` installs a specific release; `HALPRADIO_REQUIRE_SIGNATURE=1` makes the installer fail unless the signature was verified, also when `cosign` is missing or the release predates signing. When `cosign` is installed, a missing signature bundle on any release newer than v0.8.1 stops the install; `HALPRADIO_ALLOW_UNSIGNED=1` lets it continue with a warning. A signature that fails verification always stops the install. See [docs/PACKAGING.md](./docs/PACKAGING.md#-install-script-and-signatures) for the full table. A checksum taken from the same release only detects a corrupted download; the signature (or `gh attestation verify`) is what shows the file came from this project's release workflow.
 
 ---
 
@@ -214,11 +234,21 @@ Download pre-compiled standalone tarballs from the [GitHub Releases](https://git
 | **Linux** | ARM64 / Raspberry Pi / AWS Graviton | `halpradio_*_linux_arm64.tar.gz` |
 | **Windows** | x86_64 / ARM64 | `halpradio_*_windows_*.zip` |
 
+#### Verifying a download
+
+Every release has a `checksums.txt` listing the SHA-256 of each file:
+
+```bash
+sha256sum --ignore-missing -c checksums.txt     # macOS: shasum -a 256 --ignore-missing -c checksums.txt
+```
+
+Releases made after v0.8.1 also carry a Sigstore signature for `checksums.txt` and GitHub build provenance for each file. See [SECURITY.md](./SECURITY.md#verifying-a-download) for the `cosign` and `gh attestation verify` commands.
+
 ---
 
 ### Method 5: Go Install
 
-If you have Go 1.21+ installed:
+If you have Go 1.26.10+ installed (older Go versions download the required toolchain automatically unless `GOTOOLCHAIN=local` is set):
 
 ```bash
 go install github.com/halpworld/halpradio@latest
@@ -431,19 +461,25 @@ Press `i` to open the **Interactive Liner Notes & Artist Biography Drawer**, `d`
 
 - **📖 Interactive Liner Notes & Artist Bio Drawer (`i`)**: Sliding right-hand drawer displaying **Artist Biography**, **Album & Recording Context**, **Discography Highlights**, and **Track Trivia** powered by MusicBrainz + Wikipedia REST APIs with a 30-day local cache (`~/.cache/halpradio/ai/linernotes/`) and a 100% offline station-metadata synthesizer fallback.
 - **🎙️ 100% Local AI Radio DJ (`d` / `D` / `--ai-dj`)**: Choose from 4 radio personas (**Late Night Chill**, **Retro 80s Broadcaster**, **Cyberpunk Host**, **BBC Presenter**). Automatically ducks live stream audio to **20%** while the DJ speaks and restores playback volume to **100%** afterward.
-- **🔊 Zero-Cloud-Lag Local TTS & Opt-In HuggingFace ONNX Voices**: Works out of the box with zero downloads via native OS speech (`say`, `espeak-ng`, `spd-say`), or download opt-in neural `.onnx` voice models (`piper` / `sherpa-onnx` Kokoro-82M) directly from HuggingFace inside the **AI DJ Studio (`D`)**. Optional local [Ollama](https://ollama.com) LLM support with instant offline template fallback.
+- **🔊 Zero-Cloud-Lag Local TTS & Opt-In ONNX Voices**: Works out of the box with zero downloads via native OS speech (`say`, `espeak-ng`, `spd-say`), or download opt-in neural `.onnx` voice models (`piper` / `sherpa-onnx` Kokoro-82M) inside the **AI DJ Studio (`D`)**; the sherpa-onnx runtime and voice come from `github.com/k2-fsa/sherpa-onnx` and are SHA-256 verified. Optional local [Ollama](https://ollama.com) LLM support with instant offline template fallback.
 - See **[Local AI Radio DJ & Liner Notes Guide](./docs/AI_DJ.md)** for full details.
 
 ---
 
 ## 🎉 Terminal Party Line: P2P Mesh Synchronized Radio Rooms & Reactions
 
-Share the groove with teammates, study groups, or friends with zero central audio relaying! `halpradio` features an end-to-end encrypted (E2EE) P2P mesh party system powered by WebRTC data channels:
+Share the groove with teammates, study groups, or friends with zero central audio relaying! `halpradio` features an encrypted P2P mesh party system over direct TCP connections between listeners:
 
 ### 👥 In-TUI Party Manager (`Ctrl+p`)
-- **Quick Create & Join**: Press `Ctrl+p` anywhere in the app to host a new room with a memorable 6-character room code (e.g. `#8X2K9P`) or join an existing session.
-- **Argon2id & AES-256-GCM Encryption**: Every party room derives high-entropy session keys with Argon2id and encrypts all peer-to-peer control traffic using AES-256-GCM with CSPRNG nonces.
-- **Zero Central Audio Relaying**: Audio streams directly from the source radio broadcast on each client while synchronization commands and metadata travel peer-to-peer over WebRTC data channels.
+- **Quick Create & Join**: Press `Ctrl+p` anywhere in the app to host a new room or join an existing one. A new room gets a 16-character room code (e.g. `7K9P-2XQM-HF4D-WNR8`). The host shares the room's **invite**: the room code, a `/`, and the host's fingerprint, e.g. `7K9P-2XQM-HF4D-WNR8/K4QZ-7HXM-2PRD-W9NB`. The invite is shown in the party bar and the party manager, and `c` in the party manager copies it.
+- **Direct Connections**: Peers find each other by LAN discovery, or you connect to a host directly with `--address host:port`. There is no relay server.
+- **Encrypted Rooms**: The room key is derived from the code with Argon2id. Every connection starts with an ed25519-authenticated handshake using an ephemeral X25519 key exchange, and all party traffic is encrypted with AES-256-GCM.
+- **Trust model**: Anyone who has the room code can join the room and read its chat. **Share the invite only with people you trust.**
+- **Join with the invite (normal way)**: Paste the full invite into the Join form (`Ctrl+p`, then `2`) or run `halpradio party join 7K9P-2XQM-HF4D-WNR8/K4QZ-7HXM-2PRD-W9NB`. Your session then follows only the host whose identity has that fingerprint, or a host it hands over to by authenticated hand-over. Nobody else who has the room code can pose as the host, so there is nothing to check by hand: the host is shown as `[K4QZ-7HXM-2PRD-W9NB] @kenth ✓ verified by invite`. If that host leaves without handing over, your session follows nobody and shows "Host @kenth left the room. Waiting for the host from your invite." The other guests may elect a new host among themselves; a guest who joined with the invite does not follow it.
+- **Join with a bare code**: A room code alone (`7K9P-2XQM-HF4D-WNR8`) still works, but then anyone who has the code and runs `party create` with it can pose as the host to you before you have joined. Check the fingerprint: once you have joined, the host you follow is shown with its fingerprint, e.g. `[K4QZ-7HXM-2PRD-W9NB] @kenth`. The host sees its own fingerprint on its screen; check that the two match. After that your session follows only that host, or a host chosen by the room's authenticated hand-over or election.
+- **Host Fingerprint display**: The fingerprint is shown in the party bar, the party manager (`Ctrl+p`), status messages and headless output. It always comes first and is never shortened (the nickname is shortened instead). Nicknames cannot contain square brackets or anything that reads as a fingerprint (16 or more room-code characters in a row, which are replaced with `…`), so a nickname cannot pose as a fingerprint. When the host you follow changes (on join or after a hand-over) the notice is shown for 5 seconds before that host can change your audio, and host station changes are applied at most once every 2 seconds (the latest wins).
+- **Same Release Required**: Every participant needs the same halpradio release (party protocol v2); older clients cannot join.
+- **Zero Central Audio Relaying**: Audio streams directly from the source radio broadcast on each client; only synchronization commands and metadata travel between peers.
 - **DJ Pass Governance**: Host can choose **Host Only** (only the room creator can change stations) or **Open Democracy** (any participant can tune stations).
 - **Sub-Second Playback Sync**: Late-joining listeners automatically tune to the room's current broadcast with sub-second clock sync.
 - **Deterministic Host Election**: If the room host disconnects, peers deterministically elect a successor host without interrupting playback.
@@ -463,7 +499,9 @@ Control and join party rooms directly from your shell or tmux sessions:
 halpradio party create "team-focus"       # Create room and launch TUI
 halpradio party create --dj-pass=open     # Create room with democratic DJ control
 halpradio party create --headless         # Host room headlessly in server / tmux
-halpradio party join 8X2K9P               # Join room #8X2K9P with interactive TUI
+halpradio party join 7K9P-2XQM-HF4D-WNR8/K4QZ-7HXM-2PRD-W9NB  # Join with the host's invite (pins the host)
+halpradio party join 7K9P-2XQM-HF4D-WNR8  # Join with a bare code (check the host's fingerprint by hand)
+halpradio party join 7K9P-2XQM-HF4D-WNR8/K4QZ-7HXM-2PRD-W9NB --address <host:port>  # Connect directly (start the host with --port to fix its port)
 halpradio party status                    # Inspect current room, listener count, and host
 halpradio party react 1                   # Send 🔥 reaction to current room
 halpradio party chat "Loving this track!"  # Send mini-chat ping to room
@@ -530,16 +568,20 @@ Press `?` or `F1` anywhere in **halpradio** to open the floating **WhichKey Over
 ### 🖥️ In-App Plugin Manager (`P` key)
 - Press `P` anywhere in halpradio to browse installed plugins and explore the official online registry.
 - 1-click install, enable/disable toggle, and interactive capability permission review modal (network whitelists, isolated storage).
+- **Plugins start disabled.** Each plugin binary must be approved before it runs: you review its permissions and confirm explicitly (Enter alone does not approve). An update changes the binary, so the plugin needs approval again after every update.
 
 ### ⌨️ CLI Plugin Commands
 ```bash
 halpradio plugin list                  # List installed and official registry plugins
 halpradio plugin install <plugin-id>   # Install plugin from official registry with SHA-256 verification
-halpradio plugin enable <plugin-id>    # Enable plugin
+halpradio plugin approve <plugin-id>   # Review and approve permissions (again after every update)
+halpradio plugin enable <plugin-id>    # Enable plugin (asks for approval first if needed)
 halpradio plugin disable <plugin-id>   # Disable plugin
 halpradio plugin remove <plugin-id>    # Uninstall plugin
-halpradio plugin update --all          # Update plugins to latest version
+halpradio plugin update --all          # Update plugins to latest version (each needs re-approval)
 ```
+
+`install`, `approve` and `enable` print the permissions and the plugin binary's SHA-256, then ask you to type `yes`. In scripts, run `halpradio plugin approve <plugin-id>` to review, then `halpradio plugin approve <plugin-id> --approve-sha256 <hex>` with the hash it printed. A bare `--approve` is refused.
 
 ### 🌟 Official Plugins
 - **[Webhook Broadcaster](https://github.com/halpworld/halpradio-plugins/tree/main/plugins/webhook-broadcaster)**: Broadcasts now-playing tracks to Discord, Slack, or Home Assistant webhooks in real-time.
@@ -618,8 +660,24 @@ goroutine dump to the log, which usually names the culprit outright:
 So if the UI locks up, **wait about ten seconds before killing halpradio** (from another terminal:
 `pkill halpradio`), then attach `debug.log` to your [bug report](https://github.com/halpworld/halpradio/issues/new?template=bug_report.yml).
 
-The log contains station stream URLs and local file paths; it is written with `0600` permissions, and it never
-records credentials. Skim it before pasting it into a public issue.
+Stream URLs are logged without credentials, query strings or fragments; typed text is logged as a length only. The log
+file is created with mode 0600 and halpradio refuses to write through a symlink. It still contains station hosts and
+local file paths, so skim it before pasting it into a public issue.
+
+### Network services halpradio contacts
+
+halpradio talks to these services only for the features named; see [Synced Lyrics & Terminal Album Art](./docs/LYRICS_AND_ART.md) for exactly what each lyrics and art provider receives.
+
+- **RadioBrowser**: station search and discovery.
+- **SomaFM**: the SomaFM channel list.
+- **GitHub (`raw.githubusercontent.com`)**: the station catalog update, the plugin registry and the theme registry (`theme_registry_url`, https only).
+- **LRCLIB** and **NetEase Cloud Music**: synced lyrics (`lyrics_enabled`, `lyrics_netease_enabled`).
+- **iTunes**, **Deezer**, **MusicBrainz / Cover Art Archive**: cover art (`album_art_enabled` and the per-provider switches).
+- **Last.fm**: cover art, only when `lastfm_api_key` is set.
+- **AcoustID**: song identification, only when you use it.
+- **Ollama**: AI DJ scripts, only when an Ollama model is configured (plain http is allowed only to localhost; other hosts need https).
+- **GitHub (`github.com/k2-fsa/sherpa-onnx`)**: opt-in voice downloads, SHA-256 verified.
+- Party peers: direct TCP connections to the listeners in your room.
 
 ---
 
@@ -632,7 +690,7 @@ Explore detailed technical documentation in the [`docs/`](./docs) folder:
 - 🎵 **[Audio Engine & Stream Player](./docs/AUDIO_PLAYER.md)**: Multi-backend auto-detection (`mpv`, `vlc`, `ffplay`, native Go), process lifecycle, and real-time ICY metadata extraction.
 - 📻 **[Station Catalog & RadioBrowser Integration](./docs/STATION_MANAGEMENT.md)**: Station storage hierarchy (`stations.yaml`, local config, favorites), RadioBrowser API client, and PR export workflow.
 - 📜 **[Synced Lyrics & Terminal Album Art](./docs/LYRICS_AND_ART.md)**: LRCLIB / NetEase lyric providers, LRC parsing, playback-position estimation, cover art providers, and the Kitty / iTerm2 / Sixel / half-block / Braille renderers.
-- 🎙️ **[Local AI Radio DJ & Interactive Liner Notes](./docs/AI_DJ.md)**: DJ personas, local TTS engines (Piper ONNX, Sherpa-ONNX Kokoro-82M, Native OS TTS), opt-in HuggingFace voice model downloader, local Ollama integration, and MusicBrainz/Wikipedia liner notes drawer.
+- 🎙️ **[Local AI Radio DJ & Interactive Liner Notes](./docs/AI_DJ.md)**: DJ personas, local TTS engines (Piper ONNX, Sherpa-ONNX Kokoro-82M, Native OS TTS), opt-in voice downloader (sherpa-onnx runtime + voice from GitHub, SHA-256 verified), local Ollama integration, and MusicBrainz/Wikipedia liner notes drawer.
 - 🎨 **[Theme System & Audio Visualizers](./docs/THEME_SYSTEM.md)**: Lipgloss styling system, theme palettes, and TUI visualizer algorithms.
 - ⚙️ **[Configuration & Keybindings](./docs/CONFIGURATION.md)**: Directory layout, `config.yaml` options, CLI flags, and complete keymap reference.
 - 📦 **[Packaging & Distribution Guide](./docs/PACKAGING.md)**: Specifications for Homebrew, Arch Linux AUR, Docker, Scoop, and Nix.

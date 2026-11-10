@@ -32,6 +32,13 @@ stamps sharing one line of text, and the `[offset:NNN]` tag, which shifts every
 timestamp by that many milliseconds. Metadata tags (`[ar:]`, `[ti:]`, `[al:]`,
 `[length:]`) are skipped. Lines come back sorted ascending.
 
+Lyric text is untrusted. Every line is stripped of terminal control sequences
+(escape sequences such as OSC 52 clipboard writes, C1 controls, bidi overrides
+and zero-width characters) and capped at 500 characters, and a sheet keeps at
+most 2000 lines. Artist, title and album strings from a provider are cleaned
+the same way (200 characters). This happens when a response is parsed and again
+whenever a sheet is read back from the disk cache.
+
 ### Splitting a radio stream title
 
 ICY metadata is messy. `SplitTrackTitle` recognises `Artist - Title` with any
@@ -61,6 +68,22 @@ match anywhere are negative-cached for an hour so a station full of unmatched
 tracks does not hammer the providers. Every disk failure is non-fatal and falls
 back to network-only operation.
 
+Cache files are written atomically with mode `0600`. The cache is bounded: on
+the first write and then every 32 writes, entries older than 30 days are
+removed, and if the directory still holds more than 20 MB the oldest entries
+are removed until it fits.
+
+### Request limits
+
+- A provider response larger than 2 MB (after gzip decompression) is refused.
+- At most 50 search candidates are considered per provider.
+- Each provider (LRCLIB, NetEase) may be asked 4 times in a burst and then once
+  every 15 seconds, however fast a station changes its title. A throttled
+  lookup is reported as a failure, not as "no lyrics", so it is not
+  negatively cached.
+- Concurrent lookups for the same track share one request round. When every
+  provider failed for a track, that track is not retried for 30 seconds.
+
 ---
 
 ## 🖼️ The Album Art Engine (`pkg/art`)
@@ -74,8 +97,24 @@ back to network-only operation.
 | 3 | **MusicBrainz → Cover Art Archive** | recording query resolves a release MBID, then `front-500` |
 | 4 | **Last.fm** | only when `lastfm_api_key` is set |
 
-Downloads are capped at 8 MB, must present an image content type, and must
-decode before they are accepted.
+Image URLs come from provider metadata, so only plain `http`/`https` URLs
+without embedded credentials are fetched. Downloads are capped at 8 MB (a
+larger body is refused, not truncated) and must present an image content type.
+The image header is read with `image.DecodeConfig` before any pixel is decoded:
+an image wider or taller than 2048 pixels, or larger than 4 megapixels in
+total, is refused. The same check runs again before every full decode in the
+renderer and when a cached image is read from disk (a failing cache entry is
+deleted). Provider metadata responses are capped at 2 MB.
+
+Artist, title, album and source strings from a provider are stripped of
+terminal control sequences and capped at 200 characters; a stored origin URL
+that is not a plain `http`/`https` URL is dropped. This also runs when a cover
+is read back from the disk cache.
+
+Each provider may be asked 4 times in a burst and then once every 15 seconds.
+A lookup skipped by the throttle is not negatively cached. The disk cache is
+written atomically with mode `0600` and bounded: entries older than 30 days are
+removed and, beyond 200 MB, the oldest files go first.
 
 ### Protocol detection
 
@@ -194,9 +233,30 @@ lastfm_api_key: ""          # optional extra cover art provider
 
 ## 🔐 Privacy & network behaviour
 
-- Nothing is uploaded. Both engines send only the artist, title, album and
-  duration already broadcast by the station, as query parameters.
-- Requests identify themselves with a `halpradio/…` user agent, which LRCLIB
-  and MusicBrainz both ask for.
+- Nothing is uploaded, but the track you are listening to is shared: both
+  engines send the artist, title, album and duration already broadcast by the
+  station, as query parameters, to the third parties below. Each of them can
+  see your IP address and what you are listening to.
+
+  | Third party | Receives | Used for | How to turn it off |
+  |---|---|---|---|
+  | LRCLIB (`lrclib.net`) | artist, title, album, duration | lyrics | `lyrics_enabled: false` |
+  | NetEase Cloud Music (`music.163.com`) | artist and title | lyrics fallback | `lyrics_netease_enabled: false`, or `lyrics_enabled: false` |
+  | Apple iTunes Search (`itunes.apple.com`) and its image CDN | artist and title | cover art | `album_art_itunes_enabled: false`, or `album_art_enabled: false` |
+  | Deezer (`api.deezer.com`) and its image CDN | artist and title | cover art | `album_art_deezer_enabled: false`, or `album_art_enabled: false` |
+  | MusicBrainz (`musicbrainz.org`), Cover Art Archive (`coverartarchive.org`, which redirects to `archive.org`) | artist and title, then a release ID | cover art | `album_art_musicbrainz_enabled: false`, or `album_art_enabled: false` |
+  | Last.fm (`ws.audioscrobbler.com`) | artist, title and your API key | cover art | leave `lastfm_api_key` empty (the default) |
+
+  Lyrics and cover art are looked up only when the station announces a new
+  title, and the per-provider throttle above caps how often each third party
+  is asked.
+- Requests to LRCLIB and MusicBrainz identify themselves with a `halpradio/…`
+  user agent, which both ask for. NetEase requests use a desktop browser user
+  agent and a `music.163.com` referer, because the endpoint refuses others.
+- Requests follow at most 3 redirects, never from `https` to `http`, and never
+  from a public provider to a loopback, private, link-local or cloud metadata
+  address; the same rule is enforced when the connection is dialled, so a
+  provider's DNS answer cannot point there either. A configured
+  `HTTP(S)_PROXY` is still used.
 - With both features disabled in `config.yaml`, neither engine is constructed
   and no request is ever made.

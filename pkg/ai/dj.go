@@ -6,10 +6,27 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/halpworld/halpradio/pkg/util"
+)
+
+const (
+	// defaultOllamaURL is the loopback Ollama endpoint used when none is set.
+	defaultOllamaURL = "http://127.0.0.1:11434"
+	// maxOllamaResponseBytes caps the /api/generate response body.
+	maxOllamaResponseBytes = 64 << 10
+	// maxDJScriptWords and maxDJScriptRunes bound any generated DJ script.
+	maxDJScriptWords = 55
+	maxDJScriptRunes = 400
+	// maxOfflineScriptRunes bounds template scripts built from track metadata.
+	maxOfflineScriptRunes = 600
 )
 
 // Persona defines an AI Radio DJ personality, tone, and default voice model.
@@ -116,6 +133,9 @@ type DJ struct {
 	ollamaModel string
 	duckLevel   int
 	httpClient  *http.Client
+	// ollamaURLErr is set when the configured Ollama URL was refused; the
+	// DJ then uses offline templates only.
+	ollamaURLErr error
 
 	speaking    bool
 	speakSeq    uint64
@@ -137,24 +157,74 @@ func NewDJ(cfg DJConfig) *DJ {
 	}
 	ollamaURL := strings.TrimSpace(cfg.OllamaURL)
 	if ollamaURL == "" {
-		ollamaURL = "http://127.0.0.1:11434"
+		ollamaURL = defaultOllamaURL
 	}
+	validURL, urlErr := ValidateOllamaURL(ollamaURL)
 	engine := cfg.Engine
 	if engine == nil {
 		engine = NewTTSEngine(cfg.TTSEngine, voiceModel)
 	}
-	client := cfg.HTTPClient
-	if client == nil {
-		client = &http.Client{Timeout: 2500 * time.Millisecond}
+	var client http.Client
+	if cfg.HTTPClient != nil {
+		client = *cfg.HTTPClient
+	} else {
+		client = http.Client{Timeout: 2500 * time.Millisecond}
 	}
+	// Never follow redirects from the LLM endpoint: a 3xx response is
+	// returned as-is and treated as a failure (offline templates are used).
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &DJ{
-		persona:     persona,
-		ttsEngine:   engine,
-		ollamaURL:   strings.TrimRight(ollamaURL, "/"),
-		ollamaModel: strings.TrimSpace(cfg.OllamaModel),
-		duckLevel:   duck,
-		httpClient:  client,
+		persona:      persona,
+		ttsEngine:    engine,
+		ollamaURL:    validURL,
+		ollamaURLErr: urlErr,
+		ollamaModel:  strings.TrimSpace(cfg.OllamaModel),
+		duckLevel:    duck,
+		httpClient:   &client,
 	}
+}
+
+// ValidateOllamaURL checks an Ollama endpoint and returns it without a
+// trailing slash. Only http and https are accepted, without credentials,
+// query or fragment. Plain http is accepted only for loopback hosts
+// (localhost, 127.0.0.0/8, ::1), because the prompt and the reply would
+// otherwise cross the network unencrypted.
+func ValidateOllamaURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || u.Opaque != "" {
+		return "", errors.New("ollama URL must be an absolute http(s) URL")
+	}
+	if u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return "", errors.New("ollama URL must not contain credentials, a query or a fragment")
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+	case "http":
+		if !isLoopbackHost(u.Hostname()) {
+			return "", fmt.Errorf("ollama URL %q uses plain http to a non-loopback host; use https", util.SanitizeDisplay(u.Host, 128))
+		}
+	default:
+		return "", errors.New("ollama URL scheme must be http or https")
+	}
+	return strings.TrimRight(u.String(), "/"), nil
+}
+
+func isLoopbackHost(host string) bool {
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// OllamaURLError returns why the configured Ollama URL was refused, or nil.
+// When non-nil the DJ only uses offline persona templates.
+func (d *DJ) OllamaURLError() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.ollamaURLErr
 }
 
 // Persona returns the currently active DJ persona.
@@ -226,6 +296,7 @@ func (d *DJ) LastScript() string {
 // If a local Ollama model is configured and responds within the timeout, it is
 // used; otherwise deterministic offline persona templates are used with zero latency.
 func (d *DJ) GenerateIntro(ctx context.Context, tc TrackContext) (string, string, error) {
+	tc = sanitizeTrackContext(tc)
 	d.mu.Lock()
 	persona := d.persona
 	ollamaModel := d.ollamaModel
@@ -248,7 +319,7 @@ func (d *DJ) GenerateIntro(ctx context.Context, tc TrackContext) (string, string
 		}
 	}
 	if script == "" {
-		script = buildOfflinePersonaScript(persona, tc, variant)
+		script = util.SanitizeDisplay(buildOfflinePersonaScript(persona, tc, variant), maxOfflineScriptRunes)
 	}
 
 	d.mu.Lock()
@@ -260,7 +331,7 @@ func (d *DJ) GenerateIntro(ctx context.Context, tc TrackContext) (string, string
 
 // Speak synthesizes and plays the given DJ script, cancelling any previous speech in flight.
 func (d *DJ) Speak(ctx context.Context, text string) error {
-	text = strings.TrimSpace(text)
+	text = util.SanitizeDisplay(text, maxSpokenRunes)
 	if text == "" {
 		return nil
 	}
@@ -370,7 +441,7 @@ func queryLocalOllama(ctx context.Context, client *http.Client, baseURL, model s
 	}
 
 	var out ollamaGenerateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxOllamaResponseBytes)).Decode(&out); err != nil {
 		return "", err
 	}
 
@@ -378,16 +449,35 @@ func queryLocalOllama(ctx context.Context, client *http.Client, baseURL, model s
 	return cleaned, nil
 }
 
+// sanitizeDJScript turns raw LLM output into a displayable, speakable script:
+// terminal control and format characters are removed, whitespace collapsed,
+// wrapping quotes and leading dashes stripped, and the result is capped at
+// maxDJScriptWords words and maxDJScriptRunes runes.
 func sanitizeDJScript(raw string) string {
-	s := strings.TrimSpace(raw)
-	s = strings.Trim(s, `"'“”`)
-	s = strings.ReplaceAll(s, "\n", " ")
-	s = strings.ReplaceAll(s, "\r", " ")
+	s := util.SanitizeDisplay(raw, maxOllamaResponseBytes)
+	s = strings.Trim(s, `"'“” `)
+	s = strings.TrimSpace(strings.TrimLeft(s, leadingDashCutset))
 	fields := strings.Fields(s)
-	if len(fields) > 55 {
-		fields = fields[:55]
+	if len(fields) > maxDJScriptWords {
+		fields = fields[:maxDJScriptWords]
 	}
-	return strings.Join(fields, " ")
+	return util.SanitizeDisplay(strings.Join(fields, " "), maxDJScriptRunes)
+}
+
+// sanitizeTrackContext cleans and caps every metadata field before it is used
+// in an LLM prompt or an offline script (ICY titles, MusicBrainz and
+// Wikipedia data are all remote input).
+func sanitizeTrackContext(tc TrackContext) TrackContext {
+	tc.StationName = util.SanitizeDisplay(tc.StationName, 80)
+	tc.Genre = util.SanitizeDisplay(tc.Genre, 60)
+	tc.Country = util.SanitizeDisplay(tc.Country, 60)
+	tc.Artist = util.SanitizeDisplay(tc.Artist, 100)
+	tc.Title = util.SanitizeDisplay(tc.Title, 120)
+	tc.Album = util.SanitizeDisplay(tc.Album, 100)
+	tc.ReleaseYear = util.SanitizeDisplay(tc.ReleaseYear, 8)
+	tc.OriginCity = util.SanitizeDisplay(tc.OriginCity, 80)
+	tc.Trivia = util.SanitizeDisplay(tc.Trivia, 200)
+	return tc
 }
 
 func buildOfflinePersonaScript(persona Persona, tc TrackContext, variant int) string {

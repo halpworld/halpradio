@@ -20,10 +20,15 @@ const (
 	defaultCellAspect  = 2.0
 )
 
-// decodeImage decodes PNG, JPEG or GIF bytes into an image.Image.
+// decodeImage decodes PNG, JPEG or GIF bytes into an image.Image. The
+// header is checked first (checkDimensions) so an image declaring huge
+// dimensions is refused before its pixels are allocated.
 func decodeImage(data []byte) (image.Image, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("art: empty image data")
+	}
+	if err := checkDimensions(data); err != nil {
+		return nil, err
 	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {

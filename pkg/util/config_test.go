@@ -1,8 +1,10 @@
 package util
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -312,5 +314,236 @@ func TestLoudnessTargetAndDSPFile(t *testing.T) {
 	cfg, _ = LoadConfig()
 	if cfg.LoudnessTargetLUFS != -23 {
 		t.Errorf("loudness target did not round-trip: %v", cfg.LoudnessTargetLUFS)
+	}
+}
+
+// resetFallbackDir clears the cached private fallback directory so a test
+// observes the fallback logic for its own TMPDIR.
+func resetFallbackDir(t *testing.T) {
+	t.Helper()
+	fallbackDirMu.Lock()
+	fallbackDir = ""
+	fallbackDirMu.Unlock()
+	t.Cleanup(func() {
+		fallbackDirMu.Lock()
+		fallbackDir = ""
+		fallbackDirMu.Unlock()
+	})
+}
+
+func unsetHomeEnv(t *testing.T, tmp string) {
+	t.Helper()
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("XDG_CACHE_HOME", "")
+	t.Setenv("TMPDIR", tmp)
+	resetFallbackDir(t)
+}
+
+// LOC-3 / AI-6: with HOME unset the config, cache and TTS models directories
+// used to resolve to "./.halpradio", so a planted ./.halpradio/config.yaml
+// (event_command_hook) or ./.halpradio/cache/ai/models/_runtime binary in the
+// working directory was used. They must now always be absolute and outside
+// the working directory.
+func TestConfigDirsNeverRelativeWhenHomeUnset(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("HOME is not how Windows resolves the profile directory")
+	}
+	tmp := t.TempDir()
+	unsetHomeEnv(t, tmp)
+
+	work := t.TempDir()
+	planted := filepath.Join(work, ".halpradio")
+	if err := os.MkdirAll(planted, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(planted, "config.yaml"), []byte("event_command_hook: \"touch pwned\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(work)
+
+	for name, dir := range map[string]string{
+		"config": GetConfigDir(),
+		"cache":  GetCacheDir(),
+		"models": GetTTSModelsDir(),
+	} {
+		if !filepath.IsAbs(dir) {
+			t.Errorf("%s dir %q is relative", name, dir)
+		}
+		if strings.HasPrefix(dir, work) {
+			t.Errorf("%s dir %q is inside the working directory", name, dir)
+		}
+	}
+
+	cfg, _ := LoadConfig()
+	if cfg.EventCommandHook != "" {
+		t.Fatalf("event_command_hook loaded from the working directory: %q", cfg.EventCommandHook)
+	}
+
+	root := filepath.Dir(GetConfigDir())
+	info, err := os.Lstat(root)
+	if err != nil {
+		t.Fatalf("fallback root missing: %v", err)
+	}
+	if info.Mode().Perm() != 0o700 {
+		t.Errorf("fallback root mode = %v, want 0700", info.Mode().Perm())
+	}
+	if !strings.HasPrefix(root, tmp) {
+		t.Errorf("fallback root %q not under TMPDIR %q", root, tmp)
+	}
+}
+
+// A pre-existing, attacker-created halpradio-<uid> directory (too open, or a
+// symlink) must not be adopted as the fallback.
+func TestPrivateFallbackDirRejectsPlantedDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uid-based fallback is Unix only")
+	}
+	for _, tc := range []string{"world-writable", "symlink"} {
+		t.Run(tc, func(t *testing.T) {
+			tmp := t.TempDir()
+			unsetHomeEnv(t, tmp)
+			stable := filepath.Join(tmp, fmt.Sprintf("halpradio-%d", os.Getuid()))
+			switch tc {
+			case "world-writable":
+				if err := os.Mkdir(stable, 0o777); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chmod(stable, 0o777); err != nil {
+					t.Fatal(err)
+				}
+			case "symlink":
+				target := t.TempDir()
+				if err := os.Symlink(target, stable); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got := filepath.Dir(GetConfigDir())
+			if got == stable {
+				t.Fatalf("planted %s directory %q was adopted", tc, stable)
+			}
+			if !isPrivateDir(got) {
+				t.Fatalf("fallback %q is not a private directory", got)
+			}
+		})
+	}
+}
+
+// LOC-6: config.yaml must be written atomically with 0600 inside a 0700
+// directory, and looser permissions left by older versions are tightened.
+func TestSaveConfigPermissionsAndTightening(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission bits")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+
+	dir := GetConfigDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(GetConfigFile(), []byte("volume: 33\nlastfm_api_key: secret\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Volume != 33 {
+		t.Fatalf("volume = %d", cfg.Volume)
+	}
+	if fi, _ := os.Stat(GetConfigFile()); fi.Mode().Perm() != 0o600 {
+		t.Errorf("LoadConfig left config.yaml at %v, want 0600", fi.Mode().Perm())
+	}
+	if di, _ := os.Stat(dir); di.Mode().Perm() != 0o700 {
+		t.Errorf("LoadConfig left config dir at %v, want 0700", di.Mode().Perm())
+	}
+
+	// Loosen again and check SaveConfig fixes both.
+	_ = os.Chmod(dir, 0o755)
+	_ = os.Chmod(GetConfigFile(), 0o644)
+	cfg.Volume = 44
+	if err := SaveConfig(cfg); err != nil {
+		t.Fatalf("SaveConfig: %v", err)
+	}
+	if fi, _ := os.Stat(GetConfigFile()); fi.Mode().Perm() != 0o600 {
+		t.Errorf("SaveConfig wrote config.yaml with %v, want 0600", fi.Mode().Perm())
+	}
+	if di, _ := os.Stat(dir); di.Mode().Perm() != 0o700 {
+		t.Errorf("SaveConfig left config dir at %v, want 0700", di.Mode().Perm())
+	}
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".tmp-") {
+			t.Errorf("temporary file left behind: %s", e.Name())
+		}
+	}
+	again, err := LoadConfig()
+	if err != nil || again.Volume != 44 {
+		t.Fatalf("round trip: %v %d", err, again.Volume)
+	}
+}
+
+func TestFileOwnerUIDMatchesCurrentUser(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no uid on Windows")
+	}
+	info, err := os.Stat(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	uid, ok := fileOwnerUID(info)
+	if !ok || uid != os.Getuid() {
+		t.Fatalf("fileOwnerUID = %d, %v; want %d, true", uid, ok, os.Getuid())
+	}
+}
+
+// Provider opt-outs default to enabled, stay enabled when the key is absent
+// from an older config.yaml, and honour an explicit false.
+func TestProviderSwitchesDefaultEnabled(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("APPDATA", filepath.Join(home, "AppData"))
+
+	d := DefaultConfig()
+	if !d.LyricsNetEaseEnabled || !d.ArtITunesEnabled || !d.ArtDeezerEnabled || !d.ArtMusicBrainzEnabled {
+		t.Fatalf("provider switches must default to enabled: %+v", d)
+	}
+	if err := os.MkdirAll(GetConfigDir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(GetConfigFile(), []byte("volume: 40\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.LyricsNetEaseEnabled || !cfg.ArtITunesEnabled || !cfg.ArtDeezerEnabled || !cfg.ArtMusicBrainzEnabled {
+		t.Fatalf("missing keys must keep providers enabled: %+v", cfg)
+	}
+	off := "lyrics_netease_enabled: false\nalbum_art_itunes_enabled: false\nalbum_art_deezer_enabled: false\nalbum_art_musicbrainz_enabled: false\n"
+	if err := os.WriteFile(GetConfigFile(), []byte(off), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LyricsNetEaseEnabled || cfg.ArtITunesEnabled || cfg.ArtDeezerEnabled || cfg.ArtMusicBrainzEnabled {
+		t.Fatalf("explicit false must disable providers: %+v", cfg)
+	}
+	if err := SaveConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ = LoadConfig()
+	if cfg.ArtDeezerEnabled {
+		t.Fatal("false did not survive a save/load round trip")
 	}
 }

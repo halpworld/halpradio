@@ -19,6 +19,7 @@ import (
 	"github.com/halpworld/halpradio/pkg/plugin"
 	"github.com/halpworld/halpradio/pkg/radio"
 	"github.com/halpworld/halpradio/pkg/ui"
+	"github.com/halpworld/halpradio/pkg/ui/components"
 	"github.com/halpworld/halpradio/pkg/util"
 )
 
@@ -61,10 +62,8 @@ func runPartyCreate(args []string, embeddedCatalog []byte, out io.Writer) (*AppI
 	fs.SetOutput(out)
 	fs.Usage = func() { PrintPartyHelp(out) }
 
-	cfg, err := util.LoadConfig()
-	if err != nil {
-		cfg = util.DefaultConfig()
-	}
+	// Keep the fail-closed config when config.yaml exists but is unreadable.
+	cfg, _ := util.LoadConfig()
 
 	var djPassStr, nickname, roomCode string
 	var port int
@@ -82,7 +81,7 @@ func runPartyCreate(args []string, embeddedCatalog []byte, out io.Writer) (*AppI
 	fs.StringVar(&djPassStr, "d", "host", "DJ tuning permission (shorthand)")
 	fs.StringVar(&nickname, "nickname", defaultNick, "Listener handle shown to room peers")
 	fs.StringVar(&nickname, "n", defaultNick, "Listener handle (shorthand)")
-	fs.StringVar(&roomCode, "code", "", "Custom 6-character room code (optional)")
+	fs.StringVar(&roomCode, "code", "", "Custom 16-character room code, e.g. "+party.ExampleRoomCode+" (optional, generated if omitted)")
 	fs.IntVar(&port, "port", cfg.PartyPort, "TCP port to bind for peer mesh (default: auto)")
 	fs.BoolVar(&isHeadless, "headless", false, "Stream synchronized audio headlessly in terminal")
 	fs.BoolVar(&isJSON, "json", false, "Output status and events as JSON")
@@ -106,6 +105,15 @@ func runPartyCreate(args []string, embeddedCatalog []byte, out io.Writer) (*AppI
 		roomName = "team-focus"
 	}
 
+	if roomCode != "" {
+		// A created code must be hard to guess, not just well-formed.
+		if err := party.ValidateNewRoomCode(roomCode); err != nil {
+			fmt.Fprintf(out, "Error: this room code cannot be used for a new room: %s\n", safe(err.Error()))
+			return nil, false, fmt.Errorf("invalid room code: %w", err)
+		}
+	}
+	nickname = partyCLINick(nickname, "host")
+
 	djPass := party.DJPassHostOnly
 	if strings.EqualFold(djPassStr, "open") || strings.EqualFold(djPassStr, "democracy") {
 		djPass = party.DJPassOpenDemocracy
@@ -122,7 +130,7 @@ func runPartyCreate(args []string, embeddedCatalog []byte, out io.Writer) (*AppI
 			if resp.Status != nil && resp.Status.Party != nil && resp.Status.Party.RoomCode != "" {
 				code = " #" + resp.Status.Party.RoomCode
 			}
-			fmt.Fprintf(out, "✓ Party room%s created on active halpradio instance!\n", code)
+			fmt.Fprintf(out, "✓ Party room%s created on active halpradio instance!\n", safe(code))
 		}
 		return nil, true, nil
 	}
@@ -165,10 +173,8 @@ func runPartyJoin(args []string, embeddedCatalog []byte, out io.Writer) (*AppIns
 	fs.SetOutput(out)
 	fs.Usage = func() { PrintPartyHelp(out) }
 
-	cfg, err := util.LoadConfig()
-	if err != nil {
-		cfg = util.DefaultConfig()
-	}
+	// Keep the fail-closed config when config.yaml exists but is unreadable.
+	cfg, _ := util.LoadConfig()
 
 	var nickname, address string
 	var isHeadless, isJSON bool
@@ -202,28 +208,35 @@ func runPartyJoin(args []string, embeddedCatalog []byte, out io.Writer) (*AppIns
 	}
 
 	if len(fs.Args()) == 0 {
-		fmt.Fprintln(out, "Error: 6-character room code required. Usage: halpradio party join <ROOM_CODE>")
+		fmt.Fprintf(out, "Error: invite or room code required (e.g. %s). Usage: halpradio party join <INVITE>\n",
+			party.FormatInvite(party.ExampleRoomCode, party.ExampleFingerprint))
 		return nil, false, fmt.Errorf("room code required")
 	}
 
-	code := party.NormalizeRoomCode(fs.Args()[0])
-	if len(code) != 6 {
-		fmt.Fprintf(out, "Error: room code %q is invalid. Must be 6 characters (e.g. 8X2K9P or #8X2K9P)\n", fs.Args()[0])
-		return nil, false, fmt.Errorf("invalid room code %q", fs.Args()[0])
+	code, hostPin, err := party.ParseInvite(fs.Args()[0])
+	if err != nil {
+		fmt.Fprintf(out, "Error: invite is invalid: %s\n", safe(err.Error()))
+		return nil, false, fmt.Errorf("invalid room code: %w", err)
 	}
+	invite := party.FormatInvite(code, hostPin)
+	nickname = partyCLINick(nickname, "listener")
 
 	// 1. If halpradio is already running, join party room on active instance via IPC
-	payload := code
-	if address != "" {
-		payload += " " + address
-	}
-	resp, err := desktop.SendIPCCommandWithPayload("", "party-join", payload)
+	// Only the invite crosses the IPC socket; a peer address is never
+	// forwarded to the running instance.
+	resp, err := desktop.SendIPCCommandWithPayload("", "party-join", invite)
 	if err == nil && resp != nil && resp.Success {
 		if isJSON {
 			data, _ := json.MarshalIndent(resp, "", "  ")
 			fmt.Fprintln(out, string(data))
 		} else {
 			fmt.Fprintf(out, "✓ Connected active halpradio instance to party room #%s!\n", code)
+			if hostPin == "" {
+				fmt.Fprintln(out, "Note: you joined with a bare room code; check the host's fingerprint against the host's screen.")
+			}
+			if address != "" {
+				fmt.Fprintln(out, "Note: --address is not passed to a running instance; enter it in the party room manager's Join form (ctrl+p) instead.")
+			}
 		}
 		return nil, true, nil
 	}
@@ -231,6 +244,7 @@ func runPartyJoin(args []string, embeddedCatalog []byte, out io.Writer) (*AppIns
 	// 2. Halpradio is not running.
 	sessionCfg := party.SessionConfig{
 		RoomCode: code,
+		HostPin:  hostPin,
 		Nickname: nickname,
 		IsHost:   false,
 		Port:     0,
@@ -271,7 +285,7 @@ func runPartyStatus(args []string, out io.Writer) (*AppInstance, bool, error) {
 			fmt.Fprintln(out, string(data))
 			return nil, false, err
 		}
-		fmt.Fprintf(out, "Status query error: %v\n", err)
+		fmt.Fprintf(out, "Status query error: %s\n", safe(err.Error()))
 		return nil, false, err
 	}
 
@@ -309,17 +323,17 @@ func runPartyStatus(args []string, out io.Writer) (*AppInstance, bool, error) {
 		stationName = "None"
 	}
 
-	fmt.Fprintf(out, "👥 TERMINAL PARTY ROOM: #%s\n", p.RoomCode)
+	fmt.Fprintf(out, "👥 TERMINAL PARTY ROOM: #%s\n", safe(p.RoomCode))
 	if p.RoomName != "" {
-		fmt.Fprintf(out, "  Room Name:  %s\n", p.RoomName)
+		fmt.Fprintf(out, "  Room Name:  %s\n", safe(p.RoomName))
 	}
 	fmt.Fprintf(out, "  Your Role:  %s\n", role)
-	fmt.Fprintf(out, "  Host (DJ):  %s\n", p.Host)
+	fmt.Fprintf(out, "  Host (DJ):  %s\n", safe(p.Host))
 	fmt.Fprintf(out, "  DJ Pass:    %s\n", djPass)
-	fmt.Fprintf(out, "  Listeners:  %d (%s)\n", p.Listeners, strings.Join(p.Peers, ", "))
-	fmt.Fprintf(out, "  Station:    %s\n", stationName)
+	fmt.Fprintf(out, "  Listeners:  %d (%s)\n", p.Listeners, safeJoin(p.Peers, ", "))
+	fmt.Fprintf(out, "  Station:    %s\n", safe(stationName))
 	if resp.Status.Track != "" && resp.Status.Track != stationName {
-		fmt.Fprintf(out, "  Track:      %s\n", resp.Status.Track)
+		fmt.Fprintf(out, "  Track:      %s\n", safe(resp.Status.Track))
 	}
 	return nil, true, nil
 }
@@ -345,7 +359,7 @@ func runPartyLeave(args []string, out io.Writer) (*AppInstance, bool, error) {
 			fmt.Fprintln(out, string(data))
 			return nil, false, err
 		}
-		fmt.Fprintf(out, "Leave error: %v\n", err)
+		fmt.Fprintf(out, "Leave error: %s\n", safe(err.Error()))
 		return nil, false, err
 	}
 
@@ -382,11 +396,11 @@ func runPartyReact(args []string, out io.Writer) (*AppInstance, bool, error) {
 
 	_, err := desktop.SendIPCCommandWithPayload("", "party-react", emoji)
 	if err != nil {
-		fmt.Fprintf(out, "Reaction error: %v\n", err)
+		fmt.Fprintf(out, "Reaction error: %s\n", safe(err.Error()))
 		return nil, false, err
 	}
 
-	fmt.Fprintf(out, "✓ Sent reaction %s to party room\n", emoji)
+	fmt.Fprintf(out, "✓ Sent reaction %s to party room\n", safe(emoji))
 	return nil, true, nil
 }
 
@@ -399,11 +413,11 @@ func runPartyChat(args []string, out io.Writer) (*AppInstance, bool, error) {
 	message := strings.Join(args, " ")
 	_, err := desktop.SendIPCCommandWithPayload("", "party-chat", message)
 	if err != nil {
-		fmt.Fprintf(out, "Chat error: %v\n", err)
+		fmt.Fprintf(out, "Chat error: %s\n", safe(err.Error()))
 		return nil, false, err
 	}
 
-	fmt.Fprintf(out, "✓ Sent chat ping: %s\n", message)
+	fmt.Fprintf(out, "✓ Sent chat ping: %s\n", safe(message))
 	return nil, true, nil
 }
 
@@ -424,7 +438,9 @@ func executeHeadlessParty(
 
 	for _, addr := range directAddrs {
 		if addr != "" {
-			_ = sess.ConnectDirect(addr)
+			if err := sess.ConnectDirect(addr); err != nil {
+				fmt.Fprintf(out, "Warning: could not connect to %s: %s\n", safe(addr), safe(err.Error()))
+			}
 		}
 	}
 
@@ -439,66 +455,31 @@ func executeHeadlessParty(
 			d, _ := json.Marshal(ev)
 			fmt.Fprintln(out, string(d))
 		} else if info.TrackTitle != "" {
-			fmt.Fprintf(out, "♪ Now Playing: %s\n", info.TrackTitle)
+			fmt.Fprintf(out, "♪ Now Playing: %s\n", safe(info.TrackTitle))
 		}
 	})
 	pm.SetDSP(loadDSPSettings(cfg))
 	defer pm.Close()
 
+	hs := &headlessSync{sess: sess, store: store, pm: pm, out: out, isJSON: isJSON}
 	sess.SetHandlers(
-		func(sp party.SyncPayload) {
-			st := store.FindStationByID(sp.StationID)
-			if st == nil {
-				st = &radio.Station{
-					ID:      sp.StationID,
-					Name:    sp.StationName,
-					URL:     sp.StreamURL,
-					Genre:   sp.Genre,
-					Country: sp.Country,
-					Bitrate: sp.Bitrate,
-					Codec:   sp.Codec,
-				}
-			}
-			switch sp.Status {
-			case "playing":
-				_ = pm.Play(*st)
-				if !isJSON {
-					fmt.Fprintf(out, "📻 [Sync] Playing: %s (%s)\n", st.Name, st.URL)
-				}
-			case "paused":
-				_ = pm.Pause()
-				if !isJSON {
-					fmt.Fprintf(out, "⏸️ [Sync] Paused: %s\n", st.Name)
-				}
-			case "stopped":
-				_ = pm.Stop()
-				if !isJSON {
-					fmt.Fprintln(out, "⏹️ [Sync] Stopped")
-				}
-			}
-		},
+		hs.handle,
 		func(r party.FloatingReaction) {
 			if !isJSON {
-				fmt.Fprintf(out, "✨ [Reaction] %s (%s)\n", r.Emoji, r.Sender)
+				hs.printf("✨ [Reaction] %s (%s)\n", safe(r.Emoji), safe(components.CleanPartyNick(r.Sender)))
 			}
 		},
 		func(c party.ChatMessage) {
 			if !isJSON {
-				fmt.Fprintf(out, "💬 [Chat] <%s> %s\n", c.Sender, c.Message)
+				hs.printf("💬 [Chat] <%s> %s\n", safe(components.CleanPartyNick(c.Sender)), safe(c.Message))
 			}
 		},
 		func(peers []*party.PeerInfo) {
-			if !isJSON {
-				names := make([]string, 0, len(peers))
-				for _, p := range peers {
-					names = append(names, p.Nickname)
-				}
-				fmt.Fprintf(out, "👥 [Roster] %d listeners: %s\n", len(peers), strings.Join(names, ", "))
-			}
+			hs.printf("%s", headlessRoster(peers))
 		},
 		func(msg string) {
 			if !isJSON {
-				fmt.Fprintf(out, "ℹ️ [Notice] %s\n", msg)
+				hs.printf("ℹ️ [Notice] %s\n", safe(ui.PartyFlashText(sess, msg)))
 			}
 		},
 	)
@@ -519,13 +500,18 @@ func executeHeadlessParty(
 			roleStr = "Host (DJ)"
 		}
 		fmt.Fprintln(out, "─────────────────────────────────────────────────────────────────────────────")
-		fmt.Fprintf(out, "👥 HALPRADIO TERMINAL PARTY ROOM: #%s\n", sess.RoomCode())
-		fmt.Fprintf(out, "   Role:      %s\n", roleStr)
-		fmt.Fprintf(out, "   Nickname:  %s\n", sessionCfg.Nickname)
+		fmt.Fprintf(out, "👥 HALPRADIO TERMINAL PARTY ROOM\n")
+		fmt.Fprintf(out, "   Invite:    %s\n", safe(sess.Invite()))
 		if sessionCfg.IsHost {
-			fmt.Fprintf(out, "   Room Name: %s\n", sessionCfg.RoomName)
+			fmt.Fprintf(out, "              %s\n", components.PartyInviteNote)
+		}
+		fmt.Fprintf(out, "   Role:      %s\n", roleStr)
+		fmt.Fprintf(out, "   Nickname:  %s\n", safe(sessionCfg.Nickname))
+		if sessionCfg.IsHost {
+			fmt.Fprintf(out, "   Room Name: %s\n", safe(sessionCfg.RoomName))
 			fmt.Fprintf(out, "   DJ Pass:   %s\n", sessionCfg.DJPass)
 		}
+		fmt.Fprint(out, headlessFingerprintLine(sessionCfg.IsHost, sessionCfg.Nickname, sess.Fingerprint(), sess.HostPin()))
 		fmt.Fprintln(out, "   Zero Central Audio Relay: Audio pulled directly from stream source.")
 		fmt.Fprintln(out, "─────────────────────────────────────────────────────────────────────────────")
 		fmt.Fprintln(out, "Press Ctrl+C to disconnect and exit party.")
@@ -556,7 +542,9 @@ func setupPartyApp(
 	if err := store.Load(embeddedCatalog); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning loading station store: %v\n", err)
 	}
-	_ = store.ReloadBundledFromCache()
+	if cfg.CatalogAutoUpdate {
+		_ = store.ReloadBundledFromCache()
+	}
 
 	sess, err := party.NewPartySession(sessionCfg)
 	if err != nil {
@@ -565,7 +553,9 @@ func setupPartyApp(
 
 	for _, addr := range directAddrs {
 		if addr != "" {
-			_ = sess.ConnectDirect(addr)
+			if err := sess.ConnectDirect(addr); err != nil {
+				fmt.Fprintf(out, "Warning: could not connect to %s: %s\n", safe(addr), safe(err.Error()))
+			}
 		}
 	}
 
@@ -595,11 +585,17 @@ func setupPartyApp(
 			program.Send(ui.PluginFlashMsg(msg))
 		}
 	})
+	// plugins_enabled: false keeps every plugin stopped (PLG-10).
+	pluginMgr.SetPluginsDisabled(!cfg.PluginsEnabled)
 	_ = pluginMgr.Init()
 
 	model := ui.NewModel(store, pm, cfg)
 	model.SetPluginManager(pluginMgr)
 	model.SetPartySession(sess)
+	model.CatalogMinStations = embeddedStationCount(embeddedCatalog)
+	if note := storeWarningStatus(store); note != "" {
+		model.StatusMessage = note
+	}
 
 	desktopMgr := desktop.NewManager(desktop.DesktopConfig{
 		NotificationsEnabled: cfg.SongNotifications,
@@ -638,34 +634,11 @@ func setupPartyApp(
 	})
 
 	desktopMgr.SetPartyHandler(func(action desktop.MediaAction, payload string) error {
-		if program == nil {
-			return fmt.Errorf("program not ready")
-		}
-		switch action {
-		case desktop.ActionPartyCreate:
-			name := strings.TrimSpace(payload)
-			if name == "" {
-				name = "team-focus"
-			}
-			program.Send(ui.PartyCreateRoomMsg{RoomName: name})
-		case desktop.ActionPartyJoin:
-			code := strings.TrimSpace(payload)
-			addr := ""
-			if strings.Contains(code, " ") {
-				parts := strings.SplitN(code, " ", 2)
-				code = parts[0]
-				addr = parts[1]
-			}
-			program.Send(ui.PartyJoinRoomMsg{RoomCode: code, Address: addr})
-		case desktop.ActionPartyLeave:
-			program.Send(ui.PartyLeaveRoomMsg{})
-		case desktop.ActionPartyReact:
-			program.Send(ui.PartySendReactionMsg(payload))
-		case desktop.ActionPartyChat:
-			program.Send(ui.PartySendChatMsg(payload))
-		}
-		return nil
+		return dispatchPartyIPC(programSender(program), action, payload)
 	})
+	if note := reportIPCStart(nil, desktopMgr); note != "" {
+		model.StatusMessage = note
+	}
 
 	model.SetDesktop(desktopMgr)
 
@@ -686,7 +659,8 @@ func setupPartyApp(
 		tea.WithMouseCellMotion(),
 	)
 
-	debuglog.Logf("session", "party app started: room=%s host=%t", sessionCfg.RoomCode, sessionCfg.IsHost)
+	// The room code is the room's only secret: never write it to the debug log.
+	debuglog.Logf("session", "party app started: host=%t", sessionCfg.IsHost)
 
 	return &AppInstance{
 		Program:      program,
@@ -697,4 +671,13 @@ func setupPartyApp(
 		PluginMgr:    pluginMgr,
 		PartySession: sess,
 	}, nil
+}
+
+// partyCLINick is the --nickname value with anything that reads as a
+// fingerprint replaced by "…", or def when nothing is left.
+func partyCLINick(nick, def string) string {
+	if n := strings.TrimSpace(components.StripFingerprintRuns(nick)); n != "" {
+		return n
+	}
+	return def
 }

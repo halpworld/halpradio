@@ -5,10 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
-	"github.com/halpworld/halpradio/pkg/desktop"
 	"github.com/halpworld/halpradio/pkg/radio"
+	"github.com/halpworld/halpradio/pkg/util"
 )
 
 // StationJSONEntry represents the serialized JSON output for stations.
@@ -44,6 +45,10 @@ func RunStations(args []string, embeddedCatalog []byte, out io.Writer) (bool, er
 	}
 
 	store := loadStore(embeddedCatalog)
+	if subcmd != "add" || len(subargs) == 0 || !IsHelpArg(subargs[0]) {
+		// Warnings go to stderr so --json and --plain output stay parseable.
+		printStoreWarnings(os.Stderr, store)
+	}
 
 	switch subcmd {
 	case "list", "ls":
@@ -65,10 +70,9 @@ func RunStations(args []string, embeddedCatalog []byte, out io.Writer) (bool, er
 }
 
 func loadStore(embeddedCatalog []byte) *radio.Store {
-	store := radio.NewStore()
-	_ = store.Load(embeddedCatalog)
-	_ = store.ReloadBundledFromCache()
-	return store
+	// Keep the fail-closed config when config.yaml exists but is unreadable.
+	cfg, _ := util.LoadConfig()
+	return loadStationStore(embeddedCatalog, cfg)
 }
 
 func runStationsList(args []string, store *radio.Store, out io.Writer) (bool, error) {
@@ -256,40 +260,40 @@ func runStationsFav(args []string, store *radio.Store, out io.Writer) (bool, err
 	}
 
 	if targetStation == nil {
-		fmt.Fprintf(out, "Station %q not found in catalog.\n", targetID)
+		fmt.Fprintf(out, "Station %q not found in catalog.\n", safe(targetID))
 		return false, fmt.Errorf("station not found: %s", targetID)
 	}
 
 	switch action {
 	case "add":
 		if store.Favorites[targetStation.ID] {
-			fmt.Fprintf(out, "Station %q is already in favorites.\n", targetStation.Name)
+			fmt.Fprintf(out, "Station %q is already in favorites.\n", safe(targetStation.Name))
 			return true, nil
 		}
 		_ = store.ToggleFavorite(*targetStation)
-		fmt.Fprintf(out, "✓ Added %q (%s) to favorites.\n", targetStation.Name, targetStation.ID)
+		fmt.Fprintf(out, "✓ Added %q (%s) to favorites.\n", safe(targetStation.Name), safe(targetStation.ID))
 		return true, nil
 
 	case "remove", "rm", "del", "delete":
 		if !store.Favorites[targetStation.ID] {
-			fmt.Fprintf(out, "Station %q is not in favorites.\n", targetStation.Name)
+			fmt.Fprintf(out, "Station %q is not in favorites.\n", safe(targetStation.Name))
 			return true, nil
 		}
 		_ = store.ToggleFavorite(*targetStation)
-		fmt.Fprintf(out, "✓ Removed %q (%s) from favorites.\n", targetStation.Name, targetStation.ID)
+		fmt.Fprintf(out, "✓ Removed %q (%s) from favorites.\n", safe(targetStation.Name), safe(targetStation.ID))
 		return true, nil
 
 	case "toggle":
 		isFav := store.ToggleFavorite(*targetStation)
 		if isFav {
-			fmt.Fprintf(out, "✓ Added %q (%s) to favorites.\n", targetStation.Name, targetStation.ID)
+			fmt.Fprintf(out, "✓ Added %q (%s) to favorites.\n", safe(targetStation.Name), safe(targetStation.ID))
 		} else {
-			fmt.Fprintf(out, "✓ Removed %q (%s) from favorites.\n", targetStation.Name, targetStation.ID)
+			fmt.Fprintf(out, "✓ Removed %q (%s) from favorites.\n", safe(targetStation.Name), safe(targetStation.ID))
 		}
 		return true, nil
 
 	default:
-		fmt.Fprintf(out, "Unknown fav command %q. Options: list, add, remove, toggle\n", action)
+		fmt.Fprintf(out, "Unknown fav command %q. Options: list, add, remove, toggle\n", safe(action))
 		return false, fmt.Errorf("unknown fav action: %s", action)
 	}
 }
@@ -341,12 +345,24 @@ func runStationsAdd(args []string, store *radio.Store, out io.Writer) (bool, err
 		Broadcast: "Online",
 	}
 
+	before := len(store.Local)
 	if err := store.AddOrUpdateLocalStation(st); err != nil {
-		fmt.Fprintf(out, "Failed to save station: %v\n", err)
+		fmt.Fprintf(out, "Failed to save station: %s\n", safe(err.Error()))
 		return false, err
 	}
 
-	fmt.Fprintf(out, "✓ Successfully added custom station %q (%s) to local catalog.\n", st.Name, st.ID)
+	// Report the station as stored: the store assigns an ID when none was
+	// given and sanitizes every field.
+	stored := st
+	if len(store.Local) > before {
+		stored = store.Local[len(store.Local)-1]
+	} else if clean, ok := radio.SanitizeStation(st); ok {
+		if found := store.FindStationByID(clean.ID); found != nil {
+			stored = *found
+		}
+	}
+	fmt.Fprintf(out, "✓ Saved custom station %q to the local catalog with ID %s.\n", safe(stored.Name), safe(stored.ID))
+	fmt.Fprintf(out, "  Play it with: halpradio play %s\n", safe(stored.ID))
 	return true, nil
 }
 
@@ -385,10 +401,10 @@ func renderStationsPlain(stations []radio.Station, out io.Writer) (bool, error) 
 		if st.IsFavorite {
 			favMarker = "★"
 		}
-		cleanID := desktop.SanitizeString(st.ID, 128)
-		cleanName := desktop.SanitizeString(st.Name, 256)
-		cleanGenre := desktop.SanitizeString(st.Genre, 128)
-		cleanCountry := desktop.SanitizeString(st.Country, 32)
+		cleanID := util.SanitizeDisplay(st.ID, 128)
+		cleanName := util.SanitizeDisplay(st.Name, 256)
+		cleanGenre := util.SanitizeDisplay(st.Genre, 128)
+		cleanCountry := util.SanitizeDisplay(st.Country, 32)
 		fmt.Fprintf(out, "%d\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
 			i+1,
 			cleanID,
@@ -396,7 +412,7 @@ func renderStationsPlain(stations []radio.Station, out io.Writer) (bool, error) 
 			cleanGenre,
 			cleanCountry,
 			st.Bitrate,
-			st.URL,
+			util.SanitizeDisplay(st.URL, 2048),
 			favMarker,
 		)
 	}
@@ -409,25 +425,25 @@ func renderStationsTable(stations []radio.Station, out io.Writer, header string)
 		return true, nil
 	}
 
-	fmt.Fprintf(out, "📻 %s (%d stations)\n", header, len(stations))
+	fmt.Fprintf(out, "📻 %s (%d stations)\n", safe(header), len(stations))
 	fmt.Fprintln(out, "───────────────────────────────────────────────────────────────────────────────────────────────────")
 	fmt.Fprintf(out, "%-4s  %-24s  %-30s  %-18s  %-8s  %-8s\n", "#", "ID", "NAME", "GENRE", "LOC", "BITRATE")
 	fmt.Fprintln(out, "───────────────────────────────────────────────────────────────────────────────────────────────────")
 
 	for i, st := range stations {
-		name := desktop.SanitizeString(st.Name, 256)
+		name := util.SanitizeDisplay(st.Name, 256)
 		if len(name) > 30 {
 			name = name[:27] + "..."
 		}
-		id := desktop.SanitizeString(st.ID, 128)
+		id := util.SanitizeDisplay(st.ID, 128)
 		if len(id) > 24 {
 			id = id[:21] + "..."
 		}
-		genre := desktop.SanitizeString(st.Genre, 128)
+		genre := util.SanitizeDisplay(st.Genre, 128)
 		if len(genre) > 18 {
 			genre = genre[:15] + "..."
 		}
-		loc := desktop.SanitizeString(st.Country, 32)
+		loc := util.SanitizeDisplay(st.Country, 32)
 		if loc == "" {
 			loc = "🌐"
 		} else {

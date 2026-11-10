@@ -1,0 +1,19 @@
+# Keep the build context to what `go build` needs.
+.git
+.github
+.claude
+.worktrees
+dist
+docs
+vhs
+keys
+scripts
+Formula
+*.md
+!README.md
+Dockerfile
+.dockerignore
+halpradio
+*.out
+.env
+.env.*

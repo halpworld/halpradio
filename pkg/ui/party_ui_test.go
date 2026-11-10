@@ -107,6 +107,8 @@ func TestPartyModalKeyAndStateFlow(t *testing.T) {
 		StationName: testStation.Name,
 		StreamURL:   testStation.URL,
 		Status:      "playing",
+		FromHost:    true,
+		FromNick:    "host",
 	})
 	newModel, _ = m.Update(syncMsg)
 	m = newModel.(Model)

@@ -145,7 +145,9 @@ func RunVolume(args []string, out io.Writer) (bool, error) {
 		if cfg.Volume > 100 {
 			cfg.Volume = 100
 		}
-		_ = util.SaveConfig(cfg)
+		if err := saveCLIConfig(cfg, out); err != nil {
+			return false, err
+		}
 		if isJSON {
 			data, _ := json.MarshalIndent(map[string]interface{}{"volume": cfg.Volume, "status": "saved"}, "", "  ")
 			fmt.Fprintln(out, string(data))
@@ -200,7 +202,9 @@ func RunVolume(args []string, out io.Writer) (bool, error) {
 	// Update offline config
 	cfg, _ := util.LoadConfig()
 	cfg.Volume = val
-	_ = util.SaveConfig(cfg)
+	if err := saveCLIConfig(cfg, out); err != nil {
+		return false, err
+	}
 	if isJSON {
 		data, _ := json.MarshalIndent(map[string]interface{}{"volume": cfg.Volume, "status": "saved"}, "", "  ")
 		fmt.Fprintln(out, string(data))

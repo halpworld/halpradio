@@ -76,16 +76,38 @@ func Init(logFile string) (string, error) {
 			return "", fmt.Errorf("debuglog: create %s: %w", dir, err)
 		}
 	}
+	if fi, err := os.Lstat(logFile); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("debuglog: refusing to write %s: it is a symlink", logFile)
+	}
 	rotateLocked(logFile)
 
-	// 0600: logs carry station URLs and local paths; keep them to the owner.
-	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	// 0600 and no symlink following (O_NOFOLLOW where the OS has it): the
+	// log may sit in a shared directory such as /tmp.
+	f, err := openLogFile(logFile)
 	if err != nil {
 		return "", fmt.Errorf("debuglog: open %s: %w", logFile, err)
 	}
-	if info, err := f.Stat(); err == nil {
-		written = info.Size()
+	info, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return "", fmt.Errorf("debuglog: stat %s: %w", logFile, err)
 	}
+	if !info.Mode().IsRegular() {
+		_ = f.Close()
+		return "", fmt.Errorf("debuglog: refusing to write %s: not a regular file", logFile)
+	}
+	if !ownedByCurrentUser(info) {
+		_ = f.Close()
+		return "", fmt.Errorf("debuglog: refusing to write %s: owned by another user or hard-linked", logFile)
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		// A pre-existing file we own but others could read: tighten it.
+		if err := f.Chmod(0o600); err != nil {
+			_ = f.Close()
+			return "", fmt.Errorf("debuglog: chmod %s: %w", logFile, err)
+		}
+	}
+	written = info.Size()
 	out = f
 	path = logFile
 	start = time.Now()
@@ -93,9 +115,11 @@ func Init(logFile string) (string, error) {
 }
 
 // rotateLocked moves an oversized log aside so a session always starts small.
+// Only a regular file owned by the current user is rotated; rename does not
+// follow a symlink at the destination.
 func rotateLocked(logFile string) {
-	info, err := os.Stat(logFile)
-	if err != nil || info.Size() < MaxSize {
+	info, err := os.Lstat(logFile)
+	if err != nil || !info.Mode().IsRegular() || !ownedByCurrentUser(info) || info.Size() < MaxSize {
 		return
 	}
 	_ = os.Rename(logFile, logFile+".old")

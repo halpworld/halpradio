@@ -59,7 +59,7 @@ halpradio/
     ├── player/           # Multi-backend audio playback engine & ICY stream reader
     │   ├── dsp/          # Pure Go DSP rack: 10-band EQ, EBU R128 normalizer, limiter, crossfeed, lo-fi, lavfi mapping
     │   └── fingerprint/  # Acoustic stream recognition, Chromaprint / AcoustID client, LRU cache
-    ├── party/            # P2P mesh synchronized radio rooms, Argon2id/AES-256-GCM E2EE & protocol engine
+    ├── party/            # P2P mesh synchronized radio rooms, direct TCP mesh, ed25519 handshake, AES-256-GCM transport & protocol engine
     ├── plugin/           # Wazero Wasm sandboxing engine, capability permissions, host API, registry client
     ├── radio/            # Station catalog store, YAML parser, RadioBrowser client & metadata sanitizer
     ├── theme/            # Theme definitions & color palette registry
@@ -74,9 +74,9 @@ halpradio/
 
 | Package | Key Types / Files | Responsibilities |
 |---|---|---|
-| [`pkg/ai`](../pkg/ai/dj.go) | `DJ`, `LocalTTSEngine`, `LinerNotesClient` | Generates persona-driven radio intros (local Ollama or deterministic templates), synthesizes speech via Piper ONNX, Sherpa-ONNX Kokoro-82M, or native OS TTS, manages opt-in HuggingFace ONNX downloads, and resolves MusicBrainz + Wikipedia liner notes. |
+| [`pkg/ai`](../pkg/ai/dj.go) | `DJ`, `LocalTTSEngine`, `LinerNotesClient` | Generates persona-driven radio intros (local Ollama or deterministic templates), synthesizes speech via Piper ONNX, Sherpa-ONNX Kokoro-82M, or native OS TTS, manages opt-in voice downloads (sherpa-onnx runtime + voice from GitHub, SHA-256 verified), and resolves MusicBrainz + Wikipedia liner notes. |
 | [`pkg/app`](../pkg/app/app.go) | `Run()`, `RunPluginCLI()` | Parses CLI flags (`--backend`, `--theme`, `--version`, `--fingerprint`, `--auto-identify`, `--ai-dj`, `--dj-persona`), handles CLI subcommands (`remote`, `plugin`, `party`), sets up store, instantiates `player.Manager`, initializes `tea.Program`. |
-| [`pkg/party`](../pkg/party/sync.go) | `Session`, `MeshNode`, `Packet`, `Crypto` | P2P mesh synchronized radio rooms, WebRTC data channels, Argon2id key derivation & AES-256-GCM encryption, sub-second playback sync, host election, ASCII reaction bus. |
+| [`pkg/party`](../pkg/party/sync.go) | `Session`, `MeshNode`, `Packet`, `Crypto` | P2P mesh synchronized radio rooms over direct TCP connections with an ed25519-authenticated handshake, AES-256-GCM transport, room key derived from the code with Argon2id, invites (`CODE/FINGERPRINT`, `ParseInvite`, `JoinWithInvite`) that pin the host a guest follows, sub-second playback sync, host election, ASCII reaction bus. |
 | [`pkg/art`](../pkg/art/client.go) | `Client`, `Cover`, `Renderer`, `Protocol` | Resolves high-resolution cover art from iTunes, Deezer, MusicBrainz / Cover Art Archive and Last.fm, then encodes it for the terminal's best image transport with RAM and disk caching. |
 | [`pkg/lyrics`](../pkg/lyrics/lrclib.go) | `Client`, `Sheet`, `Line`, `ParseLRC()` | Queries LRCLIB and falls back to NetEase, parses `.lrc` timestamps, resolves the active line for a playback offset, and caches sheets in RAM and on disk. |
 | [`pkg/player`](../pkg/player/player.go) | `Player`, `Manager`, `TrackInfo` | Detects audio CLI backends (`mpv`, `vlc`, `ffplay`, etc.) or falls back to native Go audio. Runs ICY metadata streaming goroutine. |

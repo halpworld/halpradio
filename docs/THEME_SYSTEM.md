@@ -97,7 +97,9 @@ header_ascii: "#c4a7e7"   # Radio ASCII logo & decorative banners
 - **Hex Values**: `#RRGGBB` (e.g. `#eb6f92`), `#RGB` (e.g. `#f0a`), or `#RRGGBBAA`.
 - **ANSI Color Names**: `red`, `green`, `blue`, `cyan`, `magenta`, `yellow`, `white`, `black`, `brightred`, `brightcyan`, etc.
 - **ANSI 256 Numbers**: Strings `0` through `255` (e.g. `"208"` for orange).
-- **Zero-Crash Resilience**: If any color token is omitted or malformed, `halpradio` automatically applies clean fallback tokens based on `primary` and `background` without crashing or freezing.
+- **Zero-Crash Resilience**: If any color token is omitted or malformed, `halpradio` automatically applies clean fallback tokens based on `primary` and `background` without crashing or freezing. (Themes downloaded from a registry are stricter; see below.)
+- **Built-in IDs are reserved**: a custom file whose theme ID is a built-in one (for example `nord.yaml`) is skipped with a warning, so a file in the themes folder can never replace a built-in theme.
+- **Text is plain text**: `name`, `author` and `description` are stripped of control and escape sequences and length-capped before they are shown.
 
 ---
 
@@ -168,6 +170,16 @@ halpradio theme remove my-custom-theme
 ```
 
 ---
+
+### Registry and download rules
+
+The Community Hub and `halpradio theme install` read a JSON registry index. Its entries are treated as untrusted:
+
+- **IDs** must already be slugs (1–64 lowercase letters, digits, `-` or `_`, starting with a letter or digit). Entries with any other ID, a built-in ID (`tokyonight`, `catppuccin`, `synthwave`, `nord`, `gruvbox`, `dracula`) or a duplicate ID are dropped. Built-in themes cannot be installed over or removed (`d` / `theme remove` refuse them).
+- **Text fields** (name, author, category, description, version, date) are stripped of control and escape sequences and length-capped.
+- **`download_url`**, when an entry has one, must be `https` (a relative URL is resolved against the registry URL and must end up `https` too), with no credentials, and must not point at `localhost` or a private, loopback, link-local or other non-public address. The address actually connected to is checked as well, so a public name that resolves to a private address is refused. A configured HTTP(S) proxy is still allowed. At most 3 redirects are followed, each re-checked, so an `https` → `http` redirect is refused.
+- **The downloaded file** must be at most 64 KiB, be valid theme YAML and have valid `primary`, `background` and `foreground` colours; anything else (an HTML error page, an empty body) is refused and nothing is written.
+- **What is saved** is not the downloaded bytes: halpradio re-writes the parsed, cleaned theme to `~/.config/halpradio/themes/<id>.yaml`, atomically and with mode `0600` (the themes folder is `0700`). Exported themes are written the same way.
 
 ## 🌐 Official Themes Repository (`halpradio-themes`)
 

@@ -65,7 +65,15 @@ func MapStatusToMPRIS(status string) string {
 }
 
 // BuildMPRISMetadata constructs the standard MPRIS metadata dictionary.
+//
+// Everything published here is readable by any process on the session bus,
+// so strings are sanitized (valid UTF-8, no control/format runes) and the
+// stream URL loses userinfo, query and fragment, where credentials and
+// tokens live; an unparseable URL is omitted.
 func BuildMPRISMetadata(stationName, genre, trackTitle, streamURL string) map[string]any {
+	stationName = SanitizeString(stationName, 256)
+	genre = SanitizeString(genre, 128)
+	trackTitle = SanitizeString(trackTitle, 512)
 	title := strings.TrimSpace(trackTitle)
 	artist := ""
 	album := strings.TrimSpace(stationName)
@@ -88,7 +96,9 @@ func BuildMPRISMetadata(stationName, genre, trackTitle, streamURL string) map[st
 	meta := map[string]any{
 		"mpris:trackid": dbus.ObjectPath("/org/mpris/MediaPlayer2/Track/1"),
 		"xesam:title":   title,
-		"xesam:url":     streamURL,
+	}
+	if cleanURL, ok := debuglog.StripURLSecrets(streamURL); ok {
+		meta["xesam:url"] = cleanURL
 	}
 
 	if len(artists) > 0 {

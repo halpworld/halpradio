@@ -22,7 +22,7 @@ func TestRegistryDownloadAndInstallSecurity(t *testing.T) {
 	wasmContent := minimalWasmBytes
 	validChecksum := CalculateSHA256(wasmContent)
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/plugin.wasm" {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(wasmContent)
@@ -33,6 +33,7 @@ func TestRegistryDownloadAndInstallSecurity(t *testing.T) {
 	defer ts.Close()
 
 	client := NewRegistryClient(ts.URL)
+	client.httpClient = ts.Client() // the production client refuses loopback
 
 	// 1. Success case with matching SHA-256
 	validPlugin := RegistryPlugin{
@@ -85,12 +86,12 @@ func TestFetchRegistry(t *testing.T) {
 				"author": "halpradio",
 				"description": "Show status on Discord",
 				"download_url": "https://example.com/discord.wasm",
-				"checksum": "abc123"
+				"checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 			}
 		]
 	}`)
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(regData)
@@ -98,6 +99,7 @@ func TestFetchRegistry(t *testing.T) {
 	defer ts.Close()
 
 	client := NewRegistryClient(ts.URL)
+	client.httpClient = ts.Client()
 	index, err := client.FetchRegistry(context.Background())
 	if err != nil {
 		t.Fatalf("FetchRegistry failed: %v", err)
@@ -106,18 +108,19 @@ func TestFetchRegistry(t *testing.T) {
 		t.Errorf("unexpected registry index: %+v", index)
 	}
 
-	// Test fallback on 500 error
-	badServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// A failing registry is an error: there is no built-in fallback list.
+	badServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer badServer.Close()
 
 	badClient := NewRegistryClient(badServer.URL)
+	badClient.httpClient = badServer.Client()
 	fallbackIndex, err := badClient.FetchRegistry(context.Background())
 	if err == nil {
 		t.Errorf("expected error when registry returns 500")
 	}
-	if len(fallbackIndex.Plugins) == 0 {
-		t.Errorf("expected non-empty fallback registry")
+	if fallbackIndex != nil {
+		t.Errorf("expected no index on failure, got %+v", fallbackIndex)
 	}
 }

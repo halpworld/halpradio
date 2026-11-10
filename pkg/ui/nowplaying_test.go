@@ -534,8 +534,10 @@ func TestLyricsFetchedMsg_TransientFailureAllowsRetry(t *testing.T) {
 	})
 	m = updated.(Model)
 
-	if m.LyricsTrackKey != "" {
-		t.Errorf("expected the track key to be cleared so a retry can happen, got %q", m.LyricsTrackKey)
+	// NET-7: the key stays so metadata ticks do not resend the lookup; the
+	// failure flag makes the next explicit open retry.
+	if m.LyricsTrackKey != "Tycho - A Walk" || !m.LyricsLookupFailed {
+		t.Errorf("expected the key kept and the lookup marked failed, got %q / %v", m.LyricsTrackKey, m.LyricsLookupFailed)
 	}
 	if !strings.Contains(m.LyricsStatus, "retry") {
 		t.Errorf("expected a retry hint, got %q", m.LyricsStatus)
@@ -553,8 +555,10 @@ func TestCoverArtFetchedMsg_TransientFailureAllowsRetry(t *testing.T) {
 	})
 	m = updated.(Model)
 
-	if m.ArtTrackKey != "" {
-		t.Errorf("expected the track key to be cleared so a retry can happen, got %q", m.ArtTrackKey)
+	// NET-7: the key stays so metadata ticks do not resend the lookup; the
+	// failure flag makes the next explicit open retry.
+	if m.ArtTrackKey != "Tycho - A Walk" || !m.ArtLookupFailed {
+		t.Errorf("expected the key kept and the lookup marked failed, got %q / %v", m.ArtTrackKey, m.ArtLookupFailed)
 	}
 	if !strings.Contains(m.ArtStatus, "retry") {
 		t.Errorf("expected a retry hint, got %q", m.ArtStatus)

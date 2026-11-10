@@ -48,6 +48,10 @@ type Manager struct {
 	backend      string
 	visualizer   string
 	closed       bool
+
+	// ipcErr is why the IPC server did not start (nil when it runs or is
+	// disabled), for example ErrIPCAlreadyRunning.
+	ipcErr error
 }
 
 func isPartyAction(action MediaAction) bool {
@@ -111,6 +115,7 @@ func NewManager(cfg DesktopConfig, onAction func(MediaAction)) *Manager {
 		})
 		if err != nil {
 			debuglog.Logf("desktop", "IPC server disabled: %v", err)
+			m.ipcErr = err
 		} else {
 			m.ipc = ipcServer
 		}
@@ -329,21 +334,54 @@ func (m *Manager) GetPlaybackInfo() *PlaybackInfo {
 		viz = "dj-cat"
 	}
 
+	// Every string leaves through IPC / CLI output, so sanitize here
+	// (server side) as well as in the clients.
+	const maxField = 256
 	return &PlaybackInfo{
-		Status:      normStatus,
-		StationID:   m.stationID,
-		StationName: m.stationName,
-		Station:     station,
-		Artist:      artist,
-		Title:       title,
-		Track:       m.trackTitle,
+		Status:      SanitizeString(normStatus, maxField),
+		StationID:   SanitizeString(m.stationID, maxField),
+		StationName: SanitizeString(m.stationName, maxField),
+		Station:     SanitizeString(station, maxField),
+		Artist:      SanitizeString(artist, maxField),
+		Title:       SanitizeString(title, maxField),
+		Track:       SanitizeString(m.trackTitle, maxField),
 		Bitrate:     m.bitrate,
 		Volume:      m.volume,
 		Muted:       m.isMuted,
-		Backend:     m.backend,
-		Visualizer:  viz,
-		Party:       m.partyInfo,
+		Backend:     SanitizeString(m.backend, maxField),
+		Visualizer:  SanitizeString(viz, maxField),
+		Party:       sanitizePartyInfo(m.partyInfo, maxField),
 	}
+}
+
+// sanitizePartyInfo returns a sanitized copy of p (nil stays nil).
+func sanitizePartyInfo(p *PartyInfo, maxField int) *PartyInfo {
+	if p == nil {
+		return nil
+	}
+	c := *p
+	c.RoomCode = SanitizeString(p.RoomCode, maxField)
+	c.RoomName = SanitizeString(p.RoomName, maxField)
+	c.Host = SanitizeString(p.Host, maxField)
+	c.DJPass = SanitizeString(p.DJPass, maxField)
+	if p.Peers != nil {
+		c.Peers = make([]string, len(p.Peers))
+		for i, peer := range p.Peers {
+			c.Peers[i] = SanitizeString(peer, maxField)
+		}
+	}
+	return &c
+}
+
+// IPCError returns why the IPC server could not be started (for example
+// ErrIPCAlreadyRunning), or nil when it runs or IPC is disabled.
+func (m *Manager) IPCError() error {
+	if m == nil {
+		return nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.ipcErr
 }
 
 // SetPartyHandler registers a callback for party-related IPC actions.

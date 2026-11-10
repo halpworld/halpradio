@@ -8,7 +8,7 @@ import (
 )
 
 func TestPartySessionSubSecondPlaybackSync(t *testing.T) {
-	roomCode := "8X2K9P"
+	roomCode := GenerateRoomCode()
 
 	// 1. Create Host session
 	host, err := NewPartySession(SessionConfig{
@@ -82,13 +82,16 @@ func TestPartySessionSubSecondPlaybackSync(t *testing.T) {
 		if sp.Status != "playing" {
 			t.Errorf("expected status 'playing', got %s", sp.Status)
 		}
+		if !sp.FromHost || sp.FromPeerID != host.PeerID() {
+			t.Errorf("sync should be marked as from the verified host: FromHost=%v FromPeerID=%q", sp.FromHost, sp.FromPeerID)
+		}
 	case <-time.After(2 * time.Second):
 		t.Fatalf("timed out waiting for sub-second playback sync")
 	}
 }
 
 func TestPartySessionDJPassPermissions(t *testing.T) {
-	roomCode := "8X2K9P"
+	roomCode := GenerateRoomCode()
 
 	host, err := NewPartySession(SessionConfig{
 		RoomCode: roomCode,
@@ -139,7 +142,7 @@ func TestPartySessionDJPassPermissions(t *testing.T) {
 }
 
 func TestPartySessionReactionsAndChat(t *testing.T) {
-	roomCode := "8X2K9P"
+	roomCode := GenerateRoomCode()
 
 	session, err := NewPartySession(SessionConfig{
 		RoomCode: roomCode,
@@ -190,7 +193,7 @@ func TestPartySessionReactionsAndChat(t *testing.T) {
 }
 
 func TestPartySessionHostMigration(t *testing.T) {
-	roomCode := "8X2K9P"
+	roomCode := GenerateRoomCode()
 
 	host, err := NewPartySession(SessionConfig{
 		RoomCode: roomCode,
@@ -238,7 +241,7 @@ func TestPartySessionHostMigration(t *testing.T) {
 }
 
 func TestPartySessionSecurityEnforcement(t *testing.T) {
-	roomCode := "8X2K9P"
+	roomCode := GenerateRoomCode()
 
 	host, err := NewPartySession(SessionConfig{
 		RoomCode: roomCode,

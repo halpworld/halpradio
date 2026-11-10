@@ -15,7 +15,11 @@ func TestDescribeUpdateMsg(t *testing.T) {
 	}{
 		{"tick", TickMsg{}, "TickMsg", true},
 		{"mouse", tea.MouseMsg{}, "MouseMsg", true},
-		{"key", tea.KeyMsg{Type: tea.KeyEnter}, `KeyMsg "enter"`, false},
+		{"key", tea.KeyMsg{Type: tea.KeyEnter}, `KeyMsg enter`, false},
+		// LOC-4: typed text and pastes are logged as a length only (a paste
+		// is bracketed by bubbletea, hence 15).
+		{"typed", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")}, "KeyMsg text runes=1 paste=false", false},
+		{"paste", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("sk-secret-key"), Paste: true}, "KeyMsg text runes=15 paste=true", false},
 		{"resize", tea.WindowSizeMsg{Width: 120, Height: 40}, "WindowSizeMsg 120x40", false},
 		{"other", AutoPauseMsg{}, "ui.AutoPauseMsg", false},
 	}

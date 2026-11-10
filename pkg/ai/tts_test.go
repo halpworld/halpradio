@@ -44,11 +44,16 @@ func TestDownloadVoiceModelToDirAndIsModelInstalled(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	// Temporarily override catalog URLs for test model
+	// Temporarily override catalog URLs for test model. Downloads are only
+	// allowed for pinned digests from allow-listed hosts, so pin the fake
+	// payloads and allow the httptest host for this test.
 	orig := voiceModelCatalog[0]
 	voiceModelCatalog[0].ONNXURL = ts.URL + "/model.onnx"
 	voiceModelCatalog[0].ConfigURL = ts.URL + "/model.onnx.json"
 	defer func() { voiceModelCatalog[0] = orig }()
+	allowDownloadHostForTest(t, ts.URL)
+	pinForTest(t, ts.URL+"/model.onnx", []byte("FAKE-ONNX-WEIGHTS-BINARY-PAYLOAD"))
+	pinForTest(t, ts.URL+"/model.onnx.json", []byte(`{"audio":{"sample_rate":22050}}`))
 
 	tempDir := t.TempDir()
 	modelsDir := tempDir + "/models"

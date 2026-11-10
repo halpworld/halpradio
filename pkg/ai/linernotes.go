@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,6 +24,11 @@ import (
 const (
 	defaultMusicBrainzURL = "https://musicbrainz.org"
 	defaultWikipediaURL   = "https://en.wikipedia.org"
+
+	// maxLinerResponseBytes caps every MusicBrainz / Wikipedia response body.
+	maxLinerResponseBytes = 1 << 20
+	// maxLinerCacheFileBytes caps a cached liner-notes JSON file read from disk.
+	maxLinerCacheFileBytes = 256 << 10
 
 	linerMemCapacity = 128
 	linerMemTTL      = 6 * time.Hour
@@ -202,8 +208,14 @@ func (c *LinerNotesClient) Fetch(ctx context.Context, q LinerNotesQuery) (*Liner
 			title = strings.TrimSpace(q.RawTrack)
 		}
 	}
-	q.Artist = artist
-	q.Title = title
+	q.Artist = util.SanitizeDisplay(artist, linerNameRunes)
+	q.Title = util.SanitizeDisplay(title, linerNameRunes)
+	q.Album = util.SanitizeDisplay(q.Album, linerNameRunes)
+	q.StationName = util.SanitizeDisplay(q.StationName, linerNameRunes)
+	q.Genre = util.SanitizeDisplay(q.Genre, linerShortRunes)
+	q.Country = util.SanitizeDisplay(q.Country, linerShortRunes)
+	q.Codec = util.SanitizeDisplay(q.Codec, 32)
+	artist, title = q.Artist, q.Title
 
 	key := linerCacheKey(artist, title, q.StationName)
 
@@ -224,7 +236,7 @@ func (c *LinerNotesClient) Fetch(ctx context.Context, q LinerNotesQuery) (*Liner
 		wikiBio, wikiOK := c.queryWikipediaBio(ctx, artist)
 
 		if mbOK || wikiOK {
-			notes := mergeOnlineNotes(q, mbNotes, mbOK, wikiBio, wikiOK)
+			notes := sanitizeLinerNotes(mergeOnlineNotes(q, mbNotes, mbOK, wikiBio, wikiOK))
 			c.putMem(key, notes)
 			c.writeDisk(key, notes)
 			return notes.Clone(), nil
@@ -232,7 +244,7 @@ func (c *LinerNotesClient) Fetch(ctx context.Context, q LinerNotesQuery) (*Liner
 	}
 
 	// 4. 100% Offline fallback synthesized from station & stream metadata
-	offline := synthesizeOfflineLinerNotes(q)
+	offline := sanitizeLinerNotes(synthesizeOfflineLinerNotes(q))
 	c.putMem(key, offline)
 	return offline.Clone(), nil
 }
@@ -308,8 +320,13 @@ func (c *LinerNotesClient) readDisk(key string) *LinerNotes {
 	c.diskMu.Lock()
 	defer c.diskMu.Unlock()
 
-	raw, err := os.ReadFile(c.diskPath(key))
+	f, err := os.Open(c.diskPath(key))
 	if err != nil {
+		return nil
+	}
+	raw, err := io.ReadAll(io.LimitReader(f, maxLinerCacheFileBytes+1))
+	_ = f.Close()
+	if err != nil || len(raw) > maxLinerCacheFileBytes {
 		return nil
 	}
 	var notes LinerNotes
@@ -319,10 +336,12 @@ func (c *LinerNotesClient) readDisk(key string) *LinerNotes {
 	if notes.FetchedAt.IsZero() || time.Since(notes.FetchedAt) > linerDiskTTL {
 		return nil
 	}
-	if notes.Biography == "" && len(notes.TrackTrivia) == 0 {
+	// The cache file is input like any other: re-sanitize on read.
+	sanitized := sanitizeLinerNotes(&notes)
+	if sanitized.Biography == "" && len(sanitized.TrackTrivia) == 0 {
 		return nil
 	}
-	return &notes
+	return sanitized
 }
 
 func (c *LinerNotesClient) writeDisk(key string, notes *LinerNotes) {
@@ -451,7 +470,7 @@ func (c *LinerNotesClient) queryMusicBrainz(ctx context.Context, q LinerNotesQue
 	}
 
 	var recData mbRecordingSearchResp
-	if err := json.NewDecoder(resp.Body).Decode(&recData); err != nil || len(recData.Recordings) == 0 {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxLinerResponseBytes)).Decode(&recData); err != nil || len(recData.Recordings) == 0 {
 		return nil, false
 	}
 
@@ -504,7 +523,7 @@ func (c *LinerNotesClient) queryMusicBrainz(ctx context.Context, q LinerNotesQue
 			aReq.Header.Set("Accept", "application/json")
 			if aResp, err := c.httpClient.Do(aReq); err == nil {
 				var aData mbArtistLookupResp
-				if aResp.StatusCode == http.StatusOK && json.NewDecoder(aResp.Body).Decode(&aData) == nil {
+				if aResp.StatusCode == http.StatusOK && json.NewDecoder(io.LimitReader(aResp.Body, maxLinerResponseBytes)).Decode(&aData) == nil {
 					if aData.BeginArea.Name != "" {
 						notes.OriginCity = aData.BeginArea.Name
 					} else if aData.Area.Name != "" {
@@ -557,7 +576,7 @@ func (c *LinerNotesClient) queryMusicBrainz(ctx context.Context, q LinerNotesQue
 		notes.Biography = fmt.Sprintf("%s — %s.", notes.Artist, artistDisambig)
 	}
 
-	return notes, true
+	return sanitizeLinerNotes(notes), true
 }
 
 func extractDiscography(groups []struct {
@@ -646,7 +665,7 @@ func (c *LinerNotesClient) queryWikipediaBio(ctx context.Context, artist string)
 			continue
 		}
 		var summary wikipediaSummaryResp
-		err = json.NewDecoder(resp.Body).Decode(&summary)
+		err = json.NewDecoder(io.LimitReader(resp.Body, maxLinerResponseBytes)).Decode(&summary)
 		_ = resp.Body.Close()
 		if err != nil {
 			continue
@@ -654,7 +673,12 @@ func (c *LinerNotesClient) queryWikipediaBio(ctx context.Context, artist string)
 		if summary.Type == "disambiguation" || strings.TrimSpace(summary.Extract) == "" {
 			continue
 		}
-		return trimBiographySentences(summary.Extract, 4), true
+		bio := util.SanitizeMultiline(summary.Extract, linerBioLineRunes, linerBioLines)
+		bio = capRunes(trimBiographySentences(bio, 4), linerBioRunes)
+		if bio == "" {
+			continue
+		}
+		return bio, true
 	}
 	return "", false
 }
@@ -822,4 +846,80 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// Length caps for liner-notes fields shown in the drawer and fed to the DJ.
+const (
+	linerNameRunes    = 200
+	linerShortRunes   = 120
+	linerBioRunes     = 1500
+	linerBioLineRunes = 1500
+	linerBioLines     = 12
+	linerNoteRunes    = 400
+	linerTriviaRunes  = 300
+	linerMaxTrivia    = 10
+	linerMaxDisco     = 12
+)
+
+// sanitizeLinerNotes returns a copy of n in which every string is safe for
+// the terminal (util.SanitizeDisplay / SanitizeMultiline) and capped. It is
+// applied where MusicBrainz and Wikipedia responses are parsed, on merged and
+// offline notes, and on notes read back from the disk cache.
+func sanitizeLinerNotes(n *LinerNotes) *LinerNotes {
+	if n == nil {
+		return nil
+	}
+	out := *n
+	out.Artist = util.SanitizeDisplay(n.Artist, linerNameRunes)
+	out.Title = util.SanitizeDisplay(n.Title, linerNameRunes)
+	out.Album = util.SanitizeDisplay(n.Album, linerNameRunes)
+	out.ReleaseYear = util.SanitizeDisplay(n.ReleaseYear, 8)
+	out.Country = util.SanitizeDisplay(n.Country, linerShortRunes)
+	out.OriginCity = util.SanitizeDisplay(n.OriginCity, linerShortRunes)
+	out.Genre = util.SanitizeDisplay(n.Genre, linerShortRunes)
+	out.Label = util.SanitizeDisplay(n.Label, linerNameRunes)
+	out.MBID = util.SanitizeDisplay(n.MBID, 64)
+	out.Biography = capRunes(util.SanitizeMultiline(n.Biography, linerBioLineRunes, linerBioLines), linerBioRunes)
+	out.AlbumNotes = util.SanitizeDisplay(n.AlbumNotes, linerNoteRunes)
+	out.Source = util.SanitizeDisplay(n.Source, 64)
+
+	out.Discography = nil
+	for _, d := range n.Discography {
+		if len(out.Discography) >= linerMaxDisco {
+			break
+		}
+		item := DiscographyItem{
+			Title: util.SanitizeDisplay(d.Title, linerNameRunes),
+			Year:  util.SanitizeDisplay(d.Year, 8),
+			Type:  util.SanitizeDisplay(d.Type, 32),
+		}
+		if item.Title != "" {
+			out.Discography = append(out.Discography, item)
+		}
+	}
+	out.TrackTrivia = nil
+	for _, t := range n.TrackTrivia {
+		if len(out.TrackTrivia) >= linerMaxTrivia {
+			break
+		}
+		if v := util.SanitizeDisplay(t, linerTriviaRunes); v != "" {
+			out.TrackTrivia = append(out.TrackTrivia, v)
+		}
+	}
+	return &out
+}
+
+// capRunes truncates s to at most n runes.
+func capRunes(s string, n int) string {
+	if n <= 0 {
+		return s
+	}
+	i := 0
+	for pos := range s {
+		if i == n {
+			return strings.TrimSpace(s[:pos])
+		}
+		i++
+	}
+	return s
 }

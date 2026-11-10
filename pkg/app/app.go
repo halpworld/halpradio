@@ -38,173 +38,6 @@ type AppInstance struct {
 	DebugLogPath string
 }
 
-// RunPluginCLI handles plugin subcommands: list, install, remove, enable, disable, update.
-func RunPluginCLI(args []string, out io.Writer) (bool, error) {
-	if len(args) == 0 || IsHelpArg(args[0]) {
-		PrintPluginHelp(out)
-		return true, nil
-	}
-
-	cfg, _ := util.LoadConfig()
-	mgr := plugin.NewManager(cfg.PluginRegistryURL)
-	_ = mgr.Init()
-	defer mgr.Close()
-
-	cmd := args[0]
-	switch cmd {
-	case "list", "ls":
-		installed := mgr.GetPlugins()
-		fmt.Fprintln(out, "📦 INSTALLED PLUGINS:")
-		if len(installed) == 0 {
-			fmt.Fprintln(out, "  (No plugins installed yet. Run 'halpradio plugin install <id>')")
-		} else {
-			for _, p := range installed {
-				status := "[Enabled]"
-				if !p.State.PermissionsApproved {
-					status = "[Perms Required]"
-				} else if !p.State.Enabled {
-					status = "[Disabled]"
-				}
-				perms := "Isolated"
-				if len(p.Manifest.Permissions.Network) > 0 {
-					perms = fmt.Sprintf("Net: %s", strings.Join(p.Manifest.Permissions.Network, ","))
-				}
-				fmt.Fprintf(out, "  • %-20s v%-6s %-16s %s (%s)\n", p.Manifest.ID, p.Manifest.Version, status, p.Manifest.Name, perms)
-			}
-		}
-
-		fmt.Fprintln(out, "")
-		fmt.Fprintln(out, "🌐 OFFICIAL REGISTRY:")
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		regIndex, err := mgr.RegistryClient().FetchRegistry(ctx)
-		if err != nil {
-			fmt.Fprintf(out, "  (Registry fetch note: %v)\n", err)
-		} else {
-			for _, rp := range regIndex.Plugins {
-				isInst := false
-				for _, ip := range installed {
-					if ip.Manifest.ID == rp.ID {
-						isInst = true
-						break
-					}
-				}
-				instTag := "[Available]"
-				if isInst {
-					instTag = "[Installed]"
-				}
-				fmt.Fprintf(out, "  • %-20s v%-6s %-12s %s by %s\n", rp.ID, rp.Version, instTag, rp.Name, rp.Author)
-			}
-		}
-		return true, nil
-
-	case "install", "add":
-		if len(args) < 2 || IsHelpArg(args[1]) {
-			fmt.Fprintln(out, "Error: plugin ID required. Usage: halpradio plugin install <plugin-id>")
-			return false, fmt.Errorf("plugin ID required")
-		}
-		targetID := args[1]
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		regIndex, err := mgr.RegistryClient().FetchRegistry(ctx)
-		if err != nil {
-			fmt.Fprintf(out, "Failed fetching registry: %v\n", err)
-			return false, err
-		}
-
-		var targetPlugin *plugin.RegistryPlugin
-		for _, p := range regIndex.Plugins {
-			if p.ID == targetID {
-				targetPlugin = &p
-				break
-			}
-		}
-		if targetPlugin == nil {
-			fmt.Fprintf(out, "Plugin %q not found in official registry.\n", targetID)
-			return false, fmt.Errorf("plugin not found: %s", targetID)
-		}
-
-		fmt.Fprintf(out, "Installing %s (v%s)...\n", targetPlugin.Name, targetPlugin.Version)
-		if err := mgr.InstallFromRegistry(ctx, *targetPlugin); err != nil {
-			fmt.Fprintf(out, "Install error: %v\n", err)
-			return false, err
-		}
-		_ = mgr.ApprovePermissions(targetPlugin.ID, true)
-		_ = mgr.EnablePlugin(targetPlugin.ID)
-		fmt.Fprintf(out, "✓ Successfully installed and enabled %s!\n", targetPlugin.Name)
-		return true, nil
-
-	case "enable":
-		if len(args) < 2 || IsHelpArg(args[1]) {
-			fmt.Fprintln(out, "Error: plugin ID required. Usage: halpradio plugin enable <plugin-id>")
-			return false, fmt.Errorf("plugin ID required")
-		}
-		targetID := args[1]
-		_ = mgr.ApprovePermissions(targetID, true)
-		if err := mgr.EnablePlugin(targetID); err != nil {
-			fmt.Fprintf(out, "Enable error: %v\n", err)
-			return false, err
-		}
-		fmt.Fprintf(out, "✓ Enabled plugin %s\n", targetID)
-		return true, nil
-
-	case "disable":
-		if len(args) < 2 || IsHelpArg(args[1]) {
-			fmt.Fprintln(out, "Error: plugin ID required. Usage: halpradio plugin disable <plugin-id>")
-			return false, fmt.Errorf("plugin ID required")
-		}
-		targetID := args[1]
-		if err := mgr.DisablePlugin(targetID); err != nil {
-			fmt.Fprintf(out, "Disable error: %v\n", err)
-			return false, err
-		}
-		fmt.Fprintf(out, "✓ Disabled plugin %s\n", targetID)
-		return true, nil
-
-	case "remove", "rm", "uninstall":
-		if len(args) < 2 || IsHelpArg(args[1]) {
-			fmt.Fprintln(out, "Error: plugin ID required. Usage: halpradio plugin remove <plugin-id>")
-			return false, fmt.Errorf("plugin ID required")
-		}
-		targetID := args[1]
-		if err := mgr.UninstallPlugin(targetID); err != nil {
-			fmt.Fprintf(out, "Uninstall error: %v\n", err)
-			return false, err
-		}
-		fmt.Fprintf(out, "✓ Removed plugin %s\n", targetID)
-		return true, nil
-
-	case "update", "upgrade":
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		regIndex, err := mgr.RegistryClient().FetchRegistry(ctx)
-		if err != nil {
-			fmt.Fprintf(out, "Failed fetching registry: %v\n", err)
-			return false, err
-		}
-		installed := mgr.GetPlugins()
-		for _, inst := range installed {
-			for _, reg := range regIndex.Plugins {
-				if reg.ID == inst.Manifest.ID {
-					fmt.Fprintf(out, "Updating %s to v%s...\n", reg.Name, reg.Version)
-					_ = mgr.InstallFromRegistry(ctx, reg)
-				}
-			}
-		}
-		fmt.Fprintln(out, "✓ Plugins up to date!")
-		return true, nil
-
-	default:
-		sugg := SuggestCommand(cmd, []string{"list", "install", "enable", "disable", "remove", "update"})
-		if sugg != "" {
-			fmt.Fprintf(out, "Unknown plugin command %q. Did you mean %q? Run 'halpradio plugin --help'\n", cmd, sugg)
-		} else {
-			fmt.Fprintf(out, "Unknown plugin command %q. Run 'halpradio plugin --help'\n", cmd)
-		}
-		return false, fmt.Errorf("unknown plugin command: %s", cmd)
-	}
-}
-
 // formatPlaybackInfo interpolates %s, %t, %a, %T, %p, %v, %b, %r into a custom status template.
 func formatPlaybackInfo(st *desktop.PlaybackInfo, tmpl string) string {
 	if tmpl == "" {
@@ -213,28 +46,28 @@ func formatPlaybackInfo(st *desktop.PlaybackInfo, tmpl string) string {
 	if st == nil {
 		st = &desktop.PlaybackInfo{Status: "stopped"}
 	}
-	stationName := desktop.SanitizeString(st.StationName, 256)
+	stationName := util.SanitizeDisplay(st.StationName, 256)
 	if stationName == "" {
-		stationName = desktop.SanitizeString(st.Station, 256)
+		stationName = util.SanitizeDisplay(st.Station, 256)
 	}
-	track := desktop.SanitizeString(st.Track, 512)
+	track := util.SanitizeDisplay(st.Track, 512)
 	if track == "" && (st.Artist != "" || st.Title != "") {
-		artist := desktop.SanitizeString(st.Artist, 256)
-		title := desktop.SanitizeString(st.Title, 256)
+		artist := util.SanitizeDisplay(st.Artist, 256)
+		title := util.SanitizeDisplay(st.Title, 256)
 		if artist != "" && title != "" {
 			track = fmt.Sprintf("%s - %s", artist, title)
 		} else if title != "" {
 			track = title
 		}
 	}
-	artist := desktop.SanitizeString(st.Artist, 256)
-	title := desktop.SanitizeString(st.Title, 256)
+	artist := util.SanitizeDisplay(st.Artist, 256)
+	title := util.SanitizeDisplay(st.Title, 256)
 	if artist == "" && title == "" && track != "" {
 		artist, title = desktop.SplitArtistTitle(track)
 	}
 
-	cleanStatus := desktop.SanitizeString(st.Status, 32)
-	cleanBackend := desktop.SanitizeString(st.Backend, 32)
+	cleanStatus := util.SanitizeDisplay(st.Status, 32)
+	cleanBackend := util.SanitizeDisplay(st.Backend, 32)
 
 	res := strings.ReplaceAll(tmpl, "%%", "\x00")
 	res = strings.ReplaceAll(res, "%s", stationName)
@@ -287,7 +120,7 @@ func RunCurrent(args []string, out io.Writer) (bool, error) {
 			fmt.Fprintln(out, string(data))
 			return false, err
 		}
-		fmt.Fprintf(out, "Error: %v\n", err)
+		fmt.Fprintf(out, "Error: %s\n", safe(err.Error()))
 		return false, err
 	}
 
@@ -305,7 +138,7 @@ func RunCurrent(args []string, out io.Writer) (bool, error) {
 			fmt.Fprintln(out, string(data))
 			return false, fmt.Errorf("%s", resp.Message)
 		}
-		fmt.Fprintf(out, "Error: %s\n", resp.Message)
+		fmt.Fprintf(out, "Error: %s\n", safe(resp.Message))
 		return false, fmt.Errorf("%s", resp.Message)
 	}
 
@@ -334,14 +167,14 @@ func RunCurrent(args []string, out io.Writer) (bool, error) {
 	}
 
 	st := resp.Status
-	station := desktop.SanitizeString(st.StationName, 256)
+	station := util.SanitizeDisplay(st.StationName, 256)
 	if station == "" {
-		station = desktop.SanitizeString(st.Station, 256)
+		station = util.SanitizeDisplay(st.Station, 256)
 	}
-	track := desktop.SanitizeString(st.Track, 512)
+	track := util.SanitizeDisplay(st.Track, 512)
 	if track == "" && (st.Artist != "" || st.Title != "") {
-		artist := desktop.SanitizeString(st.Artist, 256)
-		title := desktop.SanitizeString(st.Title, 256)
+		artist := util.SanitizeDisplay(st.Artist, 256)
+		title := util.SanitizeDisplay(st.Title, 256)
 		if artist != "" && title != "" {
 			track = fmt.Sprintf("%s - %s", artist, title)
 		} else if title != "" {
@@ -371,7 +204,7 @@ func RunCurrent(args []string, out io.Writer) (bool, error) {
 	case "stopped":
 		fmt.Fprintln(out, "[STOPPED]")
 	default:
-		cleanStatus := desktop.SanitizeString(st.Status, 32)
+		cleanStatus := util.SanitizeDisplay(st.Status, 32)
 		if station != "" {
 			fmt.Fprintf(out, "[%s] %s\n", strings.ToUpper(cleanStatus), station)
 		} else {
@@ -406,24 +239,24 @@ func RunStatus(args []string, out io.Writer) (bool, error) {
 
 	resp, err := desktop.SendIPCCommand("", "status")
 	if err != nil {
-		fmt.Fprintf(out, "Status query error: %v\n", err)
+		fmt.Fprintf(out, "Status query error: %s\n", safe(err.Error()))
 		return false, err
 	}
 
 	if !resp.Success {
-		fmt.Fprintf(out, "Error: %s\n", desktop.SanitizeString(resp.Message, 256))
+		fmt.Fprintf(out, "Error: %s\n", util.SanitizeDisplay(resp.Message, 256))
 		return false, fmt.Errorf("%s", resp.Message)
 	}
 
 	if resp.Status != nil {
-		stName := desktop.SanitizeString(resp.Status.StationName, 256)
+		stName := util.SanitizeDisplay(resp.Status.StationName, 256)
 		if stName == "" {
-			stName = desktop.SanitizeString(resp.Status.Station, 256)
+			stName = util.SanitizeDisplay(resp.Status.Station, 256)
 		}
-		cleanStatus := desktop.SanitizeString(resp.Status.Status, 32)
-		cleanBackend := desktop.SanitizeString(resp.Status.Backend, 32)
+		cleanStatus := util.SanitizeDisplay(resp.Status.Status, 32)
+		cleanBackend := util.SanitizeDisplay(resp.Status.Backend, 32)
 		if stName != "" {
-			track := desktop.SanitizeString(resp.Status.Track, 512)
+			track := util.SanitizeDisplay(resp.Status.Track, 512)
 			if track == "" {
 				track = stName
 			}
@@ -470,7 +303,7 @@ func RunRemote(args []string, out io.Writer) (bool, error) {
 			fmt.Fprintln(out, string(data))
 			return false, err
 		}
-		fmt.Fprintf(out, "Remote control error: %v\n", err)
+		fmt.Fprintf(out, "Remote control error: %s\n", safe(err.Error()))
 		return false, err
 	}
 
@@ -484,7 +317,7 @@ func RunRemote(args []string, out io.Writer) (bool, error) {
 			fmt.Fprintln(out, string(data))
 			return false, fmt.Errorf("%s", resp.Message)
 		}
-		fmt.Fprintf(out, "Error: %s\n", resp.Message)
+		fmt.Fprintf(out, "Error: %s\n", safe(resp.Message))
 		return false, fmt.Errorf("%s", resp.Message)
 	}
 
@@ -516,12 +349,12 @@ func RunRemote(args []string, out io.Writer) (bool, error) {
 			if track == "" {
 				track = stName
 			}
-			fmt.Fprintf(out, "[%s] %s - %s (vol: %d%%, backend: %s)\n", resp.Status.Status, stName, track, resp.Status.Volume, resp.Status.Backend)
+			fmt.Fprintf(out, "[%s] %s - %s (vol: %d%%, backend: %s)\n", safe(resp.Status.Status), safe(stName), safe(track), resp.Status.Volume, safe(resp.Status.Backend))
 		} else {
-			fmt.Fprintf(out, "[%s] Volume: %d%%\n", resp.Status.Status, resp.Status.Volume)
+			fmt.Fprintf(out, "[%s] Volume: %d%%\n", safe(resp.Status.Status), resp.Status.Volume)
 		}
 	} else {
-		fmt.Fprintf(out, "%s\n", resp.Message)
+		fmt.Fprintf(out, "%s\n", safe(resp.Message))
 	}
 	return true, nil
 }
@@ -533,6 +366,9 @@ func RunHelp(out io.Writer) {
 
 // SetupApp parses CLI flags, loads configuration, and initializes the AppInstance.
 func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstance, bool, error) {
+	if !isInfoOnlyArgs(args) {
+		warnUnreadableConfig()
+	}
 	if len(args) > 0 {
 		switch {
 		case args[0] == "help":
@@ -589,12 +425,12 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 				return nil, true, nil
 			}
 			cfg, _ := util.LoadConfig()
-			updater := radio.NewCatalogUpdater(cfg.CatalogUpdateURL, cfg.CatalogCacheTTLHours)
+			updater := newCatalogUpdater(cfg, embeddedCatalog)
 			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 			defer cancel()
 			updated, count, err := updater.CheckAndUpdate(ctx, true)
 			if err != nil {
-				fmt.Fprintf(out, "Catalog update failed: %v\n", err)
+				fmt.Fprintf(out, "Catalog update failed: %s\n", safe(err.Error()))
 				return nil, true, err
 			}
 			if updated {
@@ -686,18 +522,18 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 	_ = theme.EnsureExampleTheme(util.GetThemesDir())
 	_, _ = theme.LoadCustomThemes(util.GetThemesDir())
 
-	cfg, err := util.LoadConfig()
-	if err != nil {
-		cfg = util.DefaultConfig()
-	}
+	// A config that exists but cannot be read comes back fail-closed
+	// (plugins and network extras off); keep it rather than replacing it
+	// with permissive defaults.
+	cfg, _ := util.LoadConfig()
 
 	if *updateCatalogFlag {
-		updater := radio.NewCatalogUpdater(cfg.CatalogUpdateURL, cfg.CatalogCacheTTLHours)
+		updater := newCatalogUpdater(cfg, embeddedCatalog)
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		defer cancel()
 		updated, count, err := updater.CheckAndUpdate(ctx, true)
 		if err != nil {
-			fmt.Fprintf(out, "Catalog update failed: %v\n", err)
+			fmt.Fprintf(out, "Catalog update failed: %s\n", safe(err.Error()))
 			return nil, true, err
 		}
 		if updated {
@@ -746,9 +582,12 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 
 	store := radio.NewStore()
 	if err := store.Load(embeddedCatalog); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning loading station store: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Warning loading station store: %s\n", safe(err.Error()))
 	}
-	_ = store.ReloadBundledFromCache()
+	// The cached catalog download is only used while auto-update is on.
+	if cfg.CatalogAutoUpdate {
+		_ = store.ReloadBundledFromCache()
+	}
 
 	var program *tea.Program
 
@@ -776,10 +615,16 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 			program.Send(ui.PluginFlashMsg(msg))
 		}
 	})
+	// plugins_enabled: false keeps every plugin stopped (absent key = enabled).
+	pluginMgr.SetPluginsDisabled(!cfg.PluginsEnabled)
 	_ = pluginMgr.Init()
 
 	model := ui.NewModel(store, pm, cfg)
 	model.SetPluginManager(pluginMgr)
+	model.CatalogMinStations = embeddedStationCount(embeddedCatalog)
+	if note := storeWarningStatus(store); note != "" {
+		model.StatusMessage = note
+	}
 
 	desktopMgr := desktop.NewManager(desktop.DesktopConfig{
 		NotificationsEnabled: cfg.SongNotifications,
@@ -818,34 +663,11 @@ func SetupApp(args []string, embeddedCatalog []byte, out io.Writer) (*AppInstanc
 	})
 
 	desktopMgr.SetPartyHandler(func(action desktop.MediaAction, payload string) error {
-		if program == nil {
-			return fmt.Errorf("halpradio program not ready")
-		}
-		switch action {
-		case desktop.ActionPartyCreate:
-			name := strings.TrimSpace(payload)
-			if name == "" {
-				name = "team-focus"
-			}
-			program.Send(ui.PartyCreateRoomMsg{RoomName: name})
-		case desktop.ActionPartyJoin:
-			code := strings.TrimSpace(payload)
-			addr := ""
-			if strings.Contains(code, " ") {
-				parts := strings.SplitN(code, " ", 2)
-				code = parts[0]
-				addr = parts[1]
-			}
-			program.Send(ui.PartyJoinRoomMsg{RoomCode: code, Address: addr})
-		case desktop.ActionPartyLeave:
-			program.Send(ui.PartyLeaveRoomMsg{})
-		case desktop.ActionPartyReact:
-			program.Send(ui.PartySendReactionMsg(payload))
-		case desktop.ActionPartyChat:
-			program.Send(ui.PartySendChatMsg(payload))
-		}
-		return nil
+		return dispatchPartyIPC(programSender(program), action, payload)
 	})
+	if note := reportIPCStart(nil, desktopMgr); note != "" {
+		model.StatusMessage = note
+	}
 
 	model.SetDesktop(desktopMgr)
 
