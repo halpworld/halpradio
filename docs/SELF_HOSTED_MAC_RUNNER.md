@@ -8,23 +8,38 @@ page explains how, and how the setup keeps that Mac safe.
 ## Security model
 
 `halpradio` is a public repository. A CI job runs whatever code the branch
-contains, so a runner is only as safe as the code it accepts. The setup
-has four layers:
+contains, so a runner is only as safe as the code it accepts.
 
-1. **Only trusted code is routed to it.** In `.github/workflows/ci.yml`, the
+> **The routing rule in `ci.yml` is not a security boundary.** A pull
+> request runs the workflow files *from that pull request*. Anyone who
+> opens a pull request from a fork can edit `.github/workflows/` in it and
+> add a job with `runs-on: [self-hosted, halpradio-mac]`. That job lands on
+> your runner whatever `ci.yml` on `main` says. Only the approval setting
+> below stops it.
+
+The setup has five layers:
+
+1. **Outside pull requests wait for your approval.** With "Require approval
+   for all external contributors" set, no workflow from a fork runs until a
+   maintainer clicks *Approve and run*. **Before approving, open the
+   pull request's Files tab and check every change under `.github/`.** A
+   pull request that touches workflows, or anything a workflow runs, can
+   target this runner.
+2. **Accidental routing is avoided.** In `.github/workflows/ci.yml`, the
    macOS job uses the self-hosted runner only for pushes to `main`, the
    weekly scheduled run, and pull requests from branches in this repository
-   that Dependabot did not open. Pull requests from forks and from
-   Dependabot always use GitHub-hosted runners.
-2. **Every job runs in a new VM.** `scripts/mac-runner/ephemeral-runner.sh`
+   that Dependabot did not open. Approved fork pull requests and Dependabot
+   updates use GitHub-hosted runners for that job, unless the pull request
+   itself changes this rule (see layer 1).
+3. **Every job runs in a new VM.** `scripts/mac-runner/ephemeral-runner.sh`
    clones a fresh [Tart](https://tart.run) macOS VM for each job and deletes
    it afterwards. Jobs never run on the host, and nothing carries over
    from one job to the next.
-3. **The VM holds no lasting credential.** Each VM gets a single-use JIT
+4. **The VM holds no lasting credential.** Each VM gets a single-use JIT
    runner config, which GitHub invalidates after one job. The token that
    creates these configs stays on the host. The runner tarball is shared
    into the VM read-only. The VM cannot see your home folder.
-4. **The runner is checked before use.** The runner download must match the
+5. **The runner is checked before use.** The runner download must match the
    SHA-256 you set in `RUNNER_SHA256`, or the script deletes it and stops.
 
 **What this does not cover:**
@@ -37,13 +52,44 @@ has four layers:
 Do not run the runner directly on a machine that holds other credentials,
 such as an agent server.
 
+**Do not use `config.sh` or `svc.sh`.** GitHub's standard instructions on
+the "New self-hosted runner" page install a long-lived runner on the host,
+outside any VM. This setup never needs them: the script registers a
+single-use runner inside each VM. If you already installed one that way,
+see [Removing a host runner](#removing-a-host-runner).
+
 ## One-time setup
 
-On the Mac (Apple Silicon, macOS 14 or later, about 60 GB free):
+On the Mac (Apple Silicon, macOS 14 or later, about 60 GB free). Check the
+chip first; Tart needs Apple Silicon:
 
 ```bash
-brew install cirruslabs/cli/tart gh
+sysctl -n machdep.cpu.brand_string
 ```
+
+Install the GitHub CLI and Tart:
+
+```bash
+brew install gh
+brew install cirruslabs/cli/tart
+```
+
+If `brew install cirruslabs/cli/tart` fails with a formula error from the
+tap, install Tart from its GitHub release instead. Verify the archive
+against the release's checksum file before you extract it:
+
+```bash
+mkdir -p ~/tart-install && cd ~/tart-install
+gh release download --repo cirruslabs/tart --pattern 'tart.tar.gz' --pattern '*checksums.txt'
+grep ' tart.tar.gz$' ./*checksums.txt | shasum -a 256 -c
+tar -xzf tart.tar.gz
+mv tart.app ~/Applications/
+ln -sf ~/Applications/tart.app/Contents/MacOS/tart /opt/homebrew/bin/tart
+tart --version
+```
+
+If your Homebrew lives in `/usr/local` (an Intel-era install), link into
+`/usr/local/bin` instead.
 
 Create a fine-grained personal access token at
 <https://github.com/settings/personal-access-tokens/new>:
@@ -57,8 +103,9 @@ Create a fine-grained personal access token at
 In the repository settings on GitHub:
 
 1. **Actions → General → Approval for running fork pull request workflows:**
-   choose "Require approval for all external contributors". This is defence in
-   depth on top of the routing rule.
+   choose "Require approval for all external contributors". This setting is
+   **required**: it is the only thing that keeps code from forks off the
+   runner (see [Security model](#security-model)).
 2. **Secrets and variables → Actions → Variables:** add `MACOS_SELF_HOSTED`
    with the value `true`.
 
@@ -105,3 +152,18 @@ queue, for up to 24 hours. Turn the variable off whenever the Mac will be
 away.
 
 Revoke the token when you stop using the runner.
+
+## Removing a host runner
+
+If you followed GitHub's own "New self-hosted runner" steps (`config.sh`,
+then `svc.sh install`), a persistent runner is running on the host itself.
+Remove it before using this setup. From the runner folder:
+
+```bash
+./svc.sh stop
+./svc.sh uninstall
+./config.sh remove --token "$(gh api -X POST repos/halpworld/halpradio/actions/runners/remove-token --jq .token)"
+```
+
+Then check that no runners are left under **Settings → Actions → Runners**,
+and delete the runner folder.
