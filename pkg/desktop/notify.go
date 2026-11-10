@@ -2,12 +2,17 @@ package desktop
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
+
+	"github.com/halpworld/halpradio/pkg/util"
 )
 
 // Notifier defines the interface for desktop notifications.
@@ -175,22 +180,92 @@ func (n *DesktopNotifier) Notify(title, message string) {
 	go dispatchOSNotification(runner, targetOS, title, message)
 }
 
-// sanitizeNotificationString strips ASCII control characters and truncates length.
+// sanitizeNotificationString removes everything that is not printable text
+// (C0/C1 controls, DEL, bidi and zero-width format runes), collapses
+// whitespace and caps the result at maxLen runes. It delegates to
+// util.SanitizeDisplay so notifications behave like every other display sink.
 func sanitizeNotificationString(s string, maxLen int) string {
-	s = strings.TrimSpace(s)
-	var b strings.Builder
-	b.Grow(len(s))
-	for _, r := range s {
-		// Keep printable characters, spaces, and standard unicode
-		if r >= 0x20 && r != 0x7f {
-			b.WriteRune(r)
-		}
+	return util.SanitizeDisplay(s, maxLen)
+}
+
+// escapeNotificationMarkup escapes the three characters that freedesktop
+// notification daemons interpret as body markup (<b>, <a href>, <img>, ...).
+// Quotes are left alone: they carry no meaning outside a tag, and daemons that
+// do not render markup would show a numeric entity literally.
+func escapeNotificationMarkup(s string) string {
+	return markupEscaper.Replace(s)
+}
+
+var markupEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
+
+// powershellToastScript is the toast script run on Windows. The two %s verbs
+// receive base64 text only (A-Z a-z 0-9 + / =), which cannot leave the
+// single-quoted literal it is placed in; the script decodes the values itself.
+const powershellToastScript = `$t=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('%s')); ` +
+	`$m=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('%s')); ` +
+	`[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null; ` +
+	`$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02); ` +
+	`$textNodes = $template.GetElementsByTagName('text'); ` +
+	`$textNodes.Item(0).AppendChild($template.CreateTextNode($t)) > $null; ` +
+	`$textNodes.Item(1).AppendChild($template.CreateTextNode($m)) > $null; ` +
+	`$audio = $template.CreateElement('audio'); $audio.SetAttribute('silent', 'true'); ` +
+	`$template.DocumentElement.AppendChild($audio) > $null; ` +
+	`$toast = [Windows.UI.Notifications.ToastNotification]::new($template); ` +
+	`[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('halpradio').Show($toast);`
+
+// PowerShellToastScript returns the plain-text toast script for title and
+// message (exported for tests and for the timer package).
+func PowerShellToastScript(title, message string) string {
+	b64 := func(v string) string { return base64.StdEncoding.EncodeToString([]byte(v)) }
+	return fmt.Sprintf(powershellToastScript, b64(title), b64(message))
+}
+
+// EncodePowerShellCommand encodes a script for powershell -EncodedCommand
+// (base64 of the UTF-16LE text). With -EncodedCommand nothing on the command
+// line is parsed as script except this single base64 token.
+func EncodePowerShellCommand(script string) string {
+	u := utf16.Encode([]rune(script))
+	buf := make([]byte, 2*len(u))
+	for i, c := range u {
+		binary.LittleEndian.PutUint16(buf[2*i:], c)
 	}
-	res := b.String()
-	if len(res) > maxLen {
-		res = res[:maxLen]
+	return base64.StdEncoding.EncodeToString(buf)
+}
+
+// NotificationCommand returns the program and argv that show a desktop
+// notification on targetOS, or ok=false when the platform is unsupported.
+// title and message must already be sanitized. No value is ever parsed as
+// script or as an option:
+//   - darwin: AppleScript "on run argv" receives the values as argv items
+//     after "--";
+//   - linux: notify-send after "--", body markup-escaped;
+//   - windows: -EncodedCommand with the values embedded as base64 literals.
+func NotificationCommand(targetOS, title, message string) (name string, args []string, ok bool) {
+	switch targetOS {
+	case "darwin":
+		return "osascript", []string{
+			"-e", "on run argv",
+			"-e", "display notification (item 2 of argv) with title (item 1 of argv)",
+			"-e", "end run",
+			// osascript parses options until "--"; without it a title
+			// such as "-e" or "-i" would be read as an option.
+			"--",
+			title,
+			message,
+		}, true
+	case "linux":
+		// The summary is plain text per the spec; only the body is markup.
+		return "notify-send", []string{
+			"-a", "halpradio", "-u", "normal", "-h", "boolean:suppress-sound:true",
+			"--", title, escapeNotificationMarkup(message),
+		}, true
+	case "windows":
+		return "powershell", []string{
+			"-NoProfile", "-NonInteractive", "-EncodedCommand",
+			EncodePowerShellCommand(PowerShellToastScript(title, message)),
+		}, true
 	}
-	return res
+	return "", nil, false
 }
 
 func dispatchOSNotification(runner CommandRunner, targetOS, title, message string) {
@@ -198,33 +273,16 @@ func dispatchOSNotification(runner CommandRunner, targetOS, title, message strin
 		runner = defaultCommandRunner
 	}
 
-	// Strict sanitization to prevent terminal and command injection
+	// Strip control/format runes so the text is safe for any daemon.
 	title = sanitizeNotificationString(title, 256)
 	message = sanitizeNotificationString(message, 1024)
 
+	name, args, ok := NotificationCommand(targetOS, title, message)
+	if !ok {
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
-
-	switch targetOS {
-	case "darwin":
-		// macOS AppleScript notification via argv passing (immune to script/command injection)
-		_ = runner(
-			ctx,
-			"osascript",
-			"-e", "on run argv",
-			"-e", "display notification (item 2 of argv) with title (item 1 of argv)",
-			"-e", "end run",
-			title,
-			message,
-		)
-
-	case "linux":
-		// Linux notification via notify-send (silent hint suppresses sound on notification daemons)
-		_ = runner(ctx, "notify-send", "-a", "halpradio", "-u", "normal", "-h", "boolean:suppress-sound:true", title, message)
-
-	case "windows":
-		// Windows PowerShell Toast Notification passing parameters as isolated arguments without string interpolation
-		psScript := `[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null; $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02); $textNodes = $template.GetElementsByTagName('text'); $textNodes.Item(0).AppendChild($template.CreateTextNode($args[0])) > $null; $textNodes.Item(1).AppendChild($template.CreateTextNode($args[1])) > $null; $audio = $template.CreateElement('audio'); $audio.SetAttribute('silent', 'true'); $template.DocumentElement.AppendChild($audio) > $null; $toast = [Windows.UI.Notifications.ToastNotification]::new($template); [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('halpradio').Show($toast);`
-		_ = runner(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psScript, title, message)
-	}
+	_ = runner(ctx, name, args...)
 }

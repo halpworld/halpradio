@@ -34,7 +34,7 @@ flowchart TD
 
 | Backend | Binary | Executable Flags | Supported Codecs | Notes |
 |---|---|---|---|---|
-| **MPV** *(Recommended)* | `mpv` | `--no-video --quiet --volume=N` | MP3, AAC, OGG, FLAC, HLS, Opus | Best streaming stability & lowest latency. |
+| **MPV** *(Recommended)* | `mpv` | `--no-video --no-terminal --ytdl=no --load-unsafe-playlists=no --sub-auto=no --audio-file-auto=no --cover-art-auto=no --volume=N` | MP3, AAC, OGG, FLAC, HLS, Opus | Best streaming stability & lowest latency. |
 | **VLC / CVLC** | `vlc` / `cvlc` | `-I dummy --quiet --gain=N` | MP3, AAC, OGG, FLAC, HLS | Wide codec support, lightweight in dummy mode. |
 | **FFplay** | `ffplay` | `-nodisp -loglevel quiet -volume N` | MP3, AAC, OGG, FLAC | Part of ffmpeg suite. |
 | **MPlayer** | `mplayer` | `-quiet -volume N` | MP3, AAC, OGG | Traditional Linux media player. |
@@ -47,12 +47,34 @@ flowchart TD
 
 When no external media CLI is installed on the system, `halpradio` gracefully switches to its **native Go player engine**:
 - **HTTP Streamer**: Initiates an HTTP GET request to the radio stream URL with customizable user agents.
-- **MP3 Decoder**: Streams incoming bytes through `github.com/hajimehoshi/go-mp3`.
+- **MP3 Decoder**: Streams incoming bytes through `github.com/hajimehoshi/go-mp3`, wrapped by `pkg/player/mp3safe`, which skips ID3v2 tags only up to 1 MiB and turns decoder panics into a playback error.
 - **DSP Rack**: Runs the decoded PCM through the equalizer, crossfeed, lo-fi and loudness stages (see [DSP Rack](#-dsp-rack-equalizer-loudness-normalizer--crossfeed)).
 - **Audio Output**: Feeds the processed 16-bit PCM audio samples directly into hardware sound drivers via `github.com/ebitengine/oto/v3`.
 
 > [!NOTE]
 > The native Go player handles MP3 streams out of the box. For AAC/AAC+ streams, installing `mpv` or `ffmpeg` is recommended.
+
+### Untrusted stream input
+
+Station URLs and stream bytes come from catalogs and remote servers, so the player treats them as untrusted:
+
+- **Where a station came from decides whether it may reach your network.** Stations you add yourself (the add-station form, `halpradio stations add`, a URL typed on the command line) may point at loopback or LAN addresses, such as a Snapcast or Icecast box at home. Stations from the bundled catalog, catalog updates, RadioBrowser, SomaFM or a listening party may not: they are dropped at import if their host is `localhost`, an IP literal in a private or reserved range, or a local-only name (`.local`, `.lan`, `.internal`, `.home.arpa`, a single-label name), and the player refuses them again at play time.
+- **Restricted addresses** are loopback, RFC 1918, link-local (including the `169.254.169.254` metadata service), CGNAT `100.64.0.0/10`, `0.0.0.0/8`, `192.0.0.0/24`, benchmarking `198.18.0.0/15`, documentation ranges, multicast, `240.0.0.0/4` and broadcast, IPv6 unique-local, link-local, site-local and multicast, and IPv6 forms that carry an IPv4 address (IPv4-mapped, NAT64 `64:ff9b::/96`, 6to4 `2002::/16`), which are judged by that address. IPv4-compatible `::/96`, `64:ff9b:1::/48` and Teredo `2001::/32` are always restricted.
+- **One HTTP policy** (`pkg/player/streamnet`) is used by the native player, the ICY listener and the pure-Go fingerprint capture: `http`/`https` only and at most 5 redirects. For a station that may not reach your network, every address actually dialled is checked, so a name that resolves (or later re-resolves) to a private address is refused. For your own stations the first connection decides: a LAN station plays, but a public station cannot redirect into your LAN.
+- **No proxy** for the Go connections, deliberately: the address check must see the real destination, and a proxy would hide it. `HTTP_PROXY`/`HTTPS_PROXY` are therefore ignored by the native player, the ICY listener and the Go fingerprint fallback.
+- **External players** (mpv, VLC, ffplay, mplayer, mpg123) and ffmpeg resolve hosts and follow redirects, playlist entries and HLS segments themselves. For a station that may not reach your network, halpradio first resolves the host and refuses to start the player if any answer is a restricted address. It then starts a **stream guard proxy** (`pkg/player/streamproxy`) on `127.0.0.1` for that playback only, and the player sends every request through it:
+  - The proxy dials through the same strict check as the native player, so a redirect, an m3u/pls entry, an HLS segment or a re-resolved name that points at a restricted address gets `403`. https goes through it as `CONNECT`, and only to the host and port asked for.
+  - It accepts only `GET`, `HEAD` and `CONNECT` with an absolute `http` URL, never follows redirects itself, strips hop-by-hop and `Proxy-*` headers, limits header size and concurrent connections, times out idle connections, and cannot reach itself or loopback.
+  - It requires a random Basic credential made for each playback. The proxy address and credential are passed in the player's environment (`http_proxy`, `https_proxy` and their upper-case forms), so they do not show in the process list. Inherited `no_proxy`, `all_proxy` and other proxy variables are removed for that player, so a proxy you configured yourself is not used for these stations.
+  - mpg123's own HTTP client never sends the credential, so for these stations mpg123 runs with `--network curl` and needs `curl` installed. If curl is missing, playback fails instead of going direct. Settings in your own `~/.curlrc` (for example `noproxy`) still apply to it.
+  - VLC also gets `--http-proxy`, so its credential is visible in the process list while it plays. VLC and mplayer have not been tested against the proxy.
+  - If the proxy cannot start, the station is refused with an error. halpradio never falls back to a direct connection. The proxy stops when playback stops.
+  - Stations you added yourself get no proxy and keep your proxy settings, so LAN stations still play.
+  - Shoutcast `ICY 200 OK` status lines are rewritten to `HTTP/1.0 200 OK` on the way through.
+- **Protocols**: ffplay and ffmpeg run with `-protocol_whitelist http,https,tcp,tls,crypto,httpproxy`, and mpv gets the same list through `--stream-lavf-o` and `--demuxer-lavf-o`, for every station. A playlist entry such as `gopher://` or `file://` is therefore refused. A `tcp://` entry would get past the proxy, but mpv does not open it because of `--load-unsafe-playlists=no`, and the ffmpeg HLS demuxer only fetches `http`/`https` segments. The fingerprint capture also refuses any URL that is not `http`/`https`.
+- **mpv** is started with `--ytdl=no` (no `yt-dlp` helper), `--load-unsafe-playlists=no` and no automatic loading of subtitle, audio or cover files next to the URL. The URL always follows `--`.
+- **Decoder failures** (malformed MP3, oversized or more than eight leading ID3 tags) end in an error status with a message; they never crash the app.
+- **Error messages and the debug log** (`--debug`): a URL quoted in a status message has control characters removed and is capped at 200 characters. Stream URLs are logged without user info, query string or fragment, backend command lines are logged the same way, and logged text has newlines and control characters collapsed.
 
 ---
 
@@ -125,13 +147,14 @@ flowchart TD
 ### Key Subsystems:
 1. **Audio Capture ([`pkg/player/fingerprint/capture.go`](../pkg/player/fingerprint/capture.go))**:
    - Streams 5 seconds of audio buffer converted to 11,025 Hz mono 16-bit PCM WAV.
-   - Prefers host `ffmpeg` CLI when installed; falls back to pure-Go HTTP streaming and MP3 decoding if external binaries are missing.
+   - Prefers host `ffmpeg` CLI when installed (network protocols only); falls back to pure-Go HTTP streaming and MP3 decoding if external binaries are missing.
 2. **Fingerprint Engine ([`pkg/player/fingerprint/fingerprint.go`](../pkg/player/fingerprint/fingerprint.go))**:
    - Generates Chromaprint-compatible compressed subfingerprints.
    - Prefers `fpcalc` CLI; falls back to a pure-Go 16-band STFT (Short-Time Fourier Transform) subfingerprint generator.
 3. **Lookup Client ([`pkg/player/fingerprint/client.go`](../pkg/player/fingerprint/client.go))**:
    - Queries `https://api.acoustid.org/v2/lookup` with open key `v8pQ6oyB` (or custom key in `config.yaml`).
    - Retrieves recording metadata, artist credits, album releases, and release year.
+   - Reads at most 1 MiB of response and strips control, bidi and zero-width characters from every returned string before display.
 4. **LRU Cache ([`pkg/player/fingerprint/cache.go`](../pkg/player/fingerprint/cache.go))**:
    - Thread-safe in-memory cache with 10-minute TTL eviction, avoiding duplicate queries for the same song.
 5. **UI Integration**:

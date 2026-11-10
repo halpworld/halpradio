@@ -11,6 +11,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"gopkg.in/yaml.v3"
+
+	"github.com/halpworld/halpradio/pkg/util"
 )
 
 // Theme represents a complete color scheme and metadata used across halpradio TUI.
@@ -370,6 +372,11 @@ func LoadCustomThemes(dir string) (map[string]Theme, error) {
 			th.Name = prettifyName(base)
 		}
 
+		if isBuiltinThemeID(themeID) {
+			fmt.Fprintf(os.Stderr, "Warning: skipping custom theme file %q: %q is a built-in theme ID\n", filename, themeID)
+			continue
+		}
+
 		th.ID = themeID
 		th.IsCustom = true
 		th = sanitizeThemeTokens(th)
@@ -392,7 +399,7 @@ func EnsureExampleTheme(themesDir string) error {
 		return nil // already exists
 	}
 
-	return os.WriteFile(examplePath, []byte(SampleThemeYAML()), 0644)
+	return util.WriteFileAtomic(examplePath, []byte(SampleThemeYAML()), 0o600)
 }
 
 // ExportActiveTheme dumps a theme to a formatted YAML file in themesDir.
@@ -420,7 +427,7 @@ func ExportActiveTheme(themesDir string, th Theme) (string, error) {
 // ExportTheme writes a formatted, commented YAML theme definition to filePath.
 func ExportTheme(filePath string, th Theme) error {
 	content := FormatThemeYAML(th)
-	return os.WriteFile(filePath, []byte(content), 0644)
+	return util.WriteFileAtomic(filePath, []byte(content), 0o600)
 }
 
 // FormatThemeYAML returns a clean, fully-commented YAML string representing a theme.
@@ -563,19 +570,19 @@ func sanitizeColor(val lipgloss.Color, fallback lipgloss.Color) lipgloss.Color {
 	return fallback
 }
 
+// sanitizeString makes theme metadata safe to print: it delegates to the
+// shared util.SanitizeDisplay (drops C0/C1 controls, DEL, bidi and zero-width
+// format characters, collapses whitespace) and caps the result at maxLen runes.
 func sanitizeString(s string, maxLen int) string {
-	var b strings.Builder
-	for _, r := range s {
-		// Reject control characters (ASCII 0-31, 127, and C1 controls 0x80-0x9F)
-		if r < 32 || r == 127 || (r >= 0x80 && r <= 0x9F) {
-			continue
-		}
-		b.WriteRune(r)
-		if b.Len() >= maxLen {
-			break
-		}
-	}
-	return strings.TrimSpace(b.String())
+	return util.SanitizeDisplay(s, maxLen)
+}
+
+// isBuiltinThemeID reports whether id names a built-in palette. Custom and
+// registry themes may not use these IDs, so a downloaded theme can never
+// replace (or, on uninstall, remove) a built-in one.
+func isBuiltinThemeID(id string) bool {
+	_, ok := BuiltinThemes[normalizeID(id)]
+	return ok
 }
 
 func sanitizeThemeTokens(th Theme) Theme {

@@ -65,7 +65,8 @@ type DJUnduckFinishedMsg struct {
 	Script string
 }
 
-// DJVoiceDownloadedMsg reports the result of an opt-in HuggingFace ONNX voice model download.
+// DJVoiceDownloadedMsg reports the result of an opt-in voice download (sherpa-onnx
+// runtime + voice from github.com/k2-fsa/sherpa-onnx, SHA-256 verified).
 type DJVoiceDownloadedMsg struct {
 	ModelID string
 	Err     error
@@ -156,10 +157,12 @@ func (m *Model) resetNowPlaying() {
 	m.LyricsStatus = ""
 	m.LyricsScroll = 0
 	m.LyricsTrackKey = ""
+	m.LyricsLookupFailed = false
 	m.IsFetchingLyrics = false
 	m.Cover = nil
 	m.ArtStatus = ""
 	m.ArtTrackKey = ""
+	m.ArtLookupFailed = false
 	m.IsFetchingArt = false
 	m.LinerNotes = nil
 	m.LinerNotesStatus = ""
@@ -497,6 +500,12 @@ func (m *Model) toggleLyricsDrawer() []tea.Cmd {
 		m.ShowLinerNotes = false
 	}
 	m.ActiveFocus = FocusLyrics
+	if m.LyricsLookupFailed {
+		// The user asked again: retry the lookup that failed.
+		m.LyricsLookupFailed = false
+		m.LyricsTrackKey = ""
+		m.LyricsStatus = ""
+	}
 	cmds := m.syncNowPlaying()
 	m.renderArt()
 	if m.LyricsSheet == nil && !m.IsFetchingLyrics && m.LyricsStatus == "" {
@@ -522,6 +531,11 @@ func (m *Model) toggleArtModal() []tea.Cmd {
 	}
 
 	m.ShowArtModal = true
+	if m.ArtLookupFailed {
+		m.ArtLookupFailed = false
+		m.ArtTrackKey = ""
+		m.ArtStatus = ""
+	}
 	cmds := m.syncNowPlaying()
 	m.renderArt()
 	if m.Cover == nil && !m.IsFetchingArt && m.ArtStatus == "" {
@@ -774,6 +788,20 @@ func (m *Model) ensureDJ() *ai.DJ {
 	return m.DJ
 }
 
+// djOllamaWarning returns a status warning when the configured Ollama URL was
+// refused (only loopback, or https to another host, is allowed), so the user
+// knows the DJ is using offline templates instead of the model they set.
+func (m *Model) djOllamaWarning() string {
+	if !m.Config.AIDJEnabled || strings.TrimSpace(m.Config.AIDJOllamaURL) == "" {
+		return ""
+	}
+	err := m.ensureDJ().OllamaURLError()
+	if err == nil {
+		return ""
+	}
+	return util.SanitizeDisplay("⚠ AI DJ: Ollama URL not used ("+err.Error()+"); using offline templates", 300)
+}
+
 // refreshDJInstalledVoices updates m.DJInstalledVoices in the update loop so View()
 // stays 100% pure and never touches the filesystem.
 func (m *Model) refreshDJInstalledVoices() {
@@ -877,9 +905,12 @@ func (m *Model) startDJAnnouncement(onDemand bool) []tea.Cmd {
 	m.DJBannerFading = false
 	m.DJBannerPersona = persona.Name
 	m.DJBannerEngine = engineLabel
-	m.DJBannerScript = previewScript
+	m.DJBannerScript = sanitizeDJScript(previewScript)
 	m.DJBannerUntil = time.Now().Add(30 * time.Second)
 	m.StatusMessage = fmt.Sprintf("🎙️ AI DJ (%s): broadcasting track intro…", persona.Name)
+	if w := m.djOllamaWarning(); w != "" {
+		m.StatusMessage = w
+	}
 
 	return []tea.Cmd{m.triggerDJIntroCmd(seq, stID, trackKey, tc)}
 }
@@ -946,7 +977,8 @@ func (m Model) unduckAfterDelayCmd(seq uint64, script string) tea.Cmd {
 	})
 }
 
-// downloadVoiceModelCmd downloads an opt-in ONNX voice model from HuggingFace
+// downloadVoiceModelCmd downloads an opt-in voice bundle (and, if needed, the
+// sherpa-onnx runtime) from github.com/k2-fsa/sherpa-onnx releases, SHA-256 verified,
 // off the UI thread when explicitly requested by the user in the DJ Studio modal.
 func (m Model) downloadVoiceModelCmd(modelID string) tea.Cmd {
 	return func() tea.Msg {

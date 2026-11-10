@@ -69,8 +69,10 @@ func TestRadioBrowserSearchEdgeCases(t *testing.T) {
 	if len(st.Genre) > 30 {
 		t.Errorf("Expected truncated genre <= 30 chars, got length %d (%s)", len(st.Genre), st.Genre)
 	}
-	if len(st.ID) > 20 {
-		t.Errorf("Expected ID <= 20 chars, got length %d (%s)", len(st.ID), st.ID)
+	// The full UUID is kept: truncating it let two stations collide on
+	// one ID (and one favourite).
+	if st.ID != "rb-a1b2c3d4-e5f6-7890-1234-56789abcdef0" {
+		t.Errorf("Expected full UUID station ID, got %q", st.ID)
 	}
 	if st.Source != "radiobrowser" {
 		t.Errorf("Expected source radiobrowser, got %s", st.Source)

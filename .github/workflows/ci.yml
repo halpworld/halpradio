@@ -5,10 +5,13 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # Weekly, so a newly published Go or module vulnerability fails CI even
+    # when nobody pushes.
+    - cron: '17 6 * * 1'
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   test:
@@ -30,18 +33,22 @@ jobs:
         && fromJSON('["self-hosted","macOS","ARM64","halpradio-mac"]')
         || matrix.os
       }}
+    permissions:
+      contents: read
+      pull-requests: write # coverage comment only
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
       fail-fast: false
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: 'go.mod'
           cache: true
@@ -67,7 +74,7 @@ jobs:
         run: go test -v -race -coverprofile=coverage.out ./...
 
       - name: Compute coverage delta & publish motivational report
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && github.event_name != 'schedule'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -78,15 +85,47 @@ jobs:
           chmod +x .github/scripts/coverage_report.sh
           ./.github/scripts/coverage_report.sh
 
+  supply-chain:
+    name: Modules, vulnerabilities & Docker build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: 'go.mod'
+          cache: false
+
+      - name: Verify module graph is tidy and untampered
+        run: |
+          go mod tidy -diff
+          go mod verify
+
+      - name: govulncheck (with the toolchain releases are built with)
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+      - name: Build container image
+        run: docker build --pull -t halpradio:ci .
+
   cross-compile:
     name: Cross Compile Check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: 'go.mod'
           cache: true

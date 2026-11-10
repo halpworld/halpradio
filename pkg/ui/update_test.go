@@ -444,16 +444,21 @@ func TestModalsKeyboardHandling(t *testing.T) {
 	}
 
 	// 2. Permission Approval Modal
-	m.ShowPermissionApproval = true
-	m.ApprovalPlugin = plugin.PluginInfo{
+	m.openApproval(plugin.PluginInfo{
 		Manifest: plugin.Manifest{ID: "test-plugin"},
-	}
+	})
+	m.ApprovalShownAt = time.Time{} // long past the key guard
 
-	// Press 'y' to approve
+	// Press 'y' to arm, then Enter to approve
 	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	m = mModel.(Model)
+	if !m.ApprovalArmed || !m.ShowPermissionApproval {
+		t.Errorf("expected 'y' to arm the prompt and keep it open")
+	}
+	mModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mModel.(Model)
 	if m.ShowPermissionApproval {
-		t.Errorf("expected ShowPermissionApproval = false after 'y'")
+		t.Errorf("expected ShowPermissionApproval = false after 'y', Enter")
 	}
 
 	// 3. Plugin Modal
@@ -488,7 +493,7 @@ func TestCatalogUpdateHandling(t *testing.T) {
 	// 2. Plugin flash and notification messages
 	mModel, _ = m.Update(PluginFlashMsg("Plugin flash message"))
 	m = mModel.(Model)
-	if m.StatusMessage != "Plugin flash message" {
+	if m.StatusMessage != "[plugin] Plugin flash message" {
 		t.Errorf("expected flash message, got %s", m.StatusMessage)
 	}
 

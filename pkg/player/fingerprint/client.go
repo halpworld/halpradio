@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -11,7 +12,46 @@ import (
 	"time"
 
 	"github.com/halpworld/halpradio/pkg/radio"
+	"github.com/halpworld/halpradio/pkg/util"
 )
+
+// maxAcoustIDBody caps the AcoustID response read into memory. Real lookup
+// responses are a few KiB; anything larger is refused rather than decoded.
+const maxAcoustIDBody = 1 << 20
+
+// Display limits for identification results. Results come from remote
+// services and are shown in the TUI and notifications, so they pass through
+// the shared display sanitizer (TTY-4).
+const (
+	maxResultArtistRunes = 256
+	maxResultTitleRunes  = 256
+	maxResultAlbumRunes  = 256
+	maxResultLabelRunes  = 64
+)
+
+// sanitizeResult strips terminal control, bidi and zero-width runes from every
+// display string and clamps the confidence to [0, 1].
+func sanitizeResult(r *Result) *Result {
+	if r == nil {
+		return nil
+	}
+	r.Artist = util.SanitizeDisplay(r.Artist, maxResultArtistRunes)
+	r.Title = util.SanitizeDisplay(r.Title, maxResultTitleRunes)
+	r.Album = util.SanitizeDisplay(r.Album, maxResultAlbumRunes)
+	r.Source = util.SanitizeDisplay(r.Source, maxResultLabelRunes)
+	r.StationID = util.SanitizeDisplay(r.StationID, maxResultLabelRunes)
+	r.StationName = util.SanitizeDisplay(r.StationName, maxResultArtistRunes)
+	if r.Confidence < 0 || r.Confidence != r.Confidence {
+		r.Confidence = 0
+	}
+	if r.Confidence > 1 {
+		r.Confidence = 1
+	}
+	if r.Year < 0 || r.Year > 9999 {
+		r.Year = 0
+	}
+	return r
+}
 
 const (
 	DefaultAcoustIDKey = "v8pQ6oyB"
@@ -50,6 +90,10 @@ type Client struct {
 	AcoustIDURL    string
 	HTTPClient     *http.Client
 	Cache          *LRUCache
+	// AllowPrivate reports whether a stream URL may be sampled from
+	// loopback, LAN or link-local addresses. Set it only for stations the
+	// user added or typed. nil refuses every restricted destination.
+	AllowPrivate func(streamURL string) bool
 }
 
 // NewClient initializes a fingerprint recognition client with caching.
@@ -81,7 +125,8 @@ func (c *Client) Identify(ctx context.Context, streamURL string, stationID strin
 	}
 
 	// 2. Capture a 5-second PCM audio buffer
-	wavPath, cleanup, err := CaptureAudioSample(ctx, streamURL, 5*time.Second)
+	allowPrivate := c.AllowPrivate != nil && c.AllowPrivate(streamURL)
+	wavPath, cleanup, err := captureAudioSample(ctx, streamURL, 5*time.Second, allowPrivate, nil)
 	if err != nil {
 		return nil, fmt.Errorf("audio capture failed: %w", err)
 	}
@@ -114,7 +159,7 @@ func (c *Client) Identify(ctx context.Context, streamURL string, stationID strin
 		if san.IsClean && san.CleanTitle != "" {
 			mbMatch, mbErr := radio.ValidateCandidateWithMusicBrainz(ctx, san.Artist, san.Title)
 			if mbErr == nil && mbMatch != nil {
-				res := &Result{
+				res := sanitizeResult(&Result{
 					Artist:      mbMatch.Artist,
 					Title:       mbMatch.Title,
 					Album:       mbMatch.Album,
@@ -125,7 +170,7 @@ func (c *Client) Identify(ctx context.Context, streamURL string, stationID strin
 					StationName: stationName,
 					Fingerprint: fpStr,
 					Duration:    duration,
-				}
+				})
 				if res.Confidence < 0.5 {
 					res.Confidence = 0.85
 				}
@@ -166,16 +211,23 @@ func (c *Client) queryAcoustID(ctx context.Context, fingerprint string, duration
 	}
 	defer resp.Body.Close()
 
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxAcoustIDBody+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxAcoustIDBody {
+		return nil, fmt.Errorf("AcoustID response exceeds %d bytes", maxAcoustIDBody)
+	}
 	var payload AcoustIDResponse
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, err
 	}
 
 	if payload.Status != "ok" {
 		if payload.Error != nil {
-			return nil, fmt.Errorf("AcoustID error %d: %s", payload.Error.Code, payload.Error.Message)
+			return nil, fmt.Errorf("AcoustID error %d: %s", payload.Error.Code, util.SanitizeDisplay(payload.Error.Message, 256))
 		}
-		return nil, fmt.Errorf("AcoustID request failed with status: %s", payload.Status)
+		return nil, fmt.Errorf("AcoustID request failed with status: %s", util.SanitizeDisplay(payload.Status, 64))
 	}
 
 	if len(payload.Results) == 0 {
@@ -204,7 +256,7 @@ func (c *Client) queryAcoustID(ctx context.Context, fingerprint string, duration
 		confidence = 0.90
 	}
 
-	return &Result{
+	return sanitizeResult(&Result{
 		Artist:      artist,
 		Title:       rec.Title,
 		Album:       album,
@@ -212,5 +264,5 @@ func (c *Client) queryAcoustID(ctx context.Context, fingerprint string, duration
 		Source:      "AcoustID",
 		StationID:   stationID,
 		StationName: stationName,
-	}, nil
+	}), nil
 }

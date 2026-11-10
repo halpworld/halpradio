@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/halpworld/halpradio/pkg/debuglog"
 	"io"
 	"math/rand"
 	"os"
@@ -91,7 +92,7 @@ func RunPlay(args []string, embeddedCatalog []byte, out io.Writer) (bool, error)
 	if remote {
 		resp, err := desktop.SendIPCCommand("", "play")
 		if err != nil {
-			fmt.Fprintf(out, "Remote play error: %v\n", err)
+			fmt.Fprintf(out, "Remote play error: %s\n", safe(err.Error()))
 			return false, err
 		}
 		if isJSON {
@@ -120,7 +121,7 @@ func RunPlay(args []string, embeddedCatalog []byte, out io.Writer) (bool, error)
 	// Resolve target station
 	st, err := resolveStation(target, isRandom, genre, allStations)
 	if err != nil {
-		fmt.Fprintf(out, "Error: %v\n", err)
+		fmt.Fprintf(out, "Error: %s\n", safe(err.Error()))
 		fmt.Fprintln(out, "Run 'halpradio stations list' to explore available stations.")
 		return false, err
 	}
@@ -139,7 +140,7 @@ func RunPlay(args []string, embeddedCatalog []byte, out io.Writer) (bool, error)
 	if durationStr != "" {
 		d, err := time.ParseDuration(durationStr)
 		if err != nil {
-			fmt.Fprintf(out, "Error: invalid duration format %q (use e.g. 45m, 1h, 30s): %v\n", durationStr, err)
+			fmt.Fprintf(out, "Error: invalid duration format %q (use e.g. 45m, 1h, 30s): %s\n", safe(durationStr), safe(err.Error()))
 			return false, err
 		}
 		duration = d
@@ -175,6 +176,8 @@ func resolveStation(target string, isRandom bool, genre string, all []radio.Stat
 			Bitrate:   128,
 			Codec:     "MP3",
 			Broadcast: "Online",
+			// Typed by the user on the command line, so LAN hosts are allowed.
+			Source: "custom",
 		}, nil
 	}
 
@@ -220,19 +223,19 @@ func resolveStation(target string, isRandom bool, genre string, all []radio.Stat
 
 func executeHeadlessPlay(st radio.Station, vol int, backend string, duration time.Duration, isJSON bool, out io.Writer) (bool, error) {
 	if !isJSON {
-		fmt.Fprintf(out, "📻 Streaming: %s\n", st.Name)
-		fmt.Fprintf(out, "📡 Stream:    %s\n", st.URL)
+		fmt.Fprintf(out, "📻 Streaming: %s\n", safe(st.Name))
+		fmt.Fprintf(out, "📡 Stream:    %s\n", safe(debuglog.RedactURL(st.URL)))
 		bitrateStr := ""
 		if st.Bitrate > 0 {
-			bitrateStr = fmt.Sprintf(" (%d kbps %s)", st.Bitrate, st.Codec)
+			bitrateStr = fmt.Sprintf(" (%d kbps %s)", st.Bitrate, safe(st.Codec))
 		}
 		locStr := ""
 		if st.Country != "" {
-			locStr = fmt.Sprintf(" | Location: %s %s", radio.CountryFlagForCode(st.Country), st.Country)
+			locStr = fmt.Sprintf(" | Location: %s %s", radio.CountryFlagForCode(st.Country), safe(st.Country))
 		}
 		genreStr := ""
 		if st.Genre != "" {
-			genreStr = fmt.Sprintf(" | Genre: %s", st.Genre)
+			genreStr = fmt.Sprintf(" | Genre: %s", safe(st.Genre))
 		}
 		fmt.Fprintf(out, "🔊 Volume:    %d%%%s%s%s\n", vol, bitrateStr, genreStr, locStr)
 		if duration > 0 {
@@ -256,7 +259,7 @@ func executeHeadlessPlay(st radio.Station, vol int, backend string, duration tim
 			fmt.Fprintln(out, string(data))
 		} else {
 			if info.TrackTitle != "" && info.TrackTitle != st.Name {
-				fmt.Fprintf(out, "♪ Now Playing: %s\n", info.TrackTitle)
+				fmt.Fprintf(out, "♪ Now Playing: %s\n", safe(info.TrackTitle))
 			}
 		}
 	})
@@ -265,7 +268,7 @@ func executeHeadlessPlay(st radio.Station, vol int, backend string, duration tim
 	defer pm.Close()
 
 	if err := pm.Play(st); err != nil {
-		fmt.Fprintf(out, "Playback error: %v\n", err)
+		fmt.Fprintf(out, "Playback error: %s\n", safe(err.Error()))
 		return false, err
 	}
 

@@ -3,17 +3,23 @@ package theme
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"gopkg.in/yaml.v3"
+
+	"github.com/halpworld/halpradio/pkg/util"
 )
 
 const (
@@ -80,7 +86,20 @@ type RegistryIndex struct {
 type RegistryClient struct {
 	httpClient  *http.Client
 	registryURL string
+
+	// allowPrivateHosts disables the loopback/private/link-local address
+	// guard on theme downloads. Only tests set it (httptest listens on
+	// 127.0.0.1).
+	allowPrivateHosts bool
 }
+
+const (
+	// maxRegistryThemes caps how many registry entries are kept, matching
+	// MaxCustomThemes.
+	maxRegistryThemes = MaxCustomThemes
+	// maxThemeDownloadRedirects bounds redirect chains on download_url.
+	maxThemeDownloadRedirects = 3
+)
 
 // NewRegistryClient creates a new RegistryClient instance.
 func NewRegistryClient(registryURL string) *RegistryClient {
@@ -98,6 +117,9 @@ func NewRegistryClient(registryURL string) *RegistryClient {
 // FetchRegistry downloads and parses the latest themes from the repository index.
 // If the network request fails, it falls back to the curated built-in offline registry.
 func (c *RegistryClient) FetchRegistry(ctx context.Context) (*RegistryIndex, error) {
+	if err := checkRegistryIndexURL(c.registryURL); err != nil {
+		return c.fallbackRegistry(), err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.registryURL, nil)
 	if err != nil {
 		return c.fallbackRegistry(), err
@@ -110,6 +132,12 @@ func (c *RegistryClient) FetchRegistry(ctx context.Context) (*RegistryIndex, err
 	}
 	defer resp.Body.Close()
 
+	if resp.Request != nil && resp.Request.URL != nil {
+		// A redirect must not downgrade the index to plain http either.
+		if err := checkRegistryIndexURL(resp.Request.URL.String()); err != nil {
+			return c.fallbackRegistry(), err
+		}
+	}
 	if resp.StatusCode != http.StatusOK {
 		return c.fallbackRegistry(), fmt.Errorf("theme registry returned HTTP %d", resp.StatusCode)
 	}
@@ -142,12 +170,58 @@ func (c *RegistryClient) FetchRegistry(ctx context.Context) (*RegistryIndex, err
 	return c.fallbackRegistry(), fmt.Errorf("failed to parse theme registry JSON")
 }
 
-func (c *RegistryClient) sanitizeRegistryThemes(index *RegistryIndex) {
-	for i := range index.Themes {
-		t := &index.Themes[i]
-		if t.ID == "" {
-			t.ID = normalizeID(t.Name)
+// checkRegistryIndexURL requires the theme index (theme_registry_url) to be
+// https, as download_url already is: over plain http anyone on the network
+// path could replace the list of themes. Plain http is accepted only for a
+// loopback host (a registry served from this machine).
+func checkRegistryIndexURL(raw string) error {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" {
+		return fmt.Errorf("theme registry URL is not a valid URL")
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+		return nil
+	case "http":
+		host := u.Hostname()
+		if strings.EqualFold(host, "localhost") {
+			return nil
 		}
+		if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+			return nil
+		}
+	}
+	return fmt.Errorf("theme registry URL must use https (got %s://%s)", u.Scheme, util.SanitizeDisplay(u.Host, 100))
+}
+
+// sanitizeRegistryThemes makes every registry entry safe to display and
+// install: colours are validated, text fields go through the shared terminal
+// sanitizer, and the ID must be a valid slug that does not shadow a built-in
+// theme. Entries that fail are dropped, and at most maxRegistryThemes are kept.
+func (c *RegistryClient) sanitizeRegistryThemes(index *RegistryIndex) {
+	kept := make([]RegistryTheme, 0, min(len(index.Themes), maxRegistryThemes))
+	seen := make(map[string]bool)
+	for i := range index.Themes {
+		if len(kept) >= maxRegistryThemes {
+			break
+		}
+		t := index.Themes[i]
+		// The ID must already be a slug (case-insensitive); it is not
+		// rewritten into one, so "evil\x1b[2J" is dropped rather than
+		// silently becoming "evil-2j". Only an absent ID is derived from
+		// the name.
+		var id string
+		if raw := strings.ToLower(strings.TrimSpace(t.ID)); raw != "" {
+			id = raw
+		} else {
+			id = normalizeID(util.SanitizeDisplay(t.Name, 128))
+		}
+		if !validIDRegex.MatchString(id) || isBuiltinThemeID(id) || seen[id] {
+			continue
+		}
+		seen[id] = true
+		t.ID = id
+
 		th := t.ToTheme()
 		t.Primary = th.Primary
 		t.Secondary = th.Secondary
@@ -161,84 +235,253 @@ func (c *RegistryClient) sanitizeRegistryThemes(index *RegistryIndex) {
 		t.Badge = th.Badge
 		t.BadgeText = th.BadgeText
 		t.HeaderAscii = th.HeaderAscii
+
+		t.Name = sanitizeString(t.Name, 64)
+		if t.Name == "" {
+			t.Name = prettifyName(id)
+		}
+		t.Author = sanitizeString(t.Author, 64)
+		t.Category = sanitizeString(t.Category, 32)
+		t.Description = sanitizeString(t.Description, 256)
+		t.DownloadURL = strings.TrimSpace(t.DownloadURL)
+		if !util.IsDisplaySafe(t.DownloadURL) || len(t.DownloadURL) > 2048 {
+			t.DownloadURL = ""
+		}
+		kept = append(kept, t)
 	}
+	index.Themes = kept
+	index.Version = sanitizeString(index.Version, 32)
+	index.UpdatedAt = sanitizeString(index.UpdatedAt, 64)
 }
 
 // DownloadAndInstall downloads or writes a theme into the themesDir and registers it.
+//
+// When the registry entry has a download_url, it must be https (relative
+// references resolve against the registry URL), redirects may not leave https
+// or reach loopback/private/link-local addresses, and the body is parsed and
+// validated as a theme; the file written is the re-serialised, sanitized
+// theme, never the downloaded bytes. Built-in theme IDs cannot be replaced.
+// Files are written atomically with mode 0600.
 func (c *RegistryClient) DownloadAndInstall(ctx context.Context, th RegistryTheme, themesDir string) error {
 	rawID := strings.TrimSpace(th.ID)
 	if rawID == "" {
 		rawID = th.Name
 	}
 	if strings.Contains(th.ID, "..") || strings.Contains(th.ID, "/") || strings.Contains(th.ID, "\\") {
-		return fmt.Errorf("invalid theme ID %q (path traversal characters not allowed)", th.ID)
+		return fmt.Errorf("invalid theme ID %q (path traversal characters not allowed)", util.SanitizeDisplay(th.ID, 64))
 	}
 	normID := normalizeID(rawID)
 	if normID == "" || !validIDRegex.MatchString(normID) {
-		return fmt.Errorf("invalid theme ID %q", th.ID)
+		return fmt.Errorf("invalid theme ID %q", util.SanitizeDisplay(th.ID, 64))
 	}
+	if isBuiltinThemeID(normID) {
+		return fmt.Errorf("theme ID %q is a built-in theme and cannot be replaced", normID)
+	}
+
+	runtimeTheme := th.ToTheme()
+	if strings.TrimSpace(th.DownloadURL) != "" {
+		downloaded, err := c.downloadThemeFile(ctx, th.DownloadURL)
+		if err != nil {
+			return fmt.Errorf("download theme %q: %w", normID, err)
+		}
+		if downloaded.Name == "" {
+			downloaded.Name = runtimeTheme.Name
+		}
+		if downloaded.Author == "" {
+			downloaded.Author = runtimeTheme.Author
+		}
+		if downloaded.Description == "" {
+			downloaded.Description = runtimeTheme.Description
+		}
+		runtimeTheme = downloaded
+	}
+	runtimeTheme.ID = normID
+	runtimeTheme.IsCustom = true
+	runtimeTheme = sanitizeThemeTokens(runtimeTheme)
 
 	if err := os.MkdirAll(themesDir, 0700); err != nil {
 		return fmt.Errorf("failed to create themes directory: %w", err)
 	}
-
 	targetPath := filepath.Join(themesDir, fmt.Sprintf("%s.yaml", normID))
-
-	// If a custom HTTP download URL is specified, try downloading raw YAML
-	var yamlContent string
-	if th.DownloadURL != "" {
-		downloadURL := th.DownloadURL
-		if !strings.HasPrefix(downloadURL, "http://") && !strings.HasPrefix(downloadURL, "https://") {
-			base, err := url.Parse(c.registryURL)
-			if err == nil {
-				rel, err := url.Parse(downloadURL)
-				if err == nil {
-					downloadURL = base.ResolveReference(rel).String()
-				}
-			}
-		}
-
-		if parsedURL, err := url.Parse(downloadURL); err == nil && (parsedURL.Scheme == "http" || parsedURL.Scheme == "https") {
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
-			if err == nil {
-				req.Header.Set("User-Agent", "halpradio/theme-installer")
-				resp, err := c.httpClient.Do(req)
-				if err == nil && resp.StatusCode == http.StatusOK {
-					defer resp.Body.Close()
-					data, err := io.ReadAll(io.LimitReader(resp.Body, MaxThemeFileSize))
-					if err == nil && len(data) > 0 {
-						yamlContent = string(data)
-					}
-				}
-			}
-		}
-	}
-
-	if yamlContent == "" {
-		yamlContent = FormatThemeYAML(th.ToTheme())
-	}
-
-	if err := os.WriteFile(targetPath, []byte(yamlContent), 0644); err != nil {
+	if err := util.WriteFileAtomic(targetPath, []byte(FormatThemeYAML(runtimeTheme)), 0o600); err != nil {
 		return fmt.Errorf("failed to save theme file: %w", err)
 	}
 
-	// Register in runtime memory
-	runtimeTheme := th.ToTheme()
-	runtimeTheme.ID = normID
-	runtimeTheme.IsCustom = true
 	RegisterTheme(normID, runtimeTheme)
-
 	return nil
 }
 
+// downloadThemeFile fetches a theme YAML from a registry download_url and
+// returns it parsed and validated.
+func (c *RegistryClient) downloadThemeFile(ctx context.Context, rawURL string) (Theme, error) {
+	base, err := url.Parse(c.registryURL)
+	if err != nil {
+		return Theme{}, fmt.Errorf("invalid registry URL")
+	}
+	ref, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return Theme{}, fmt.Errorf("invalid download_url")
+	}
+	u := base.ResolveReference(ref)
+	if err := c.checkThemeDownloadURL(u); err != nil {
+		return Theme{}, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return Theme{}, err
+	}
+	req.Header.Set("User-Agent", "halpradio/theme-installer")
+	resp, err := c.themeDownloadClient().Do(req)
+	if err != nil {
+		return Theme{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return Theme{}, fmt.Errorf("theme download returned HTTP %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, MaxThemeFileSize+1))
+	if err != nil {
+		return Theme{}, err
+	}
+	if len(data) > MaxThemeFileSize {
+		return Theme{}, fmt.Errorf("theme file exceeds %d bytes", MaxThemeFileSize)
+	}
+	return parseThemeYAML(data)
+}
+
+// parseThemeYAML parses a downloaded theme and requires it to look like one:
+// valid YAML into the Theme schema with valid primary, background and
+// foreground colours.
+func parseThemeYAML(data []byte) (Theme, error) {
+	if len(data) == 0 {
+		return Theme{}, errors.New("empty theme file")
+	}
+	var th Theme
+	if err := yaml.Unmarshal(data, &th); err != nil {
+		return Theme{}, fmt.Errorf("theme file is not valid YAML")
+	}
+	for _, c := range []lipgloss.Color{th.Primary, th.Background, th.Foreground} {
+		if !isValidColor(string(c)) {
+			return Theme{}, errors.New("theme file is missing valid primary/background/foreground colours")
+		}
+	}
+	return sanitizeThemeTokens(th), nil
+}
+
+func (c *RegistryClient) checkThemeDownloadURL(u *url.URL) error {
+	if u == nil || u.Scheme != "https" || u.Host == "" {
+		return errors.New("theme download_url must be https")
+	}
+	if u.User != nil {
+		return errors.New("theme download_url must not contain credentials")
+	}
+	if c.allowPrivateHosts {
+		return nil
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return errors.New("theme download_url may not point at a local address")
+	}
+	if ip := net.ParseIP(host); ip != nil && isNonPublicIP(ip) {
+		return errors.New("theme download_url may not point at a local or private address")
+	}
+	return nil
+}
+
+// themeDownloadClient returns a client for download_url fetches: redirects are
+// re-checked with checkThemeDownloadURL (https only, no local/private hosts),
+// and unless a proxy is configured the dialer refuses non-public addresses
+// so a public hostname that resolves to 127.0.0.1 or 10.x is refused too.
+func (c *RegistryClient) themeDownloadClient() *http.Client {
+	base := c.httpClient
+	if base == nil {
+		base = &http.Client{Timeout: 10 * time.Second}
+	}
+	cl := *base
+	if !c.allowPrivateHosts {
+		dialer := &net.Dialer{Timeout: 10 * time.Second, Control: refuseNonPublicDial}
+		cl.Transport = &http.Transport{
+			Proxy:               http.ProxyFromEnvironment,
+			DialContext:         dialer.DialContext,
+			TLSHandshakeTimeout: 10 * time.Second,
+			ForceAttemptHTTP2:   true,
+		}
+	}
+	cl.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= maxThemeDownloadRedirects {
+			return errors.New("too many redirects")
+		}
+		return c.checkThemeDownloadURL(req.URL)
+	}
+	return &cl
+}
+
+// refuseNonPublicDial is a net.Dialer Control hook that blocks connections to
+// loopback, private, link-local, unspecified and multicast addresses. With an
+// HTTP(S) proxy configured the dial goes to the proxy, which is allowed.
+func refuseNonPublicDial(network, address string, _ syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return fmt.Errorf("refusing to dial unresolved address %q", address)
+	}
+	if isNonPublicIP(ip) && !isConfiguredProxy(address) {
+		return fmt.Errorf("refusing to connect to non-public address %s", ip)
+	}
+	return nil
+}
+
+func isNonPublicIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsInterfaceLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified()
+}
+
+// isConfiguredProxy reports whether address is the host:port of a proxy from
+// the environment, so a local corporate proxy keeps working.
+func isConfiguredProxy(address string) bool {
+	for _, env := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"} {
+		v := strings.TrimSpace(os.Getenv(env))
+		if v == "" {
+			continue
+		}
+		pu, err := url.Parse(v)
+		if err != nil || pu.Host == "" {
+			continue
+		}
+		port := pu.Port()
+		if port == "" {
+			port = "80"
+			if pu.Scheme == "https" {
+				port = "443"
+			}
+		}
+		if addrs, err := net.LookupHost(pu.Hostname()); err == nil {
+			for _, a := range addrs {
+				if net.JoinHostPort(a, port) == address {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 // Uninstall removes a custom theme YAML file from disk and unregisters it.
+// Built-in themes cannot be uninstalled.
 func (c *RegistryClient) Uninstall(id string, themesDir string) error {
 	if strings.Contains(id, "..") || strings.Contains(id, "/") || strings.Contains(id, "\\") {
-		return fmt.Errorf("invalid theme ID %q (path traversal characters not allowed)", id)
+		return fmt.Errorf("invalid theme ID %q (path traversal characters not allowed)", util.SanitizeDisplay(id, 64))
 	}
 	normID := normalizeID(id)
 	if normID == "" || !validIDRegex.MatchString(normID) {
-		return fmt.Errorf("invalid theme ID %q", id)
+		return fmt.Errorf("invalid theme ID %q", util.SanitizeDisplay(id, 64))
+	}
+	if isBuiltinThemeID(normID) {
+		return fmt.Errorf("theme %q is built in and cannot be uninstalled", normID)
 	}
 
 	yamlPath := filepath.Join(themesDir, fmt.Sprintf("%s.yaml", normID))

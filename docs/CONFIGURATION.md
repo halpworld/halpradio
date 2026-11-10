@@ -8,8 +8,14 @@
 
 All user state and settings are stored in your platform's standard configuration directory:
 
-- **macOS / Linux**: `~/.config/halpradio/`
+- **Linux**: `$XDG_CONFIG_HOME/halpradio/` (default `~/.config/halpradio/`)
+- **macOS**: `~/Library/Application Support/halpradio/`
 - **Windows**: `%APPDATA%\halpradio\`
+- **No home directory known** (for example `HOME` unset in a service or container): `<tmp>/halpradio-<uid>/config/`, where `<tmp>` is the system temp directory. halpradio only uses that folder if it is a real directory (not a symlink) owned by you with mode `0700`; otherwise it creates a fresh, randomly named `0700` folder for that run, so settings are not kept. halpradio never falls back to a path relative to the current directory. The cache directory follows the same rule (`<tmp>/halpradio-<uid>/cache/`).
+
+The tree below uses `~/.config/halpradio/` as shorthand for your platform's directory.
+
+**Permissions.** `config.yaml` can hold API keys and a command hook, so it is written atomically with mode `0600` and the config directory is created `0700`. Files and directories from older versions (for example `0644` / `0755`) are tightened when the config is loaded or saved. `config.yaml` must be a regular file of at most 1 MiB.
 
 ```
 ~/.config/halpradio/
@@ -43,8 +49,9 @@ mpris_enabled: true         # Enable Linux MPRIS v2 D-Bus service (playerctl / m
 ipc_enabled: true           # Enable local IPC socket for CLI & script remote control
 
 # WebAssembly Plugin & Extension System
-plugins_enabled: true       # Enable/disable Wasm plugin sandbox engine
+plugins_enabled: true       # false: no plugin is loaded or started (TUI, party and plugin CLI)
 plugin_registry_url: "https://raw.githubusercontent.com/halpworld/halpradio-plugins/main/registry.json"
+theme_registry_url: "https://raw.githubusercontent.com/halpworld/halpradio-themes/main/themes.json"  # must be https (see note below)
 
 # Station Catalog Auto-Update & Caching
 catalog_auto_update: true   # Lightweight background sync for newly added curated stations
@@ -66,6 +73,7 @@ sleep_fade_seconds: 10      # Duration of smooth volume fade-out before stopping
 event_notify_desktop: true  # Send native OS desktop notifications (macOS / Linux / Windows)
 event_terminal_bell: true   # Emit terminal bell (\a) chime on interval transitions
 event_command_hook: ""      # Path to shell script / command to run on timer transitions
+                            # (ignored if config.yaml is not owned by the current user)
 
 # Acoustic Stream Fingerprinting & Dirty Metadata Sanitizer
 fingerprint_enabled: true   # Enable on-demand acoustic recognition via 'I' (Chromaprint / AcoustID)
@@ -79,12 +87,16 @@ lyrics_offset_ms: 0         # Persistent lyric sync correction in milliseconds (
 album_art_enabled: true     # Enable terminal cover art rendering ('A' key)
 album_art_protocol: auto    # auto | kitty | iterm2 | sixel | halfblock | braille | off
 lastfm_api_key: ""          # Optional extra cover art provider (iTunes, Deezer & Cover Art Archive need no key)
+lyrics_netease_enabled: true        # Allow NetEase as a lyrics provider (LRCLIB is the primary)
+album_art_itunes_enabled: true      # Allow the iTunes Search API for cover art
+album_art_deezer_enabled: true      # Allow the Deezer API for cover art
+album_art_musicbrainz_enabled: true # Allow MusicBrainz + Cover Art Archive for cover art
 
 # Local AI Radio DJ & Interactive Liner Notes Companion
 ai_dj: false                              # Automatically announce new tracks ('d' always triggers on-demand)
 ai_dj_persona: "late-night-chill"         # late-night-chill | retro-80s | cyberpunk | bbc-presenter
 ai_dj_tts_engine: "auto"                  # auto | piper | sherpa-onnx | native | silent
-ai_dj_voice_model: "en_US-lessac-medium"  # Opt-in HuggingFace ONNX model ID in ~/.cache/halpradio/ai/models/
+ai_dj_voice_model: "en_US-lessac-medium"  # Opt-in ONNX voice ID (downloaded from github.com/k2-fsa/sherpa-onnx, SHA-256 verified) in ~/.cache/halpradio/ai/models/
 ai_dj_ollama_url: "http://127.0.0.1:11434"# Optional local Ollama endpoint
 ai_dj_ollama_model: ""                    # Optional local Ollama model (e.g. "llama3.2:1b")
 ai_dj_duck_level: 20                      # Audio ducking percentage (5-100) while DJ speaks
@@ -92,6 +104,11 @@ ai_dj_duck_level: 20                      # Audio ducking percentage (5-100) whi
 # Experimental Features (On Hold)
 experimental_tuner: false   # Enable experimental Analog Frequency Tuner on Tab 0 (see docs/TUNER.md)
 ```
+
+> [!NOTE]
+> `plugins_enabled: false` stops every plugin from loading. The four provider switches (`lyrics_netease_enabled`, `album_art_itunes_enabled`, `album_art_deezer_enabled`, `album_art_musicbrainz_enabled`) stop halpradio from contacting that service; covers already in the local art cache can still be shown. Each defaults to `true`, and an older `config.yaml` without the key keeps the default.
+>
+> `theme_registry_url` must use `https://`; plain `http://` is accepted only for `localhost` or a loopback address, and a redirect to `http://` is refused.
 
 ---
 
@@ -207,7 +224,7 @@ halpradio --version
 
 # Diagnostics for a bug report (see "Debug Logging" below)
 halpradio --debug
-halpradio --debug-log /tmp/halpradio.log
+halpradio --debug-log ~/.config/halpradio/debug-session.log
 ```
 
 ---

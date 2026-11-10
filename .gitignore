@@ -30,3 +30,7 @@ dist/
 .idea/
 .vscode/
 .worktrees/
+.env.*
+*.key
+*.pem
+private.key

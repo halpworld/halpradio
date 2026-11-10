@@ -1,18 +1,17 @@
 package art
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/halpworld/halpradio/pkg/radio/netguard"
 )
 
 // Default provider endpoints. Each is overridable on Client so tests can point
@@ -72,11 +71,24 @@ type Client struct {
 	LastFMBaseURL      string // default "https://ws.audioscrobbler.com"
 	HTTPClient         *http.Client
 
+	// DisableITunes, DisableDeezer and DisableMusicBrainz skip that provider
+	// (config album_art_itunes_enabled / album_art_deezer_enabled /
+	// album_art_musicbrainz_enabled: false), so no track title is sent to it.
+	// DisableMusicBrainz also skips Cover Art Archive, which is looked up
+	// through MusicBrainz.
+	DisableITunes      bool
+	DisableDeezer      bool
+	DisableMusicBrainz bool
+
 	lastFMKey string
 	cacheDir  string
 
-	mu  sync.Mutex
-	mem map[string]*memEntry
+	// limiter throttles lookups per provider; nil means no throttle.
+	limiter *netguard.Limiter
+
+	mu         sync.Mutex
+	mem        map[string]*memEntry
+	diskWrites int // guarded by mu; paces cache pruning
 }
 
 // NewClient returns a Client caching artwork under cacheDir (created lazily).
@@ -89,7 +101,8 @@ func NewClient(cacheDir, lastFMKey string) *Client {
 		ITunesBaseURL:      DefaultITunesBaseURL,
 		DeezerBaseURL:      DefaultDeezerBaseURL,
 		LastFMBaseURL:      DefaultLastFMBaseURL,
-		HTTPClient:         &http.Client{Timeout: 10 * time.Second},
+		HTTPClient:         netguard.NewClient(10 * time.Second),
+		limiter:            netguard.NewLimiter(limiterBurst, limiterInterval),
 		lastFMKey:          strings.TrimSpace(lastFMKey),
 		cacheDir:           strings.TrimSpace(cacheDir),
 		mem:                make(map[string]*memEntry, memCapacity),
@@ -140,16 +153,28 @@ func (c *Client) Fetch(ctx context.Context, artist, title, album string) (*Cover
 
 	providers := []struct {
 		name string
+		base string
 		fn   func(context.Context, string, string) (*Cover, error)
 	}{
-		{"iTunes", c.fetchITunes},
-		{"Deezer", c.fetchDeezer},
-		{"Cover Art Archive", c.fetchCoverArtArchive},
-		{"Last.fm", c.fetchLastFM},
+		{"iTunes", baseOr(c.ITunesBaseURL, DefaultITunesBaseURL), c.fetchITunes},
+		{"Deezer", baseOr(c.DeezerBaseURL, DefaultDeezerBaseURL), c.fetchDeezer},
+		{"Cover Art Archive", baseOr(c.MusicBrainzBaseURL, DefaultMusicBrainzBaseURL), c.fetchCoverArtArchive},
+		{"Last.fm", baseOr(c.LastFMBaseURL, DefaultLastFMBaseURL), c.fetchLastFM},
 	}
 
+	throttled := false
 	for _, p := range providers {
-		cover, err := p.fn(ctx, cleanArtist, cleanTitle)
+		if c.providerDisabled(p.name) {
+			continue
+		}
+		if !c.limiter.Allow(p.name) {
+			throttled = true
+			continue
+		}
+		// Every request of this provider, including the image download and
+		// any redirect, starts from the provider's own origin: a public
+		// provider cannot point halpradio at a loopback or private address.
+		cover, err := p.fn(netguard.WithOrigin(ctx, p.base), cleanArtist, cleanTitle)
 		if err != nil {
 			if ctx.Err() != nil {
 				// The caller gave up; do not poison the cache with a
@@ -164,13 +189,33 @@ func (c *Client) Fetch(ctx context.Context, artist, title, album string) (*Cover
 		cover.Artist = firstNonEmpty(cover.Artist, artist)
 		cover.Title = firstNonEmpty(cover.Title, title)
 		cover.Album = firstNonEmpty(album, cover.Album, cleanAlbum)
+		sanitizeCover(cover)
 		c.memPut(key, cover)
 		_ = c.diskPut(key, cover)
 		return cover.clone(), nil
 	}
 
+	if throttled {
+		// Do not remember a miss that was caused by the throttle.
+		return nil, errThrottled
+	}
 	c.memPut(key, nil)
 	return nil, ErrNotFound
+}
+
+// providerDisabled reports whether the named provider must not be contacted.
+func (c *Client) providerDisabled(name string) bool {
+	switch name {
+	case "iTunes":
+		return c.DisableITunes
+	case "Deezer":
+		return c.DisableDeezer
+	case "Cover Art Archive":
+		return c.DisableMusicBrainz
+	case "Last.fm":
+		return c.lastFMKey == ""
+	}
+	return false
 }
 
 // fetchITunes queries the iTunes Search API and upgrades the 100px artwork URL
@@ -409,22 +454,32 @@ func (c *Client) getJSON(ctx context.Context, rawURL string, out any) error {
 
 	resp, err := c.httpClient().Do(req)
 	if err != nil {
-		return fmt.Errorf("art: request %s: %w", rawURL, err)
+		return fmt.Errorf("art: provider request failed: %w", stripURL(err))
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return fmt.Errorf("art: provider returned status %d", resp.StatusCode)
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxJSONBytes)).Decode(out); err != nil {
+	body, err := netguard.ReadLimited(resp.Body, maxJSONBytes)
+	if err != nil {
+		return fmt.Errorf("art: read response: %w", err)
+	}
+	if err := json.Unmarshal(body, out); err != nil {
 		return fmt.Errorf("art: decode response: %w", err)
 	}
 	return nil
 }
 
-// download retrieves an image, capping the body at 8 MB, rejecting non-image
-// content types and verifying that the bytes actually decode as an image.
+// download retrieves an image. The URL comes from provider metadata, so only
+// plain http/https URLs are fetched. The body is capped at 8 MB (a larger body
+// is an error, not a truncated image), non-image content types are rejected,
+// and the image header must declare a supported format within maxImageSide /
+// maxImagePixels. The pixels are not decoded here.
 func (c *Client) download(ctx context.Context, rawURL string) ([]byte, error) {
+	if _, err := netguard.CheckURL(rawURL); err != nil {
+		return nil, fmt.Errorf("art: image URL refused: %w", err)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("art: build image request: %w", err)
@@ -434,7 +489,7 @@ func (c *Client) download(ctx context.Context, rawURL string) ([]byte, error) {
 
 	resp, err := c.httpClient().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("art: download %s: %w", rawURL, err)
+		return nil, fmt.Errorf("art: image download failed: %w", stripURL(err))
 	}
 	defer resp.Body.Close()
 
@@ -445,14 +500,14 @@ func (c *Client) download(ctx context.Context, rawURL string) ([]byte, error) {
 		return nil, fmt.Errorf("art: unexpected content type %q for cover art", ct)
 	}
 
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxImageBytes))
+	data, err := netguard.ReadLimited(resp.Body, maxImageBytes)
 	if err != nil {
 		return nil, fmt.Errorf("art: read image body: %w", err)
 	}
 	if len(data) == 0 {
 		return nil, fmt.Errorf("art: empty image body")
 	}
-	if _, _, err := image.Decode(bytes.NewReader(data)); err != nil {
+	if err := checkDimensions(data); err != nil {
 		return nil, fmt.Errorf("art: downloaded bytes are not a usable image: %w", err)
 	}
 	return data, nil
@@ -463,7 +518,7 @@ func (c *Client) httpClient() *http.Client {
 	if c.HTTPClient != nil {
 		return c.HTTPClient
 	}
-	return &http.Client{Timeout: 10 * time.Second}
+	return netguard.NewClient(10 * time.Second)
 }
 
 // contentType strips parameters from a Content-Type header value.

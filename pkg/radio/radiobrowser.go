@@ -1,12 +1,16 @@
 package radio
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/halpworld/halpradio/pkg/radio/netguard"
+	"github.com/halpworld/halpradio/pkg/util"
 )
 
 type RadioBrowserStation struct {
@@ -53,11 +57,17 @@ func NewRadioBrowserClient() *RadioBrowserClient {
 			"https://at1.api.radio-browser.info",
 			"https://fr1.api.radio-browser.info",
 		},
-		HTTPClient: &http.Client{
-			Timeout: 6 * time.Second,
-		},
+		HTTPClient: netguard.NewClient(6 * time.Second),
 	}
 }
+
+const (
+	// maxRadioBrowserBytes caps one search response. A 100-result page is
+	// well under 200 KB; anything near this limit is hostile.
+	maxRadioBrowserBytes = 4 << 20
+	// maxRadioBrowserResults caps the stations kept from one search.
+	maxRadioBrowserResults = 500
+)
 
 // ParseSearchQuery parses natural language or structured qualifiers into SearchParams.
 // Supports qualifiers like:
@@ -216,6 +226,9 @@ func (rb *RadioBrowserClient) SearchWithParams(params SearchParams) ([]Station, 
 	if limit <= 0 {
 		limit = 40
 	}
+	if limit > maxRadioBrowserResults {
+		limit = maxRadioBrowserResults
+	}
 
 	queryParams := url.Values{}
 	queryParams.Set("limit", fmt.Sprintf("%d", limit))
@@ -257,7 +270,7 @@ func (rb *RadioBrowserClient) SearchWithParams(params SearchParams) ([]Station, 
 	for _, baseURL := range rb.BaseURLs {
 		endpoint := fmt.Sprintf("%s/json/stations/search?%s", baseURL, queryParams.Encode())
 
-		req, err := http.NewRequest("GET", endpoint, nil)
+		req, err := http.NewRequestWithContext(netguard.WithOrigin(context.Background(), baseURL), "GET", endpoint, nil)
 		if err != nil {
 			lastErr = err
 			continue
@@ -276,16 +289,26 @@ func (rb *RadioBrowserClient) SearchWithParams(params SearchParams) ([]Station, 
 			continue
 		}
 
-		var rawStations []RadioBrowserStation
-		if err := json.NewDecoder(resp.Body).Decode(&rawStations); err != nil {
-			resp.Body.Close()
+		body, err := netguard.ReadLimited(resp.Body, maxRadioBrowserBytes)
+		resp.Body.Close()
+		if err != nil {
 			lastErr = err
 			continue
 		}
-		resp.Body.Close()
+		var rawStations []RadioBrowserStation
+		if err := json.Unmarshal(body, &rawStations); err != nil {
+			lastErr = err
+			continue
+		}
 
 		var stations []Station
 		for _, r := range rawStations {
+			if len(stations) >= limit {
+				break
+			}
+			if strings.TrimSpace(r.StationUUID) == "" {
+				continue
+			}
 			streamURL := r.URL
 			if streamURL == "" {
 				streamURL = r.URLFallback
@@ -294,15 +317,13 @@ func (rb *RadioBrowserClient) SearchWithParams(params SearchParams) ([]Station, 
 				continue
 			}
 
-			genre := r.Tags
-			if len(genre) > 30 {
-				genre = genre[:30]
-			}
+			// Rune-safe cap; byte slicing could cut an escape sequence or a
+			// multi-byte rune in half.
+			genre := util.SanitizeDisplay(r.Tags, 30)
 
-			id := fmt.Sprintf("rb-%s", r.StationUUID)
-			if len(id) > 20 {
-				id = id[:20]
-			}
+			// The full UUID keeps IDs unique; SanitizeStation drops the
+			// station if the server sent something that is not ID-shaped.
+			id := "rb-" + strings.ToLower(strings.TrimSpace(r.StationUUID))
 
 			tagsLower := strings.ToLower(r.Tags)
 			broadcast := "Online"
@@ -342,8 +363,11 @@ func (rb *RadioBrowserClient) SearchWithParams(params SearchParams) ([]Station, 
 				Homepage:  r.Homepage,
 				Source:    "radiobrowser",
 			}
-			st = EnrichStation(st)
-			stations = append(stations, st)
+			clean, ok := SanitizeStation(st)
+			if !ok {
+				continue
+			}
+			stations = append(stations, EnrichStation(clean))
 		}
 
 		return stations, nil

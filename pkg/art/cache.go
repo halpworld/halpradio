@@ -1,17 +1,17 @@
 package art
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"image"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/halpworld/halpradio/pkg/radio/netguard"
 )
 
 // Cache tuning. Cover payloads are large, so the RAM cache stays small while
@@ -220,6 +220,9 @@ func (c *Client) diskGet(key string) (*Cover, bool) {
 		return nil, false
 	}
 
+	if info, err := os.Stat(metaPath); err != nil || info.Size() > maxJSONBytes {
+		return nil, false
+	}
 	metaRaw, err := os.ReadFile(metaPath)
 	if err != nil {
 		return nil, false
@@ -232,22 +235,29 @@ func (c *Client) diskGet(key string) (*Cover, bool) {
 		return nil, false
 	}
 
+	info, err := os.Stat(imgPath)
+	if err != nil || info.Size() == 0 || info.Size() > maxImageBytes {
+		c.diskDrop(imgPath, metaPath)
+		return nil, false
+	}
 	data, err := os.ReadFile(imgPath)
 	if err != nil || len(data) == 0 {
 		return nil, false
 	}
-	if _, _, err := image.DecodeConfig(bytes.NewReader(data)); err != nil {
+	if err := checkDimensions(data); err != nil {
+		// Written by an older version, or tampered with: never serve it.
+		c.diskDrop(imgPath, metaPath)
 		return nil, false
 	}
 
-	return &Cover{
+	return sanitizeCover(&Cover{
 		Data:   data,
 		Source: meta.Source,
 		Artist: meta.Artist,
 		Title:  meta.Title,
 		Album:  meta.Album,
 		URL:    meta.URL,
-	}, true
+	}), true
 }
 
 // diskPut writes a cover and its metadata sidecar. Disk errors are returned so
@@ -260,7 +270,7 @@ func (c *Client) diskPut(key string, cover *Cover) error {
 	if err := os.MkdirAll(c.cacheDir, 0o700); err != nil {
 		return fmt.Errorf("art: create cache dir: %w", err)
 	}
-	if err := os.WriteFile(imgPath, cover.Data, 0o600); err != nil {
+	if err := netguard.WriteFileAtomic(imgPath, cover.Data, 0o600); err != nil {
 		return fmt.Errorf("art: write cache image: %w", err)
 	}
 	meta, err := json.Marshal(diskMeta{
@@ -274,8 +284,25 @@ func (c *Client) diskPut(key string, cover *Cover) error {
 	if err != nil {
 		return fmt.Errorf("art: encode cache metadata: %w", err)
 	}
-	if err := os.WriteFile(metaPath, meta, 0o600); err != nil {
+	if err := netguard.WriteFileAtomic(metaPath, meta, 0o600); err != nil {
 		return fmt.Errorf("art: write cache metadata: %w", err)
 	}
+
+	// Keep the cache bounded: entries older than diskTTL and, beyond
+	// diskMaxBytes, the oldest files are removed. Checked on the first write
+	// and then every pruneEvery writes.
+	c.mu.Lock()
+	prune := c.diskWrites%pruneEvery == 0
+	c.diskWrites++
+	c.mu.Unlock()
+	if prune {
+		netguard.PruneDir(c.cacheDir, diskTTL, diskMaxBytes, ".img", ".json")
+	}
 	return nil
+}
+
+// diskDrop removes a cache entry that must not be served again.
+func (c *Client) diskDrop(imgPath, metaPath string) {
+	_ = os.Remove(imgPath)
+	_ = os.Remove(metaPath)
 }

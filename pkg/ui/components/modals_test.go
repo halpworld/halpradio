@@ -169,7 +169,7 @@ func TestRenderModals(t *testing.T) {
 		},
 	}
 	safeApprovalModal := RenderPermissionApprovalModal(safePlugin, 80, 24, th)
-	if !strings.Contains(safeApprovalModal, "None (Isolated)") {
+	if !strings.Contains(safeApprovalModal, "No network access") {
 		t.Errorf("Expected isolated network in safe plugin approval modal")
 	}
 

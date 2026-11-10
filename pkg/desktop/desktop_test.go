@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -141,5 +142,18 @@ func TestIsOwnedByCurrentUser(t *testing.T) {
 
 	if !isOwnedByCurrentUser(fi) {
 		t.Errorf("expected temp file to be owned by current user")
+	}
+}
+
+func TestGetPlaybackInfo_Sanitized(t *testing.T) {
+	m := NewManager(DesktopConfig{}, nil)
+	defer m.Close()
+	m.UpdatePlaybackFull("PLAYING", "id\x1b[2J", "Station\x1b]0;pwn\x07‮", "", "Art\u009b31m - Song​", "http://x/", 0, 50, false, "mpv\x07", "")
+	m.SetPartyInfo(&PartyInfo{Active: true, RoomName: "room\x1b[1m", Peers: []string{"host‮"}})
+	info := m.GetPlaybackInfo()
+	for _, s := range []string{info.StationID, info.StationName, info.Station, info.Artist, info.Title, info.Track, info.Backend, info.Party.RoomName, info.Party.Peers[0]} {
+		if strings.ContainsAny(s, "\x1b\x07‮\u009b​") {
+			t.Errorf("unsanitized playback field: %q", s)
+		}
 	}
 }

@@ -27,6 +27,10 @@ type Station struct {
 }
 
 type StationCatalog struct {
+	// Version is an optional, monotonically increasing catalog_version. The
+	// catalog updater refuses a download whose version is lower than the
+	// cached one.
+	Version  int       `yaml:"catalog_version,omitempty"`
 	Stations []Station `yaml:"stations"`
 }
 

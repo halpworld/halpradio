@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -91,10 +92,15 @@ type PartyCreateRoomMsg struct {
 	Nickname string
 	DJPass   string
 }
+
+// PartyJoinRoomMsg joins a room by invite (see party.ParseInvite): a bare
+// room code, or the code and the host fingerprint, which pins the host. It
+// is sent from the local IPC
+// socket, so it deliberately has no peer address field: addresses are only
+// taken from the user's own input in the party Join form or CLI flags.
 type PartyJoinRoomMsg struct {
-	RoomCode string
+	RoomCode string // a room code or a full invite
 	Nickname string
-	Address  string
 }
 type PartyLeaveRoomMsg struct{}
 type PartySendReactionMsg string
@@ -182,6 +188,33 @@ type Model struct {
 	PluginStatusMsg        string
 	ShowPermissionApproval bool
 	ApprovalPlugin         plugin.PluginInfo
+	// PluginSelectedID is the installed plugin the cursor is on. Keys act on
+	// this ID, never on a row index, so a list that changes between draw and
+	// key press cannot redirect an action (FR-A-4).
+	PluginSelectedID string
+	// PendingApprovalID is a plugin installed while another modal or a text
+	// input was active. Its prompt opens only from the plugin manager.
+	PendingApprovalID string
+	// ApprovalScroll is the first visible line of the rule list.
+	ApprovalScroll int
+	// ApprovalSeenEnd is set once the last line of the rule list has been on
+	// screen; "y" is refused before that.
+	ApprovalSeenEnd bool
+	// ApprovalArmed is set by "y"; Enter then approves, any other key cancels.
+	ApprovalArmed bool
+	// ApprovalShownAt is when the prompt became visible. Keys are ignored
+	// for approvalKeyGuard after it.
+	ApprovalShownAt time.Time
+	// ApprovalHint is the prompt's feedback line ("scroll to the end…").
+	ApprovalHint string
+	// ConfigWarning is shown on every frame while config.yaml could not be
+	// read (fail-closed config, FR-A-3).
+	ConfigWarning string
+	// Now is the model's clock. Tests replace it; nil means time.Now.
+	Now func() time.Time
+	// CatalogMinStations is the embedded catalog's station count. The
+	// background catalog update refuses a download much smaller than it.
+	CatalogMinStations int
 
 	TimerModalScreen           int // 0: Main Menu/Dashboard, 1: Custom Sleep, 2: Pomodoro Config
 	TimerMenuCursor            int
@@ -226,7 +259,11 @@ type Model struct {
 	LyricsScroll     int
 	LyricsOffset     time.Duration
 	LyricsTrackKey   string
-	TrackStartTime   time.Time
+	// LyricsLookupFailed marks LyricsTrackKey as a failed lookup (providers
+	// unreachable). The key is kept so ticks do not resend it (NET-7); the
+	// next explicit open of the drawer retries.
+	LyricsLookupFailed bool
+	TrackStartTime     time.Time
 
 	ArtClient     *art.Client
 	ArtRenderer   *art.Renderer
@@ -238,6 +275,8 @@ type Model struct {
 	ArtStatus     string
 	IsFetchingArt bool
 	ArtTrackKey   string
+	// ArtLookupFailed is the cover art counterpart of LyricsLookupFailed.
+	ArtLookupFailed bool
 
 	// ArtClearFrames counts down the frames that still carry the protocol's
 	// image-delete escape. Kitty placements survive a text repaint, so a
@@ -288,6 +327,30 @@ type Model struct {
 	DJModalStatus        string
 	DJInstalledVoices    map[string]bool
 	IsDownloadingVoice   bool
+
+	// partySyncSeq numbers incoming party syncs so a slow host-name check
+	// cannot start a stream after a newer sync arrived.
+	partySyncSeq uint64
+	// partyHostAnnounced remembers which session/host fingerprint the
+	// "Following host" notice was shown for.
+	partyHostAnnounced string
+	// partyPendingSync is the latest host sync not applied yet (held for a
+	// new host, or coalesced); the latest one wins.
+	partyPendingSync *party.SyncPayload
+	// partyHoldUntil is when syncs from a newly followed host may apply.
+	partyHoldUntil time.Time
+	// partyLastApply is when a host sync last changed playback.
+	partyLastApply time.Time
+	// partyFlushPending is set while a partySyncFlushMsg is scheduled.
+	partyFlushPending bool
+}
+
+// now returns the model's clock.
+func (m Model) now() time.Time {
+	if m.Now != nil {
+		return m.Now()
+	}
+	return time.Now()
 }
 
 func NewModel(
@@ -360,10 +423,12 @@ func NewModel(
 		TunerFreq:                  93.9,
 		TunerBand:                  "FM",
 		PlaybackStartTime:          time.Now(),
-		FingerprintClient:          fingerprint.NewClient(cfg.AcoustidAPIKey),
-		PartyInputs:                make([]string, 3),
-		LyricsOffset:               time.Duration(cfg.LyricsOffsetMs) * time.Millisecond,
-		ShowLyrics:                 cfg.LyricsEnabled && cfg.LyricsAutoOpen,
+		// Strict (AllowPrivate nil); identifyTrackCmd sets the policy per
+		// request from the current station's Source.
+		FingerprintClient: fingerprint.NewClient(cfg.AcoustidAPIKey),
+		PartyInputs:       make([]string, 3),
+		LyricsOffset:      time.Duration(cfg.LyricsOffsetMs) * time.Millisecond,
+		ShowLyrics:        cfg.LyricsEnabled && cfg.LyricsAutoOpen,
 	}
 
 	if pm != nil {
@@ -374,11 +439,15 @@ func NewModel(
 
 	if cfg.LyricsEnabled {
 		m.LyricsClient = lyrics.NewClient(util.GetLyricsCacheDir())
+		m.LyricsClient.DisableNetEase = !cfg.LyricsNetEaseEnabled
 	}
 	if cfg.AlbumArtEnabled {
 		m.ArtProtocol = art.Resolve(cfg.AlbumArtProtocol)
 		m.ArtRenderer = art.NewRenderer(m.ArtProtocol)
 		m.ArtClient = art.NewClient(util.GetAlbumArtCacheDir(), cfg.LastFMAPIKey)
+		m.ArtClient.DisableITunes = !cfg.ArtITunesEnabled
+		m.ArtClient.DisableDeezer = !cfg.ArtDeezerEnabled
+		m.ArtClient.DisableMusicBrainz = !cfg.ArtMusicBrainzEnabled
 	} else {
 		m.ArtProtocol = art.ProtocolNone
 	}
@@ -400,6 +469,17 @@ func NewModel(
 			m.ThemeCursor = i
 			break
 		}
+	}
+
+	if cfg.AIDJEnabled && strings.TrimSpace(cfg.AIDJOllamaURL) != "" {
+		if _, err := ai.ValidateOllamaURL(cfg.AIDJOllamaURL); err != nil {
+			m.StatusMessage = util.SanitizeDisplay("⚠ AI DJ: Ollama URL not used ("+err.Error()+"); using offline templates", 300)
+		}
+	}
+
+	if w := cfg.LoadWarning(); w != "" {
+		m.ConfigWarning = "⚠ " + w
+		m.StatusMessage = m.ConfigWarning
 	}
 
 	m.RefreshStations()
@@ -428,6 +508,40 @@ func (m *Model) SwitchTab(tabIndex int) {
 		m.ActiveFocus = FocusMainList
 	}
 	m.RefreshStations()
+}
+
+// clampSidebarIndices keeps GenreIndex and CountryIndex inside the current
+// lists after the catalog changed (a smaller catalog update used to leave an
+// index past the end, and the next key press indexed out of range). The
+// selection follows its value when it still exists; otherwise it falls back
+// to "All".
+func (m *Model) clampSidebarIndices() {
+	if m.GenreIndex < 0 || m.GenreIndex > len(m.Genres) ||
+		(m.GenreIndex > 0 && m.Genres[m.GenreIndex-1] != m.SelectedGenre) {
+		m.GenreIndex = 0
+		for i, g := range m.Genres {
+			if m.SelectedGenre != "" && g == m.SelectedGenre {
+				m.GenreIndex = i + 1
+				break
+			}
+		}
+		if m.GenreIndex == 0 {
+			m.SelectedGenre = ""
+		}
+	}
+	if m.CountryIndex < 0 || m.CountryIndex > len(m.Countries) ||
+		(m.CountryIndex > 0 && m.Countries[m.CountryIndex-1].Code != m.SelectedCountry) {
+		m.CountryIndex = 0
+		for i, c := range m.Countries {
+			if m.SelectedCountry != "" && c.Code == m.SelectedCountry {
+				m.CountryIndex = i + 1
+				break
+			}
+		}
+		if m.CountryIndex == 0 {
+			m.SelectedCountry = ""
+		}
+	}
 }
 
 func (m *Model) RefreshStations() {
@@ -473,6 +587,13 @@ func (m *Model) RefreshStations() {
 
 	m.Countries = radio.PrioritizeCountry(m.Store.GetCountries(), m.LocaleCountry)
 	m.Genres = m.Store.GetCategories()
+	m.clampSidebarIndices()
+	if m.ActiveTab == 3 {
+		selectedGenre = m.SelectedGenre
+	}
+	if m.ActiveTab == 2 {
+		selectedCountry = m.SelectedCountry
+	}
 
 	// Update Globe spatial clusters
 	allStations := m.Store.GetAllStations()
@@ -491,7 +612,15 @@ func (m *Model) RefreshStations() {
 	}
 }
 
+// WindowTitle is the terminal title. It embeds ICY titles and station
+// names from the network, so it is sanitized: an OSC title sequence ends at
+// BEL or ESC, and a raw one would let a stream inject escape sequences
+// (TTY-2).
 func (m Model) WindowTitle() string {
+	return util.SanitizeDisplay(m.rawWindowTitle(), 200)
+}
+
+func (m Model) rawWindowTitle() string {
 	timerPrefix := ""
 	if m.Timer != nil && m.Timer.IsActive() {
 		timerPrefix = m.Timer.WindowTitleBadge()
@@ -541,14 +670,19 @@ func (m Model) Init() tea.Cmd {
 		tea.SetWindowTitle(m.WindowTitle()),
 	}
 	if m.Config.CatalogAutoUpdate {
-		cmds = append(cmds, checkCatalogUpdateCmd(m.Config))
+		minStations := m.CatalogMinStations
+		if minStations == 0 && m.Store != nil {
+			minStations = len(m.Store.Bundled)
+		}
+		cmds = append(cmds, checkCatalogUpdateCmd(m.Config, minStations))
 	}
 	return tea.Batch(cmds...)
 }
 
-func checkCatalogUpdateCmd(cfg util.Config) tea.Cmd {
+func checkCatalogUpdateCmd(cfg util.Config, minStations int) tea.Cmd {
 	return func() tea.Msg {
 		updater := radio.NewCatalogUpdater(cfg.CatalogUpdateURL, cfg.CatalogCacheTTLHours)
+		updater.MinStations = minStations
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
@@ -640,6 +774,28 @@ func (m *Model) openPartyModal() {
 		m.PartyInputs = []string{"team-focus", defaultNick, "host"}
 		m.PartyInputFocus = 0
 	}
+}
+
+// enterPartyFormScreen switches the party modal to the create (1) or join (2)
+// form. The forms share PartyInputs, so each gets its own defaults: the join
+// form starts with an empty code and address (the create form's "team-focus"
+// and "host" are not a room code or a peer address).
+func (m *Model) enterPartyFormScreen(screen int) {
+	nick := m.Config.PartyNickname
+	if len(m.PartyInputs) > 1 && strings.TrimSpace(m.PartyInputs[1]) != "" {
+		nick = m.PartyInputs[1]
+	}
+	if nick == "" {
+		nick = "listener"
+	}
+	if screen == 2 {
+		m.PartyInputs = []string{"", nick, ""}
+	} else {
+		m.PartyInputs = []string{"team-focus", nick, "host"}
+	}
+	m.PartyModalScreen = screen
+	m.PartyInputFocus = 0
+	m.PartyStatusMsg = ""
 }
 
 func (m *Model) SyncDesktop() {
@@ -790,4 +946,16 @@ func (m *Model) TogglePlayPause() {
 			m.Desktop.NotifySong(st.Name, st.Name)
 		}
 	}
+}
+
+// statusLine is the status bar text: the config warning, when there is one,
+// stays in front of every other message until config.yaml is fixed.
+func (m Model) statusLine() string {
+	if m.ConfigWarning == "" || strings.Contains(m.StatusMessage, m.ConfigWarning) {
+		return m.StatusMessage
+	}
+	if m.StatusMessage == "" {
+		return m.ConfigWarning
+	}
+	return m.ConfigWarning + " • " + m.StatusMessage
 }

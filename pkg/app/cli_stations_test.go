@@ -272,7 +272,7 @@ func TestRunStationsAddCustom(t *testing.T) {
 	if err != nil || !done {
 		t.Fatalf("RunStations add failed: %v", err)
 	}
-	if !strings.Contains(buf.String(), "Successfully added") {
+	if !strings.Contains(buf.String(), "with ID custom-synthwave") {
 		t.Errorf("Expected success confirmation, got: %s", buf.String())
 	}
 
@@ -286,7 +286,7 @@ func TestRunStationsAddCustom(t *testing.T) {
 	if err != nil || !done {
 		t.Fatalf("RunStations add auto ID failed: %v", err)
 	}
-	if !strings.Contains(buf.String(), "Successfully added") {
+	if !strings.Contains(buf.String(), "Saved custom station") || !strings.Contains(buf.String(), "with ID custom-") {
 		t.Errorf("Expected success confirmation for auto ID, got: %s", buf.String())
 	}
 

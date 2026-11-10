@@ -39,6 +39,13 @@ func init() {
 		"224.0.0.0/4",     // IPv4 Multicast
 		"240.0.0.0/4",     // Reserved
 		"ff00::/8",        // IPv6 Multicast
+		"192.88.99.0/24",  // 6to4 relay anycast (deprecated)
+		"::/96",           // IPv4-compatible IPv6 (deprecated; also covers :: and ::1)
+		"64:ff9b:1::/48",  // Local-use NAT64 (RFC 8215): translator reaches internal IPv4
+		"fec0::/10",       // IPv6 site-local (deprecated, still routed on some LANs)
+		"2001::/32",       // Teredo: tunnels to an embedded IPv4 server/client
+		"100::/64",        // IPv6 discard-only
+		"2001:db8::/32",   // IPv6 documentation
 	}
 	for _, c := range cidrs {
 		_, ipNet, err := net.ParseCIDR(c)
@@ -61,7 +68,47 @@ func IsPrivateOrLoopbackIP(ip net.IP) bool {
 			return true
 		}
 	}
+	// IPv6 forms that carry an IPv4 address the network may translate or
+	// tunnel to: judge them by the embedded IPv4 address. (IPv4-mapped
+	// ::ffff:a.b.c.d is already handled by net.IP's To4 above, and
+	// IPv4-compatible ::a.b.c.d is refused outright by ::/96.)
+	if v4 := embeddedIPv4(ip); v4 != nil {
+		return IsPrivateOrLoopbackIP(v4)
+	}
 	return false
+}
+
+var (
+	nat64WellKnown = mustCIDR("64:ff9b::/96") // RFC 6052: last 32 bits
+	sixToFour      = mustCIDR("2002::/16")    // RFC 3056: bits 16-47
+)
+
+// mustCIDR parses a constant prefix. It cannot fail for the literals
+// above; a nil result would only make embeddedIPv4 skip that form.
+func mustCIDR(s string) *net.IPNet {
+	_, n, _ := net.ParseCIDR(s)
+	return n
+}
+
+// embeddedIPv4 returns the IPv4 address embedded in a NAT64 well-known
+// prefix or 6to4 address, or nil. A public NAT64 target (what DNS64 returns
+// for a public host on an IPv6-only network) stays reachable; one that wraps
+// a loopback, private or metadata address is refused.
+func embeddedIPv4(ip net.IP) net.IP {
+	if ip.To4() != nil {
+		return nil
+	}
+	ip16 := ip.To16()
+	if ip16 == nil {
+		return nil
+	}
+	switch {
+	case nat64WellKnown != nil && nat64WellKnown.Contains(ip16):
+		return net.IPv4(ip16[12], ip16[13], ip16[14], ip16[15]).To4()
+	case sixToFour != nil && sixToFour.Contains(ip16):
+		return net.IPv4(ip16[2], ip16[3], ip16[4], ip16[5]).To4()
+	}
+	return nil
 }
 
 // PermissionsConfig defines granular host capabilities requested by a plugin.
@@ -94,6 +141,117 @@ func (p PermissionsConfig) HasEvent(eventName string) bool {
 	return false
 }
 
+// ruleIsLocal reports whether a CIDR rule lies entirely inside one of the
+// private, loopback, link-local or otherwise non-public blocks. Only such a
+// rule names local addresses "explicitly and narrowly"; a broad rule that
+// merely contains them (0.0.0.0/0, ::/0, 0.0.0.0/1) does not.
+func ruleIsLocal(n *net.IPNet) bool {
+	if n == nil {
+		return false
+	}
+	ones, bits := n.Mask.Size()
+	for _, block := range privateCIDRs {
+		bOnes, bBits := block.Mask.Size()
+		if bits != bBits || ones < bOnes {
+			continue
+		}
+		if block.Contains(n.IP) {
+			return true
+		}
+	}
+	return false
+}
+
+// parseIPRule parses an IP or CIDR network rule. ok is false for "*" and
+// host-name rules.
+func parseIPRule(rule string) (n *net.IPNet, ok bool) {
+	if strings.Contains(rule, "/") {
+		_, ipNet, err := net.ParseCIDR(rule)
+		if err != nil {
+			return nil, false
+		}
+		return ipNet, true
+	}
+	ip := net.ParseIP(rule)
+	if ip == nil {
+		return nil, false
+	}
+	if v4 := ip.To4(); v4 != nil {
+		return &net.IPNet{IP: v4, Mask: net.CIDRMask(32, 32)}, true
+	}
+	return &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)}, true
+}
+
+// IsUnspecifiedRangeIP reports whether ip is in 0.0.0.0/8, is the IPv6
+// unspecified address ::, or is an IPv4-compatible address (::/96). A
+// connection to 0.0.0.0 or :: reaches this computer on Linux and macOS, so
+// these are refused at dial time under every rule, and a rule that names
+// only such addresses is rejected when the manifest is validated (FR-C-6).
+func IsUnspecifiedRangeIP(ip net.IP) bool {
+	if ip == nil {
+		return true
+	}
+	if v4 := ip.To4(); v4 != nil {
+		return v4[0] == 0
+	}
+	ip16 := ip.To16()
+	if ip16 == nil {
+		return true
+	}
+	if ip16.Equal(net.IPv6loopback) {
+		return false // ::1 is loopback, allowed by an explicit narrow rule
+	}
+	for _, b := range ip16[:12] {
+		if b != 0 {
+			return false
+		}
+	}
+	return true // :: and IPv4-compatible ::a.b.c.d
+}
+
+// ruleOnlyUnspecified reports whether a CIDR rule lies inside 0.0.0.0/8 or
+// ::/96 (other than the exact rule ::1), so it could never grant anything.
+func ruleOnlyUnspecified(n *net.IPNet) bool {
+	ones, bits := n.Mask.Size()
+	if bits == 32 {
+		return ones >= 8 && n.IP.To4() != nil && n.IP.To4()[0] == 0
+	}
+	if v4 := n.IP.To4(); v4 != nil { // IPv4-mapped prefix ::ffff:a.b.c.d/k
+		return ones >= 104 && v4[0] == 0
+	}
+	if ones < 96 {
+		return false
+	}
+	ip16 := n.IP.To16()
+	for _, b := range ip16[:12] {
+		if b != 0 {
+			return false
+		}
+	}
+	// Inside ::/96 only the exact loopback rule ::1 names something
+	// reachable; wider rules such as ::/96 are refused rather than shown
+	// as a roundabout loopback grant.
+	return !(ones == 128 && ip16.Equal(net.IPv6loopback))
+}
+
+// ipRuleAllows reports whether an IP or CIDR rule grants access to ip. A
+// private, loopback, link-local or metadata target is granted only by a rule
+// that itself lies inside such a block, so 0.0.0.0/0 grants public
+// addresses only, exactly like "*".
+func ipRuleAllows(rule string, ip net.IP) bool {
+	if IsUnspecifiedRangeIP(ip) {
+		return false // never reachable, whatever the rule says
+	}
+	n, ok := parseIPRule(rule)
+	if !ok || !n.Contains(ip) {
+		return false
+	}
+	if IsPrivateOrLoopbackIP(ip) {
+		return ruleIsLocal(n)
+	}
+	return true
+}
+
 // IsIPAllowed checks whether a resolved IP address is permitted under network capabilities.
 func (p PermissionsConfig) IsIPAllowed(ip net.IP) bool {
 	if ip == nil {
@@ -108,18 +266,12 @@ func (p PermissionsConfig) IsIPAllowed(ip net.IP) bool {
 		if rule == "" {
 			continue
 		}
-
-		if strings.Contains(rule, "/") {
-			_, ipNet, err := net.ParseCIDR(rule)
-			if err == nil && ipNet.Contains(ip) {
-				return true
-			}
-		} else if ruleIP := net.ParseIP(rule); ruleIP != nil && ruleIP.Equal(ip) {
+		if ipRuleAllows(rule, ip) {
 			return true
 		}
 	}
 
-	// Private, loopback, link-local, and cloud metadata IPs require an explicit IP or CIDR rule.
+	// Private, loopback, link-local, and cloud metadata IPs require an explicit, narrow IP or CIDR rule.
 	if isPrivate {
 		return false
 	}
@@ -169,27 +321,18 @@ func (p PermissionsConfig) CanAccessNetwork(rawURL string) bool {
 
 	// If host is an IP literal
 	if targetIP != nil {
-		isPrivate := IsPrivateOrLoopbackIP(targetIP)
-
 		for _, rule := range p.Network {
 			rule = strings.TrimSpace(rule)
 			if rule == "" {
 				continue
 			}
-
-			// Check CIDR match
-			if strings.Contains(rule, "/") {
-				_, ipNet, err := net.ParseCIDR(rule)
-				if err == nil && ipNet.Contains(targetIP) {
-					return true
-				}
-			} else if ruleIP := net.ParseIP(rule); ruleIP != nil && ruleIP.Equal(targetIP) {
+			if ipRuleAllows(rule, targetIP) {
 				return true
 			}
 		}
 
-		// Private/loopback IPs are ONLY allowed if explicitly matched above.
-		if isPrivate {
+		// Private/loopback IPs are ONLY allowed if explicitly and narrowly matched above.
+		if IsPrivateOrLoopbackIP(targetIP) {
 			return false
 		}
 
@@ -207,10 +350,7 @@ func (p PermissionsConfig) CanAccessNetwork(rawURL string) bool {
 	hostLower := strings.ToLower(host)
 
 	// Disallow localhost or local mDNS domains under wildcard unless explicitly granted
-	isLocalHost := hostLower == "localhost" ||
-		strings.HasSuffix(hostLower, ".localhost") ||
-		strings.HasSuffix(hostLower, ".local") ||
-		strings.HasSuffix(hostLower, ".internal")
+	isLocalHost := isLocalHostName(hostLower)
 
 	for _, rule := range p.Network {
 		rule = strings.TrimSpace(rule)
@@ -244,6 +384,14 @@ func (p PermissionsConfig) CanAccessNetwork(rawURL string) bool {
 	return false
 }
 
+func isLocalHostName(hostLower string) bool {
+	hostLower = strings.TrimSuffix(hostLower, ".")
+	return hostLower == "localhost" ||
+		strings.HasSuffix(hostLower, ".localhost") ||
+		strings.HasSuffix(hostLower, ".local") ||
+		strings.HasSuffix(hostLower, ".internal")
+}
+
 // Manifest defines the plugin metadata and declared permissions.
 type Manifest struct {
 	ID          string            `yaml:"id" json:"id"`
@@ -264,17 +412,23 @@ func (m *Manifest) Validate() error {
 	if !validIDRegex.MatchString(m.ID) {
 		return fmt.Errorf("plugin ID %q is invalid (must be lowercase alphanumeric, dashes, underscores)", m.ID)
 	}
-	if strings.TrimSpace(m.Name) == "" {
-		return errors.New("plugin name is required")
+	if err := validateDisplayField("name", m.Name, MaxNameRunes, true); err != nil {
+		return err
 	}
-	if len(m.Name) > 100 {
-		return fmt.Errorf("plugin name too long (%d chars, max 100)", len(m.Name))
+	if err := validateVersion(m.Version); err != nil {
+		return err
 	}
-	if strings.TrimSpace(m.Version) == "" {
-		return errors.New("plugin version is required")
+	if err := validateDisplayField("author", m.Author, MaxAuthorRunes, false); err != nil {
+		return err
 	}
-	if len(m.Version) > 32 {
-		return fmt.Errorf("plugin version too long (%d chars, max 32)", len(m.Version))
+	if err := validateDisplayField("description", m.Description, MaxDescriptionRunes, false); err != nil {
+		return err
+	}
+	if err := validateHomepage(m.Homepage); err != nil {
+		return err
+	}
+	if err := m.Permissions.Validate(); err != nil {
+		return err
 	}
 	if m.WasmFile == "" {
 		m.WasmFile = "plugin.wasm"
@@ -323,12 +477,19 @@ func ParseManifest(data []byte, ext string) (*Manifest, error) {
 }
 
 // PluginState tracks the user configuration and permissions status for a plugin.
+//
+// An approval is bound to the exact plugin binary (ApprovedSHA256) and the
+// exact permission set (ApprovedPermissions) the user was shown. If either
+// differs from what is on disk, the approval is void and the plugin does not
+// start until it is approved again.
 type PluginState struct {
-	Enabled             bool              `json:"enabled"`
-	PermissionsApproved bool              `json:"permissions_approved"`
-	Config              map[string]string `json:"config,omitempty"`
-	InstalledAt         string            `json:"installed_at,omitempty"`
-	UpdatedAt           string            `json:"updated_at,omitempty"`
+	Enabled             bool               `json:"enabled"`
+	PermissionsApproved bool               `json:"permissions_approved"`
+	ApprovedSHA256      string             `json:"approved_sha256,omitempty"`
+	ApprovedPermissions *PermissionsConfig `json:"approved_permissions,omitempty"`
+	Config              map[string]string  `json:"config,omitempty"`
+	InstalledAt         string             `json:"installed_at,omitempty"`
+	UpdatedAt           string             `json:"updated_at,omitempty"`
 }
 
 // PluginsConfigFile maps plugin ID to user plugin state.
@@ -347,6 +508,13 @@ type PluginInfo struct {
 	LastError       string      `json:"last_error,omitempty"`
 	UpdateAvailable bool        `json:"update_available,omitempty"`
 	LatestVersion   string      `json:"latest_version,omitempty"`
+	// WasmSHA256 is the SHA-256 of plugin.wasm as last read from disk. Pass
+	// the PluginInfo you displayed to ApprovePermissionsFor so the approval
+	// only applies to this exact binary and permission set.
+	WasmSHA256 string `json:"wasm_sha256,omitempty"`
+	// ApprovalNote explains why a plugin needs (re-)approval, for example
+	// "the plugin binary changed since you approved it". Empty when approved.
+	ApprovalNote string `json:"approval_note,omitempty"`
 }
 
 // RegistryIndex represents the official plugin catalog retrieved from the registry repo.
@@ -354,9 +522,15 @@ type RegistryIndex struct {
 	Version   string           `json:"version"`
 	UpdatedAt string           `json:"updated_at"`
 	Plugins   []RegistryPlugin `json:"plugins"`
+	// Skipped counts entries FetchRegistry dropped because they failed
+	// validation or repeated an ID.
+	Skipped int `json:"-"`
 }
 
-// RegistryPlugin represents a verified plugin available in the official registry.
+// RegistryPlugin is one entry of the plugin registry. Entries are validated
+// by FetchRegistry (display strings, permissions, checksum, https download
+// URL); the checksum comes from the same document, so it proves integrity of
+// the download, not who published it. See Signature.
 type RegistryPlugin struct {
 	ID          string            `json:"id"`
 	Name        string            `json:"name"`
@@ -365,8 +539,8 @@ type RegistryPlugin struct {
 	Description string            `json:"description"`
 	Homepage    string            `json:"homepage,omitempty"`
 	DownloadURL string            `json:"download_url"`
-	Checksum    string            `json:"checksum"` // SHA256
-	Signature   string            `json:"signature,omitempty"`
+	Checksum    string            `json:"checksum"`            // SHA256
+	Signature   string            `json:"signature,omitempty"` // hex Ed25519 over SigningPayload()
 	Permissions PermissionsConfig `json:"permissions"`
 	Tags        []string          `json:"tags,omitempty"`
 }

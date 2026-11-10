@@ -1,11 +1,14 @@
 package radio
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/halpworld/halpradio/pkg/radio/netguard"
 )
 
 type SomaFMChannel struct {
@@ -22,21 +25,28 @@ type SomaFMResponse struct {
 
 type SomaFMClient struct {
 	HTTPClient *http.Client
+	// Endpoint overrides the channel list URL (tests); empty means the
+	// official https://somafm.com/channels.json.
+	Endpoint string
 }
+
+// maxSomaFMBytes caps the channel list response (the real one is ~40 KB).
+const maxSomaFMBytes = 1 << 20
 
 func NewSomaFMClient() *SomaFMClient {
 	return &SomaFMClient{
-		HTTPClient: &http.Client{
-			Timeout: 6 * time.Second,
-		},
+		HTTPClient: netguard.NewClient(6 * time.Second),
 	}
 }
 
 // FetchChannels fetches the live list of channels directly from SomaFM official JSON API
 func (c *SomaFMClient) FetchChannels() ([]Station, error) {
 	endpoint := "https://somafm.com/channels.json"
+	if c.Endpoint != "" {
+		endpoint = c.Endpoint
+	}
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequestWithContext(netguard.WithOrigin(context.Background(), endpoint), "GET", endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -52,8 +62,12 @@ func (c *SomaFMClient) FetchChannels() ([]Station, error) {
 		return nil, fmt.Errorf("SomaFM API status code %d", resp.StatusCode)
 	}
 
+	body, err := netguard.ReadLimited(resp.Body, maxSomaFMBytes)
+	if err != nil {
+		return nil, err
+	}
 	var data SomaFMResponse
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	if err := json.Unmarshal(body, &data); err != nil {
 		return nil, err
 	}
 
@@ -84,5 +98,8 @@ func (c *SomaFMClient) FetchChannels() ([]Station, error) {
 		stations = append(stations, st)
 	}
 
+	// Channel IDs and titles come from the network: the same gate as every
+	// other station source drops bad IDs and strips control sequences.
+	stations, _ = sanitizeStations(stations, "somafm")
 	return stations, nil
 }

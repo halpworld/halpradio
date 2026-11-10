@@ -272,7 +272,7 @@ func TestStartICYListener(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	go pm.startICYListener(ctx, st)
+	go pm.startICYListener(ctx, st, true)
 
 	select {
 	case receivedTrack = <-trackCh:
@@ -342,7 +342,7 @@ func TestStopCancelsICYListenerAndClearsTrack(t *testing.T) {
 	pm.icyCancel = cancel
 	pm.mu.Unlock()
 
-	go pm.startICYListener(ctx, st)
+	go pm.startICYListener(ctx, st, true)
 
 	// Wait for first track to arrive
 	select {
@@ -436,7 +436,7 @@ func TestPauseCancelsICYListener(t *testing.T) {
 	pm.icyCancel = cancel
 	pm.mu.Unlock()
 
-	go pm.startICYListener(ctx, st)
+	go pm.startICYListener(ctx, st, true)
 
 	// Wait for first track to arrive
 	select {
@@ -513,7 +513,7 @@ func TestICYListenerStationMismatchIgnored(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	go pm.startICYListener(ctx, stA)
+	go pm.startICYListener(ctx, stA, true)
 
 	select {
 	case track := <-trackCh:

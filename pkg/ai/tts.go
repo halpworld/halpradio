@@ -5,10 +5,14 @@ import (
 	"bytes"
 	"compress/bzip2"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -200,38 +204,91 @@ func IsModelInstalled(modelID string) bool {
 	return IsModelInstalledInDir(util.GetTTSModelsDir(), modelID)
 }
 
+// artifactPin is the expected SHA-256 digest and byte size of a downloadable
+// archive. Digests are compiled into the binary; nothing that is not listed
+// in pinnedArtifacts is ever downloaded.
+type artifactPin struct {
+	SHA256 string
+	Size   int64
+}
+
+// pinnedArtifacts maps every download URL the AI DJ may fetch to its pinned
+// digest. The values were taken from the GitHub release API "digest" field
+// of k2-fsa/sherpa-onnx (tags v1.13.8 and tts-models). Assets on the rolling
+// "tts-models" tag can be replaced upstream; when that happens the digest no
+// longer matches and the install is refused until this table is updated.
+var pinnedArtifacts = map[string]artifactPin{
+	// sherpa-onnx v1.13.8 runtime (native executable + shared libraries).
+	"https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-osx-arm64-shared.tar.bz2":            {"b10e5c7e2c30ea03de9c442655d14860d9edc475c6251d58a8f5f06e913a1d56", 20314448},
+	"https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-osx-x64-shared.tar.bz2":              {"54aad64acee9d2d596535a6080d6f22602a720af5460e1d50461b1e1b06bee40", 22846038},
+	"https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2":            {"c0bdb7907d3a74bba1d55d22bf4d9fa75586cf1530614ebe88a27b9118e015c4", 28156791},
+	"https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-aarch64-shared-cpu.tar.bz2":    {"4e3734f82bc1379fd91f219f5869c7e9d03b7a4f7561907d8abca4849c51a789", 28091778},
+	"https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-win-x64-shared-MT-Release.tar.bz2":   {"6dffdc715a4465b989446a6105265d2cb345e7101591a17d35534b6758f6e8df", 24805859},
+	"https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-win-arm64-shared-MT-Release.tar.bz2": {"455ea18dc44aea188b4f7976037dea3d77e3f8d7afe0760f34244a7a0db53c4c", 23341583},
+	// Voice bundles (rolling "tts-models" tag; asset updated_at in comments).
+	"https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-lessac-medium-int8.tar.bz2": {"f1c6d0295cf16087b05f80fdca5b44daca5cd78e2c425d419a42ba34929805f9", 20969179},  // 2025-12-02
+	"https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-ryan-medium-int8.tar.bz2":   {"376eb489d42e98cb49f0e13a633e8d88580bd247ed8aacc298a733210404f771", 21083446},  // 2025-12-02
+	"https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-amy-medium-int8.tar.bz2":    {"bd23c0aa629eb3719448582f45ede49e8fa6a679061fed5eab16a6a6fd8e7e82", 21028122},  // 2026-04-22
+	"https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_GB-alan-medium-int8.tar.bz2":   {"f0b2526c9600657141ccbbe412f6159dceedab5bab4ba4e8857d9443acb50de4", 21103831},  // 2025-06-30
+	"https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-en-v0_19.tar.bz2":                {"c9f0dd393615805b0bab050c340834d5e684e732aec91c0e860cd30e982c08bd", 103248205}, // 2025-08-10
+}
+
+// allowedDownloadHosts are the only hosts a model/runtime download (or any
+// redirect it follows) may reach. GitHub release assets redirect from
+// github.com to one of the githubusercontent.com hosts.
+var allowedDownloadHosts = map[string]bool{
+	"github.com":                           true,
+	"objects.githubusercontent.com":        true,
+	"release-assets.githubusercontent.com": true,
+}
+
+// isAllowedDownloadURL reports whether u may be requested. It is a variable so
+// tests can point downloads at an httptest server.
+var isAllowedDownloadURL = func(u *url.URL) bool {
+	return u != nil && u.Scheme == "https" && u.User == nil && allowedDownloadHosts[strings.ToLower(u.Hostname())] &&
+		(u.Port() == "" || u.Port() == "443")
+}
+
+const (
+	maxDownloadRedirects = 5
+
+	// Extraction budgets (AI-5). The runtime archive unpacks to well under
+	// 100 MB of kept files; voice bundles carry espeak-ng-data (hundreds of
+	// small files) plus one model of up to ~110 MB (Kokoro).
+	maxRuntimeExtractBytes = 400 * 1024 * 1024
+	maxVoiceExtractBytes   = 300 * 1024 * 1024
+	maxArchiveEntries      = 4000
+
+	runtimeManifestName = ".halpradio-manifest.json"
+)
+
+var errUnpinnedArtifact = errors.New("download refused: no pinned SHA-256 digest for this asset")
+
 // sherpaRuntimeArchiveURL returns the prebuilt sherpa-onnx runtime archive URL for the current OS and architecture.
 func sherpaRuntimeArchiveURL() (url string, topDir string, ok bool) {
-	switch runtime.GOOS {
-	case "darwin":
-		if runtime.GOARCH == "arm64" {
-			return "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-osx-arm64-shared.tar.bz2",
-				"sherpa-onnx-v1.13.8-osx-arm64-shared", true
-		}
-		if runtime.GOARCH == "amd64" {
-			return "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-osx-x64-shared.tar.bz2",
-				"sherpa-onnx-v1.13.8-osx-x64-shared", true
-		}
-	case "linux":
-		if runtime.GOARCH == "amd64" {
-			return "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2",
-				"sherpa-onnx-v1.13.8-linux-x64-shared", true
-		}
-		if runtime.GOARCH == "arm64" {
-			return "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-aarch64-shared-cpu.tar.bz2",
-				"sherpa-onnx-v1.13.8-linux-aarch64-shared-cpu", true
-		}
-	case "windows":
-		if runtime.GOARCH == "amd64" {
-			return "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-win-x64-shared-MT-Release.tar.bz2",
-				"sherpa-onnx-v1.13.8-win-x64-shared-MT-Release", true
-		}
-		if runtime.GOARCH == "arm64" {
-			return "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-win-arm64-shared-MT-Release.tar.bz2",
-				"sherpa-onnx-v1.13.8-win-arm64-shared-MT-Release", true
-		}
+	return sherpaRuntimeArchiveURLFor(runtime.GOOS, runtime.GOARCH)
+}
+
+func sherpaRuntimeArchiveURLFor(goos, goarch string) (string, string, bool) {
+	const base = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/"
+	var top string
+	switch goos + "/" + goarch {
+	case "darwin/arm64":
+		top = "sherpa-onnx-v1.13.8-osx-arm64-shared"
+	case "darwin/amd64":
+		top = "sherpa-onnx-v1.13.8-osx-x64-shared"
+	case "linux/amd64":
+		top = "sherpa-onnx-v1.13.8-linux-x64-shared"
+	case "linux/arm64":
+		top = "sherpa-onnx-v1.13.8-linux-aarch64-shared-cpu"
+	case "windows/amd64":
+		top = "sherpa-onnx-v1.13.8-win-x64-shared-MT-Release"
+	case "windows/arm64":
+		top = "sherpa-onnx-v1.13.8-win-arm64-shared-MT-Release"
+	default:
+		return "", "", false
 	}
-	return "", "", false
+	return base + top + ".tar.bz2", top, true
 }
 
 // DownloadVoiceModel downloads an opt-in ONNX voice model (and the lightweight
@@ -243,6 +300,10 @@ func DownloadVoiceModel(ctx context.Context, modelID string, progressFn func(dow
 }
 
 // DownloadVoiceModelToDir downloads a voice model into modelsDir.
+//
+// Every archive is checked against its pinned SHA-256 digest before anything
+// is extracted; an unpinned or mismatching download is refused and leaves
+// nothing behind. modelsDir must be absolute.
 func DownloadVoiceModelToDir(ctx context.Context, client *http.Client, modelsDir, modelID string, progressFn func(downloaded, total int64)) error {
 	spec, ok := GetVoiceModelSpec(modelID)
 	if !ok {
@@ -251,12 +312,16 @@ func DownloadVoiceModelToDir(ctx context.Context, client *http.Client, modelsDir
 	if modelsDir == "" {
 		return errors.New("models directory not configured")
 	}
+	if !filepath.IsAbs(modelsDir) {
+		return errors.New("models directory must be an absolute path")
+	}
 	if client == nil {
 		client = &http.Client{Timeout: 5 * time.Minute}
 	}
 	if err := os.MkdirAll(modelsDir, 0o700); err != nil {
 		return fmt.Errorf("create models dir: %w", err)
 	}
+	_ = os.Chmod(modelsDir, 0o700)
 
 	// When ONNXURL is overridden (e.g. in unit tests using httptest.Server), use direct file download.
 	isCustomTestURL := !strings.HasPrefix(spec.ONNXURL, "https://huggingface.co/")
@@ -274,19 +339,75 @@ func DownloadVoiceModelToDir(ctx context.Context, client *http.Client, modelsDir
 		return nil
 	}
 
-	// Ensure the local sherpa-onnx TTS runtime binary is installed alongside modelsDir
-	if resolveSherpaBinaryInDir(modelsDir) == "" && !hasStandalonePiperBinary() {
-		if err := ensureSherpaRuntimeInDir(ctx, client, modelsDir); err != nil {
-			return fmt.Errorf("install local ONNX TTS runtime: %w", err)
+	// Ensure the local sherpa-onnx TTS runtime binary is installed alongside
+	// modelsDir. A bundled runtime that fails its manifest check (tampered,
+	// or installed by an older version without a manifest) is reinstalled.
+	if !hasStandalonePiperBinary() {
+		bin := resolveSherpaBinaryInDir(modelsDir)
+		if bin == "" || (bin == bundledSherpaPath(modelsDir) && verifyBundledRuntime(modelsDir) != nil) {
+			if err := ensureSherpaRuntimeInDir(ctx, client, modelsDir); err != nil {
+				return fmt.Errorf("install local ONNX TTS runtime: %w", err)
+			}
 		}
 	}
 
 	// Download and extract the self-contained ONNX voice bundle (.tar.bz2)
 	targetDir := filepath.Join(modelsDir, sanitizeModelID(spec.ID))
-	if err := downloadAndExtractTarBz2(ctx, client, spec.BundleURL, spec.BundleDir, targetDir, nil, progressFn); err != nil {
+	policy := extractPolicy{
+		stripPrefix: spec.BundleDir,
+		maxTotal:    maxVoiceExtractBytes,
+		maxEntries:  maxArchiveEntries,
+		maxFile:     maxModelFileBytes,
+		required:    []string{spec.ONNXFile, "tokens.txt"},
+	}
+	if err := downloadAndExtractTarBz2(ctx, client, spec.BundleURL, targetDir, policy, progressFn); err != nil {
 		return fmt.Errorf("download voice bundle %s: %w", spec.ID, err)
 	}
 	return nil
+}
+
+func sherpaExeName() string {
+	if runtime.GOOS == "windows" {
+		return "sherpa-onnx-offline-tts.exe"
+	}
+	return "sherpa-onnx-offline-tts"
+}
+
+func bundledSherpaPath(modelsDir string) string {
+	return filepath.Join(modelsDir, "_runtime", "bin", sherpaExeName())
+}
+
+// runtimeExtractPolicy returns the extraction rules for the runtime archive:
+// keep the TTS executable and the shared libraries, and give the exec bit to
+// the executable only. On Windows the DLLs are placed next to the .exe so the
+// loader resolves them from the runtime directory (AI-9).
+func runtimeExtractPolicy(goos, topDir string) extractPolicy {
+	exe := "bin/sherpa-onnx-offline-tts"
+	if goos == "windows" {
+		exe += ".exe"
+	}
+	isDLL := func(rel string) bool { return strings.HasSuffix(strings.ToLower(rel), ".dll") }
+	return extractPolicy{
+		stripPrefix: topDir,
+		maxTotal:    maxRuntimeExtractBytes,
+		maxEntries:  maxArchiveEntries,
+		maxFile:     maxModelFileBytes,
+		keep: func(rel string) bool {
+			if rel == exe || strings.HasPrefix(rel, "lib/") {
+				return true
+			}
+			return goos == "windows" && strings.HasPrefix(rel, "bin/") && !strings.Contains(strings.TrimPrefix(rel, "bin/"), "/") && isDLL(rel)
+		},
+		mapPath: func(rel string) string {
+			if goos == "windows" && strings.HasPrefix(rel, "lib/") && isDLL(rel) && !strings.Contains(strings.TrimPrefix(rel, "lib/"), "/") {
+				return "bin/" + strings.TrimPrefix(rel, "lib/")
+			}
+			return rel
+		},
+		executable: func(rel string) bool { return rel == exe },
+		required:   []string{exe},
+		manifest:   true,
+	}
 }
 
 func ensureSherpaRuntimeInDir(ctx context.Context, client *http.Client, modelsDir string) error {
@@ -295,27 +416,49 @@ func ensureSherpaRuntimeInDir(ctx context.Context, client *http.Client, modelsDi
 		return errors.New("no prebuilt ONNX runtime available for this OS/architecture")
 	}
 	runtimeDir := filepath.Join(modelsDir, "_runtime")
-	keepFilter := func(relPath string) bool {
-		if strings.HasPrefix(relPath, "lib/") {
-			return true
-		}
-		if relPath == "bin/sherpa-onnx-offline-tts" || relPath == "bin/sherpa-onnx-offline-tts.exe" {
-			return true
-		}
-		return false
+	if err := downloadAndExtractTarBz2(ctx, client, archiveURL, runtimeDir, runtimeExtractPolicy(runtime.GOOS, topDir), nil); err != nil {
+		return err
 	}
-	return downloadAndExtractTarBz2(ctx, client, archiveURL, topDir, runtimeDir, keepFilter, nil)
+	return verifyBundledRuntime(modelsDir)
+}
+
+// extractPolicy bounds and shapes what downloadAndExtractTarBz2 writes.
+type extractPolicy struct {
+	stripPrefix string                  // required top-level directory; entries outside it are skipped
+	keep        func(rel string) bool   // nil keeps everything
+	mapPath     func(rel string) string // optional rename of kept entries
+	executable  func(rel string) bool   // files that get mode 0700; nil means none
+	maxTotal    int64                   // cumulative bytes written
+	maxEntries  int                     // tar headers read (all types)
+	maxFile     int64                   // per-file cap; larger entries abort extraction
+	required    []string                // relative paths that must exist afterwards
+	manifest    bool                    // write runtimeManifestName with per-file digests
+}
+
+// runtimeManifest records what was installed from a pinned runtime archive so
+// the files can be re-verified before every exec.
+type runtimeManifest struct {
+	Source        string            `json:"source"`
+	ArchiveSHA256 string            `json:"archive_sha256"`
+	Files         map[string]string `json:"files"`
 }
 
 func downloadAndExtractTarBz2(
 	ctx context.Context,
 	client *http.Client,
 	rawURL string,
-	stripPrefixDir string,
 	destDir string,
-	keepFilter func(relPath string) bool,
+	policy extractPolicy,
 	progressFn func(downloaded, total int64),
 ) error {
+	pin, ok := lookupPin(rawURL)
+	if !ok {
+		return errUnpinnedArtifact
+	}
+	if strings.Trim(policy.stripPrefix, "/") == "" {
+		return errors.New("archive extraction requires a top-level directory")
+	}
+
 	tmpArchive, err := os.CreateTemp(filepath.Dir(destDir), "onnx-bundle-*.tar.bz2")
 	if err != nil {
 		return err
@@ -324,6 +467,8 @@ func downloadAndExtractTarBz2(
 	_ = tmpArchive.Close()
 	defer os.Remove(tmpArchivePath)
 
+	// downloadFileAtomic verifies the pinned digest over the downloaded bytes;
+	// nothing below runs unless it matched.
 	if err := downloadFileAtomic(ctx, client, rawURL, tmpArchivePath, progressFn); err != nil {
 		return err
 	}
@@ -339,45 +484,52 @@ func downloadAndExtractTarBz2(
 	if err := os.MkdirAll(stagingDir, 0o700); err != nil {
 		return err
 	}
-	cleanupStaging := func() {
+	fail := func(err error) error {
 		_ = os.RemoveAll(stagingDir)
+		return err
 	}
 
-	bzReader := bzip2.NewReader(f)
-	tr := tar.NewReader(bzReader)
+	tr := tar.NewReader(bzip2.NewReader(f))
+	prefix := strings.Trim(policy.stripPrefix, "/") + "/"
+	var written int64
+	entries := 0
+	digests := make(map[string]string)
 
-	prefix := strings.Trim(stripPrefixDir, "/") + "/"
 	for {
-		select {
-		case <-ctx.Done():
-			cleanupStaging()
-			return ctx.Err()
-		default:
+		if err := ctx.Err(); err != nil {
+			return fail(err)
 		}
-
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			cleanupStaging()
-			return err
+			return fail(err)
+		}
+		entries++
+		if policy.maxEntries > 0 && entries > policy.maxEntries {
+			return fail(fmt.Errorf("archive has more than %d entries", policy.maxEntries))
 		}
 
 		name := filepath.ToSlash(strings.TrimPrefix(hdr.Name, "./"))
-		if stripPrefixDir != "" && strings.HasPrefix(name, prefix) {
-			name = strings.TrimPrefix(name, prefix)
+		if !strings.HasPrefix(name, prefix) {
+			continue // outside the required top-level directory (includes absolute paths)
 		}
-		name = strings.TrimPrefix(name, "/")
-		if name == "" || strings.Contains(name, "..") {
+		name = strings.TrimPrefix(name, prefix)
+		if name == "" || !isCleanRelPath(name) {
 			continue
 		}
-		if keepFilter != nil && !keepFilter(name) {
+		if policy.keep != nil && !policy.keep(name) {
 			continue
+		}
+		if policy.mapPath != nil {
+			name = policy.mapPath(name)
+			if !isCleanRelPath(name) {
+				continue
+			}
 		}
 
 		outPath := filepath.Join(stagingDir, filepath.FromSlash(name))
-		// Guard against zip-slip
 		if !strings.HasPrefix(filepath.Clean(outPath)+string(os.PathSeparator), filepath.Clean(stagingDir)+string(os.PathSeparator)) {
 			continue
 		}
@@ -385,55 +537,133 @@ func downloadAndExtractTarBz2(
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(outPath, 0o700); err != nil {
-				cleanupStaging()
-				return err
+				return fail(err)
 			}
 		case tar.TypeReg, tar.TypeRegA:
+			if policy.maxFile > 0 && hdr.Size > policy.maxFile {
+				return fail(fmt.Errorf("archive entry %q exceeds %d bytes", name, policy.maxFile))
+			}
 			if err := os.MkdirAll(filepath.Dir(outPath), 0o700); err != nil {
-				cleanupStaging()
-				return err
+				return fail(err)
 			}
-			mode := os.FileMode(hdr.Mode) & 0o777
-			if mode == 0 {
-				mode = 0o600
+			mode := os.FileMode(0o600)
+			if policy.executable != nil && policy.executable(name) {
+				mode = 0o700
 			}
-			if strings.HasPrefix(name, "bin/") || strings.HasSuffix(name, ".dylib") || strings.Contains(name, ".so") || strings.HasSuffix(name, ".dll") {
-				mode |= 0o700
-			}
-			outFile, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+			_ = os.Remove(outPath)
+			outFile, err := os.OpenFile(outPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
 			if err != nil {
-				cleanupStaging()
-				return err
+				return fail(err)
 			}
-			_, copyErr := io.Copy(outFile, io.LimitReader(tr, maxModelFileBytes))
+			h := sha256.New()
+			limit := policy.maxFile
+			if limit <= 0 {
+				limit = maxModelFileBytes
+			}
+			n, copyErr := io.Copy(io.MultiWriter(outFile, h), io.LimitReader(tr, limit+1))
 			closeErr := outFile.Close()
 			if copyErr != nil {
-				cleanupStaging()
-				return copyErr
+				return fail(copyErr)
 			}
 			if closeErr != nil {
-				cleanupStaging()
-				return closeErr
+				return fail(closeErr)
 			}
+			if n > limit {
+				return fail(fmt.Errorf("archive entry %q exceeds %d bytes", name, limit))
+			}
+			written += n
+			if policy.maxTotal > 0 && written > policy.maxTotal {
+				return fail(fmt.Errorf("archive expands beyond %d bytes", policy.maxTotal))
+			}
+			if err := os.Chmod(outPath, mode); err != nil && runtime.GOOS != "windows" {
+				return fail(err)
+			}
+			digests[name] = hex.EncodeToString(h.Sum(nil))
+		default:
+			// Symlinks, hard links, devices and FIFOs are never created.
+		}
+	}
+
+	for _, req := range policy.required {
+		if !fileExistsNonEmpty(filepath.Join(stagingDir, filepath.FromSlash(req))) {
+			return fail(fmt.Errorf("archive is missing required file %q", req))
+		}
+	}
+
+	if policy.manifest {
+		data, err := json.MarshalIndent(runtimeManifest{Source: rawURL, ArchiveSHA256: pin.SHA256, Files: digests}, "", "  ")
+		if err != nil {
+			return fail(err)
+		}
+		if err := util.WriteFileAtomic(filepath.Join(stagingDir, runtimeManifestName), data, 0o600); err != nil {
+			return fail(err)
 		}
 	}
 
 	_ = os.RemoveAll(destDir)
 	if err := os.Rename(stagingDir, destDir); err != nil {
-		cleanupStaging()
-		return err
+		return fail(err)
 	}
 	return nil
 }
 
+// isCleanRelPath accepts slash-separated relative paths with no empty, "."
+// or ".." segments.
+func isCleanRelPath(p string) bool {
+	if p == "" || strings.HasPrefix(p, "/") || strings.Contains(p, "\\") || strings.Contains(p, ":") {
+		return false
+	}
+	for _, seg := range strings.Split(strings.TrimSuffix(p, "/"), "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			return false
+		}
+	}
+	return true
+}
+
+func lookupPin(rawURL string) (artifactPin, bool) {
+	pin, ok := pinnedArtifacts[rawURL]
+	if !ok || len(pin.SHA256) != sha256.Size*2 {
+		return artifactPin{}, false
+	}
+	return pin, true
+}
+
+// downloadClient returns a shallow copy of client whose redirects must stay on
+// the download allow-list.
+func downloadClient(client *http.Client) *http.Client {
+	cl := *client
+	cl.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= maxDownloadRedirects {
+			return errors.New("too many redirects")
+		}
+		if !isAllowedDownloadURL(req.URL) {
+			return fmt.Errorf("redirect to %s refused", req.URL.Redacted())
+		}
+		return nil
+	}
+	return &cl
+}
+
+// downloadFileAtomic fetches a pinned artifact into destPath. The URL (and any
+// redirect) must be on the allow-list, and the SHA-256 and size of the bytes
+// received must equal the pin before destPath is created.
 func downloadFileAtomic(ctx context.Context, client *http.Client, rawURL, destPath string, progressFn func(downloaded, total int64)) error {
+	pin, ok := lookupPin(rawURL)
+	if !ok {
+		return errUnpinnedArtifact
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil || !isAllowedDownloadURL(u) {
+		return fmt.Errorf("download from %s refused: host not allowed", rawURL)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("User-Agent", defaultUserAgent)
 
-	resp, err := client.Do(req)
+	resp, err := downloadClient(client).Do(req)
 	if err != nil {
 		return err
 	}
@@ -441,6 +671,11 @@ func downloadFileAtomic(ctx context.Context, client *http.Client, rawURL, destPa
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("HTTP %d from %s", resp.StatusCode, rawURL)
+	}
+
+	limit := int64(maxModelFileBytes)
+	if pin.Size > 0 && pin.Size < limit {
+		limit = pin.Size
 	}
 
 	dir := filepath.Dir(destPath)
@@ -455,25 +690,28 @@ func downloadFileAtomic(ctx context.Context, client *http.Client, rawURL, destPa
 	}
 
 	total := resp.ContentLength
+	if pin.Size > 0 {
+		total = pin.Size
+	}
 	var downloaded int64
 	buf := make([]byte, 32*1024)
-	limited := io.LimitReader(resp.Body, maxModelFileBytes+1)
+	limited := io.LimitReader(resp.Body, limit+1)
+	h := sha256.New()
 
 	for {
-		select {
-		case <-ctx.Done():
+		if err := ctx.Err(); err != nil {
 			cleanup()
-			return ctx.Err()
-		default:
+			return err
 		}
 
 		n, readErr := limited.Read(buf)
 		if n > 0 {
 			downloaded += int64(n)
-			if downloaded > maxModelFileBytes {
+			if downloaded > limit {
 				cleanup()
-				return errors.New("model file exceeds maximum allowed size")
+				return errors.New("download exceeds its pinned size")
 			}
+			h.Write(buf[:n])
 			if _, wErr := tmp.Write(buf[:n]); wErr != nil {
 				cleanup()
 				return wErr
@@ -491,15 +729,99 @@ func downloadFileAtomic(ctx context.Context, client *http.Client, rawURL, destPa
 		}
 	}
 
+	if (pin.Size > 0 && downloaded != pin.Size) || !strings.EqualFold(hex.EncodeToString(h.Sum(nil)), pin.SHA256) {
+		cleanup()
+		return fmt.Errorf("integrity check failed for %s: SHA-256 does not match the pinned digest", rawURL)
+	}
+
 	if err := tmp.Close(); err != nil {
 		_ = os.Remove(tmpName)
 		return err
 	}
+	_ = os.Chmod(tmpName, 0o600)
 	if err := os.Rename(tmpName, destPath); err != nil {
 		_ = os.Remove(tmpName)
 		return err
 	}
 	return nil
+}
+
+// readRuntimeManifest loads the manifest of a bundled runtime and checks that
+// it belongs to the pinned runtime archive for this platform.
+func readRuntimeManifest(modelsDir string) (runtimeManifest, error) {
+	var m runtimeManifest
+	if !filepath.IsAbs(modelsDir) {
+		return m, errors.New("models directory is not absolute")
+	}
+	path := filepath.Join(modelsDir, "_runtime", runtimeManifestName)
+	info, err := os.Lstat(path)
+	if err != nil {
+		return m, err
+	}
+	if !info.Mode().IsRegular() || info.Size() > 1<<20 {
+		return m, errors.New("runtime manifest is not a regular file")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return m, err
+	}
+	if err := json.Unmarshal(data, &m); err != nil {
+		return m, fmt.Errorf("runtime manifest: %w", err)
+	}
+	archiveURL, _, ok := sherpaRuntimeArchiveURL()
+	pin, pinned := lookupPin(archiveURL)
+	if !ok || !pinned || m.Source != archiveURL || !strings.EqualFold(m.ArchiveSHA256, pin.SHA256) {
+		return m, errors.New("runtime manifest does not match the pinned runtime")
+	}
+	if _, listed := m.Files["bin/"+sherpaExeName()]; !listed {
+		return m, errors.New("runtime manifest does not list the TTS executable")
+	}
+	return m, nil
+}
+
+// verifyBundledRuntime re-hashes every file listed in the runtime manifest and
+// fails if any is missing, is not a regular file, or has changed. It runs
+// before every exec of the bundled runtime.
+func verifyBundledRuntime(modelsDir string) error {
+	m, err := readRuntimeManifest(modelsDir)
+	if err != nil {
+		return err
+	}
+	runtimeDir := filepath.Join(modelsDir, "_runtime")
+	for rel, want := range m.Files {
+		if !isCleanRelPath(rel) {
+			return fmt.Errorf("runtime manifest has invalid path %q", rel)
+		}
+		p := filepath.Join(runtimeDir, filepath.FromSlash(rel))
+		info, err := os.Lstat(p)
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("runtime file %s is not a regular file", rel)
+		}
+		got, err := sha256File(p)
+		if err != nil {
+			return err
+		}
+		if !strings.EqualFold(got, want) {
+			return fmt.Errorf("runtime file %s does not match its install manifest", rel)
+		}
+	}
+	return nil
+}
+
+func sha256File(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // TTSEngine synthesizes and plays local DJ announcements.
@@ -585,8 +907,6 @@ func DetectEngineInDir(preferred string, modelsDir string, modelID string) strin
 			return bin + " (Local Offline)"
 		case "spd-say":
 			return "Speech Dispatcher (Local Offline)"
-		case "powershell":
-			return "Windows SAPI (Local Offline)"
 		default:
 			return "Native OS Speech (0ms Cloud Lag)"
 		}
@@ -600,22 +920,56 @@ func hasStandalonePiperBinary() bool {
 	return err == nil
 }
 
+// resolveSherpaBinaryInDir returns the sherpa-onnx TTS executable to use: the
+// bundled runtime under an absolute modelsDir when its install manifest
+// lists it (the full digest check runs in verifiedSherpaBinary right before
+// exec), otherwise one installed on PATH.
 func resolveSherpaBinaryInDir(modelsDir string) string {
-	if modelsDir != "" {
-		exe := "sherpa-onnx-offline-tts"
-		if runtime.GOOS == "windows" {
-			exe += ".exe"
-		}
-		bundled := filepath.Join(modelsDir, "_runtime", "bin", exe)
+	if modelsDir != "" && filepath.IsAbs(modelsDir) {
+		bundled := bundledSherpaPath(modelsDir)
 		if fileExistsNonEmpty(bundled) {
-			return bundled
+			if _, err := readRuntimeManifest(modelsDir); err == nil {
+				return bundled
+			}
 		}
 	}
-	if p, err := exec.LookPath("sherpa-onnx-offline-tts"); err == nil {
+	if p, err := exec.LookPath("sherpa-onnx-offline-tts"); err == nil && filepath.IsAbs(p) {
 		return p
 	}
 	return ""
 }
+
+// verifiedSherpaBinary resolves the sherpa-onnx executable and, when it is the
+// bundled runtime, re-verifies every installed runtime file against the
+// manifest before it may be executed.
+func verifiedSherpaBinary(modelsDir string) (string, error) {
+	bin := resolveSherpaBinaryInDir(modelsDir)
+	if bin == "" {
+		return "", errors.New("sherpa-onnx-offline-tts not installed")
+	}
+	if modelsDir != "" && bin == bundledSherpaPath(modelsDir) {
+		if err := verifyBundledRuntime(modelsDir); err != nil {
+			return "", fmt.Errorf("bundled TTS runtime failed verification: %w", err)
+		}
+	}
+	return bin, nil
+}
+
+// maxSpokenRunes caps the text handed to any TTS process.
+const maxSpokenRunes = 600
+
+// sanitizeSpokenText makes DJ text safe to pass as a single argv element:
+// control and format characters are removed, length is capped, and leading
+// dashes (ASCII and Unicode) are stripped so the text can never be parsed as
+// a command-line option by the TTS runner.
+func sanitizeSpokenText(text string) string {
+	text = util.SanitizeDisplay(text, maxSpokenRunes)
+	return strings.TrimSpace(strings.TrimLeft(text, leadingDashCutset))
+}
+
+// leadingDashCutset holds ASCII hyphen-minus plus Unicode dash and minus
+// characters, and whitespace, all trimmed from the start of spoken text.
+const leadingDashCutset = "-\u2010\u2011\u2012\u2013\u2014\u2015\u2212\ufe58\ufe63\uff0d \t"
 
 func detectNativeTTSBinary() string {
 	switch runtime.GOOS {
@@ -629,11 +983,9 @@ func detectNativeTTSBinary() string {
 				return bin
 			}
 		}
-	case "windows":
-		if _, err := exec.LookPath("powershell"); err == nil {
-			return "powershell"
-		}
 	}
+	// Windows has no native speech backend wired up (there is no SAPI
+	// branch in speakNative), so it falls back to the visual broadcast.
 	return ""
 }
 
@@ -697,7 +1049,7 @@ func (e *LocalTTSEngine) Label() string {
 
 // Speak synthesizes and plays text using the resolved engine, respecting context cancellation.
 func (e *LocalTTSEngine) Speak(ctx context.Context, text string, personaID string) error {
-	text = strings.TrimSpace(text)
+	text = sanitizeSpokenText(text)
 	if text == "" {
 		return nil
 	}
@@ -761,7 +1113,7 @@ func (e *LocalTTSEngine) speakPiper(ctx context.Context, text string) error {
 	defer os.Remove(wavPath)
 
 	// Prefer the self-contained sherpa-onnx VITS runner when the voice bundle is present
-	if sherpaBin := resolveSherpaBinaryInDir(modelsDir); sherpaBin != "" {
+	if sherpaBin, verr := verifiedSherpaBinary(modelsDir); verr == nil {
 		spec, _ := GetVoiceModelSpec(safeID)
 		onnxFile := spec.ONNXFile
 		if onnxFile == "" {
@@ -779,6 +1131,7 @@ func (e *LocalTTSEngine) speakPiper(ctx context.Context, text string) error {
 				"--output-filename="+wavPath,
 				text,
 			)
+			cmd.Dir = filepath.Dir(sherpaBin)
 			if err := cmd.Run(); err == nil {
 				return playAudioFile(ctx, wavPath)
 			}
@@ -802,9 +1155,9 @@ func (e *LocalTTSEngine) speakSherpa(ctx context.Context, text string, personaID
 	if modelsDir == "" {
 		modelsDir = util.GetTTSModelsDir()
 	}
-	sherpaBin := resolveSherpaBinaryInDir(modelsDir)
-	if sherpaBin == "" {
-		return errors.New("sherpa-onnx-offline-tts not installed")
+	sherpaBin, err := verifiedSherpaBinary(modelsDir)
+	if err != nil {
+		return err
 	}
 
 	safeID := sanitizeModelID(e.ModelID)
@@ -861,6 +1214,7 @@ func (e *LocalTTSEngine) speakSherpa(ctx context.Context, text string, personaID
 	}
 
 	cmd := exec.CommandContext(ctx, sherpaBin, args...)
+	cmd.Dir = filepath.Dir(sherpaBin)
 	if err := cmd.Run(); err != nil {
 		return err
 	}

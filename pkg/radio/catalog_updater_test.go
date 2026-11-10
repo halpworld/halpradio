@@ -18,7 +18,7 @@ func TestCatalogUpdater_CacheHit_NoNetwork(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tempDir)
 
 	requestsReceived := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestsReceived++
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("stations: []\n"))
@@ -26,6 +26,7 @@ func TestCatalogUpdater_CacheHit_NoNetwork(t *testing.T) {
 	defer server.Close()
 
 	updater := NewCatalogUpdater(server.URL, 24)
+	updater.HTTPClient = server.Client()
 	updater.MetadataFile = filepath.Join(tempDir, "catalog_metadata.json")
 	updater.CacheFile = filepath.Join(tempDir, "catalog_cache.yaml")
 
@@ -59,7 +60,7 @@ func TestCatalogUpdater_Conditional304NotModified(t *testing.T) {
 	t.Setenv("HOME", tempDir)
 	t.Setenv("XDG_CONFIG_HOME", tempDir)
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("If-None-Match") == `"etag-test"` {
 			w.WriteHeader(http.StatusNotModified)
 			return
@@ -75,6 +76,7 @@ stations:
 	defer server.Close()
 
 	updater := NewCatalogUpdater(server.URL, 24)
+	updater.HTTPClient = server.Client()
 	updater.MetadataFile = filepath.Join(tempDir, "catalog_metadata.json")
 	updater.CacheFile = filepath.Join(tempDir, "catalog_cache.yaml")
 
@@ -119,7 +121,7 @@ stations:
     bitrate: 320
     codec: "MP3"
 `
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("ETag", `"new-etag-999"`)
 		w.Header().Set("Last-Modified", "Tue, 18 Aug 2026 08:00:00 GMT")
 		w.WriteHeader(http.StatusOK)
@@ -128,6 +130,7 @@ stations:
 	defer server.Close()
 
 	updater := NewCatalogUpdater(server.URL, 24)
+	updater.HTTPClient = server.Client()
 	updater.MetadataFile = filepath.Join(tempDir, "catalog_metadata.json")
 	updater.CacheFile = filepath.Join(tempDir, "catalog_cache.yaml")
 
@@ -165,13 +168,14 @@ func TestCatalogUpdater_CorruptedYAML_Rejected(t *testing.T) {
 	t.Setenv("HOME", tempDir)
 	t.Setenv("XDG_CONFIG_HOME", tempDir)
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("invalid: yaml: [corrupted"))
 	}))
 	defer server.Close()
 
 	updater := NewCatalogUpdater(server.URL, 24)
+	updater.HTTPClient = server.Client()
 	updater.MetadataFile = filepath.Join(tempDir, "catalog_metadata.json")
 	updater.CacheFile = filepath.Join(tempDir, "catalog_cache.yaml")
 

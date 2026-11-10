@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/halpworld/halpradio/pkg/party"
 )
 
 // HelpItem defines a single entry in a command or flag list.
@@ -202,7 +203,7 @@ func PrintRootHelp(out io.Writer) {
 
 	RenderHelpItems(out, "Core Commands", []HelpItem{
 		{Name: "play", Args: "<target> [flags]", Description: "Stream radio directly without TUI (index, ID, name, URL, or random)"},
-		{Name: "party", Args: "<create|join|status|...>", Description: "P2P mesh synchronized radio rooms & live ASCII reactions (E2EE)"},
+		{Name: "party", Args: "<create|join|status|...>", Description: "P2P mesh synchronized radio rooms & live ASCII reactions"},
 		{Name: "stations", Args: "[list|search|fav]", Description: "Discover, search, filter, and manage station catalog"},
 		{Name: "volume", Args: "[value] [flags]", Description: "Query or adjust volume (e.g. halpradio volume +5, 60, mute)"},
 		{Name: "current", Args: "[flags]", Description: "Query currently playing track for status bars (tmux, Waybar)"},
@@ -246,8 +247,8 @@ func PrintRootHelp(out io.Writer) {
 
 	RenderHelpExamples(out, "Top Automation Examples", []HelpExample{
 		{Command: "halpradio", Description: "Launch interactive Bubble Tea TUI"},
-		{Command: "halpradio party create \"team-focus\"", Description: "Create encrypted P2P radio room with teammates"},
-		{Command: "halpradio party join 8X2K9P", Description: "Join synchronized radio room using 6-char code"},
+		{Command: "halpradio party create \"team-focus\"", Description: "Create a P2P radio room with teammates"},
+		{Command: "halpradio party join " + party.FormatInvite(party.ExampleRoomCode, party.ExampleFingerprint), Description: "Join a synchronized radio room with the host's invite"},
 		{Command: "halpradio play somafm_groovesalad", Description: "Headless stream SomaFM Groove Salad"},
 		{Command: "halpradio play 2 --volume 30", Description: "Headless stream station #2 at 30% volume"},
 		{Command: "halpradio play somafm_groovesalad -d 45m", Description: "45-minute focus session with auto-stop"},
@@ -570,8 +571,9 @@ func PrintPluginHelp(out io.Writer) {
 
 	RenderHelpItems(out, "Commands", []HelpItem{
 		{Name: "list", Description: "List installed and official registry plugins"},
-		{Name: "install", Args: "<plugin-id>", Description: "Install a plugin from official registry"},
-		{Name: "enable", Args: "<plugin-id>", Description: "Enable an installed plugin"},
+		{Name: "install", Args: "<plugin-id> [--approve-sha256 <hex>]", Description: "Install a plugin from official registry, review and approve its permissions"},
+		{Name: "approve", Args: "<plugin-id> [--approve-sha256 <hex>]", Description: "Review and approve an installed plugin's permissions (again after every update)"},
+		{Name: "enable", Args: "<plugin-id> [--approve-sha256 <hex>]", Description: "Enable an installed plugin (asks for approval first if needed)"},
 		{Name: "disable", Args: "<plugin-id>", Description: "Disable an installed plugin"},
 		{Name: "remove", Args: "<plugin-id>", Description: "Uninstall an installed plugin"},
 		{Name: "update", Args: "<id|--all>", Description: "Update installed plugins from registry"},
@@ -579,7 +581,9 @@ func PrintPluginHelp(out io.Writer) {
 
 	RenderHelpExamples(out, "Examples", []HelpExample{
 		{Command: "halpradio plugin list", Description: "List available & installed plugins"},
-		{Command: "halpradio plugin install visualizer-matrix", Description: "Install a plugin"},
+		{Command: "halpradio plugin install visualizer-matrix", Description: "Install a plugin (type yes to approve its permissions)"},
+		{Command: "halpradio plugin approve visualizer-matrix", Description: "Show the permissions and the binary's SHA-256 (without a terminal nothing is approved)"},
+		{Command: "halpradio plugin approve visualizer-matrix --approve-sha256 <hex>", Description: "Approve without a prompt, only if <hex> is the SHA-256 shown in the previous step"},
 		{Command: "halpradio plugin disable visualizer-matrix", Description: "Disable a plugin"},
 		{Command: "halpradio plugin update --all", Description: "Update all plugins"},
 	})
@@ -610,18 +614,18 @@ func PrintPlaybackControlHelp(cmd string, out io.Writer) {
 
 // PrintPartyHelp renders help for `halpradio party`.
 func PrintPartyHelp(out io.Writer) {
-	RenderHelpHeader(out, "halpradio party", "P2P Mesh Synchronized Radio Rooms & Live Reactions (E2EE)")
+	RenderHelpHeader(out, "halpradio party", "P2P Mesh Synchronized Radio Rooms & Live Reactions")
 	RenderHelpUsage(out,
 		"halpradio party create [name] [flags]",
-		"halpradio party join <room-code> [flags]",
+		"halpradio party join <invite|room-code> [flags]",
 		"halpradio party status [--json]",
 		"halpradio party leave",
 		"halpradio party react <1-5|emoji>",
 		"halpradio party chat <message>",
 	)
 	RenderHelpItems(out, "Commands", []HelpItem{
-		{Name: "create", Args: "[name]", Description: "Create and host an encrypted P2P radio room (generates #8X2K9P)"},
-		{Name: "join", Args: "<code|#code>", Description: "Join an active radio room using its 6-character room code"},
+		{Name: "create", Args: "[name]", Description: "Create and host a P2P radio room; prints the invite (room code/host fingerprint) to share"},
+		{Name: "join", Args: "<invite|code>", Description: "Join a room. The full invite (CODE/FINGERPRINT) pins the host; a bare code needs a manual fingerprint check"},
 		{Name: "status", Description: "Show party status, active room code, role, and connected listeners"},
 		{Name: "leave", Description: "Leave current party room (triggers host migration if hosting)"},
 		{Name: "react", Args: "<1-5|emoji>", Description: "Broadcast an ASCII reaction (1:🔥, 2:❤️, 3:☕, 4:🚀, 5:👀)"},
@@ -639,7 +643,8 @@ func PrintPartyHelp(out io.Writer) {
 		{Command: "halpradio party create \"chill-vibes\"", Description: "Create room 'chill-vibes' and launch TUI"},
 		{Command: "halpradio party create --dj-pass=open", Description: "Create room allowing any listener to tune stations"},
 		{Command: "halpradio party create --headless", Description: "Create and host room headlessly in server/tmux"},
-		{Command: "halpradio party join 8X2K9P", Description: "Join radio room #8X2K9P with interactive TUI"},
+		{Command: "halpradio party join " + party.FormatInvite(party.ExampleRoomCode, party.ExampleFingerprint), Description: "Join with the host's invite: follow only that host, no manual check"},
+		{Command: "halpradio party join " + party.ExampleRoomCode, Description: "Join with a bare code: check the host's fingerprint against the host's screen"},
 		{Command: "halpradio party status", Description: "Inspect current party room, listener count, and host"},
 		{Command: "halpradio party react 1", Description: "Send live 🔥 reaction to current room"},
 		{Command: "halpradio party chat \"loving this track!\"", Description: "Send mini-chat ping to room"},

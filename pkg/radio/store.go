@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/halpworld/halpradio/pkg/radio/netguard"
 	"github.com/halpworld/halpradio/pkg/util"
 	"gopkg.in/yaml.v3"
 )
@@ -20,6 +21,9 @@ type Store struct {
 	Favorites map[string]bool    `json:"favorites"`
 	FavItems  map[string]Station `json:"fav_items"` // Store full station object for radiobrowser favorites
 	History   []HistoryEntry     `json:"history,omitempty"`
+
+	embeddedCount int      // valid stations in the embedded catalog
+	loadWarnings  []string // problems found while loading station files
 }
 
 func NewStore() *Store {
@@ -34,19 +38,28 @@ func NewStore() *Store {
 }
 
 // Load reads bundled stations from embedded catalog, local user stations from config dir, and user favorites.
+//
+// Every station from every file passes SanitizeStation: entries with an
+// invalid ID or stream URL are dropped and all text is made terminal-safe,
+// so a poisoned stations.yaml or favorites.json comes out clean in memory.
+// Files that cannot be parsed, and dropped entries, are reported through
+// LoadWarnings rather than failing the load.
 func (s *Store) Load(embeddedYAML []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	_ = util.EnsureConfigDir()
+	s.loadWarnings = nil
 
 	if len(embeddedYAML) > 0 {
 		var catalog StationCatalog
 		if err := yaml.Unmarshal(embeddedYAML, &catalog); err == nil {
-			for i := range catalog.Stations {
-				catalog.Stations[i].Source = "bundled"
-			}
-			s.Bundled = catalog.Stations
+			stations, dropped := sanitizeStations(catalog.Stations, "bundled")
+			s.Bundled = stations
+			s.embeddedCount = len(stations)
+			s.warnDropped("bundled catalog", dropped)
+		} else {
+			s.warn("bundled catalog could not be parsed")
 		}
 	}
 
@@ -54,10 +67,11 @@ func (s *Store) Load(embeddedYAML []byte) error {
 	if data, err := os.ReadFile(localFile); err == nil && len(data) > 0 {
 		var catalog StationCatalog
 		if err := yaml.Unmarshal(data, &catalog); err == nil {
-			for i := range catalog.Stations {
-				catalog.Stations[i].Source = "local"
-			}
-			s.Local = catalog.Stations
+			stations, dropped := sanitizeStations(catalog.Stations, "local")
+			s.Local = stations
+			s.warnDropped(localFile, dropped)
+		} else {
+			s.warn(fmt.Sprintf("%s could not be parsed and was ignored", localFile))
 		}
 	}
 
@@ -65,17 +79,35 @@ func (s *Store) Load(embeddedYAML []byte) error {
 	if data, err := os.ReadFile(favFile); err == nil && len(data) > 0 {
 		var favMap map[string]Station
 		if err := json.Unmarshal(data, &favMap); err == nil {
-			for id, st := range favMap {
+			dropped := 0
+			for id, raw := range favMap {
+				if strings.TrimSpace(raw.ID) == "" {
+					raw.ID = id
+				}
+				st, ok := SanitizeStation(raw)
+				if !ok || st.ID != id {
+					dropped++
+					continue
+				}
 				s.Favorites[id] = true
 				st.IsFavorite = true
 				s.FavItems[id] = st
 			}
+			s.warnDropped(favFile, dropped)
 		} else {
 			var favList []string
 			if err := json.Unmarshal(data, &favList); err == nil {
+				dropped := 0
 				for _, id := range favList {
+					if !ValidStationID(id) {
+						dropped++
+						continue
+					}
 					s.Favorites[id] = true
 				}
+				s.warnDropped(favFile, dropped)
+			} else {
+				s.warn(fmt.Sprintf("%s could not be parsed and was ignored", favFile))
 			}
 		}
 	}
@@ -84,14 +116,43 @@ func (s *Store) Load(embeddedYAML []byte) error {
 	return nil
 }
 
+// LoadWarnings returns problems found by the last Load or
+// ReloadBundledFromCache: unparsable files and dropped invalid entries. The
+// UI or CLI can surface them; the store itself never fails on them.
+func (s *Store) LoadWarnings() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]string(nil), s.loadWarnings...)
+}
+
+func (s *Store) warn(msg string) {
+	s.loadWarnings = append(s.loadWarnings, util.SanitizeDisplay(msg, 300))
+}
+
+func (s *Store) warnDropped(where string, n int) {
+	if n > 0 {
+		s.warn(fmt.Sprintf("%s: ignored %d invalid or duplicate station entries", where, n))
+	}
+}
+
 // ReloadBundledFromCache reloads the bundled catalog from the cached file and resyncs favorites.
+//
+// The cache is untrusted input: it is re-verified (signature, when a catalog
+// signing key is built in), every entry passes SanitizeStation, and a cache
+// that would shrink the catalog to less than half of the embedded one is
+// ignored. It returns false and keeps the current catalog when the cache is
+// missing or rejected.
 func (s *Store) ReloadBundledFromCache() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	cacheFile := util.GetCatalogCacheFile()
 	cacheData, err := os.ReadFile(cacheFile)
-	if err != nil || len(cacheData) == 0 {
+	if err != nil || len(cacheData) == 0 || len(cacheData) > MaxCatalogDownloadBytes {
+		return false
+	}
+	if err := verifyCachedCatalog(cacheFile, cacheData); err != nil {
+		s.warn("cached station catalog ignored: " + err.Error())
 		return false
 	}
 
@@ -100,10 +161,13 @@ func (s *Store) ReloadBundledFromCache() bool {
 		return false
 	}
 
-	for i := range catalog.Stations {
-		catalog.Stations[i].Source = "bundled"
+	stations, dropped := sanitizeStations(catalog.Stations, "bundled")
+	if len(stations) == 0 || len(stations)*2 < s.embeddedCount {
+		s.warn("cached station catalog ignored: implausibly small")
+		return false
 	}
-	s.Bundled = catalog.Stations
+	s.warnDropped("cached station catalog", dropped)
+	s.Bundled = stations
 	s.syncFavoritesLocked()
 	return true
 }
@@ -115,6 +179,7 @@ func (s *Store) LoadSomaFM() error {
 	if err != nil {
 		return err
 	}
+	channels, _ = sanitizeStations(channels, "somafm")
 	s.mu.Lock()
 	s.SomaFM = channels
 	s.syncFavoritesLocked()
@@ -153,7 +218,7 @@ func (s *Store) SaveFavorites() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(favFile, data, 0600)
+	return netguard.WriteFileAtomic(favFile, data, 0600)
 }
 
 func (s *Store) SaveLocalStations() error {
@@ -164,14 +229,25 @@ func (s *Store) SaveLocalStations() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(localFile, data, 0600)
+	return netguard.WriteFileAtomic(localFile, data, 0600)
 }
 
+// AddOrUpdateLocalStation validates st through SanitizeStation and stores it
+// in the local catalog. An empty ID gets a fresh "custom-N" ID that
+// collides with no existing station. Invalid stations are refused with
+// an error and nothing is saved.
 func (s *Store) AddOrUpdateLocalStation(st Station) error {
-	if st.ID == "" {
-		st.ID = fmt.Sprintf("custom-%d", len(s.Local)+1)
+	if strings.TrimSpace(st.ID) == "" {
+		st.ID = s.newLocalID()
 	}
+	// The local catalog is the user's own: stamp it before validation so a
+	// LAN or loopback stream the user added is accepted.
 	st.Source = "local"
+	clean, ok := SanitizeStation(st)
+	if !ok {
+		return errInvalidStation(st)
+	}
+	st = clean
 	st.IsFavorite = s.Favorites[st.ID]
 
 	found := false
@@ -189,6 +265,33 @@ func (s *Store) AddOrUpdateLocalStation(st Station) error {
 	return s.SaveLocalStations()
 }
 
+// newLocalID returns the first "custom-N" ID, counting up from the number
+// of local stations plus one, that no station in the store uses yet. The old
+// scheme (always len+1) reused an ID after a deletion and overwrote another
+// station.
+func (s *Store) newLocalID() string {
+	for n := len(s.Local) + 1; ; n++ {
+		id := fmt.Sprintf("custom-%d", n)
+		if !s.idInUse(id) {
+			return id
+		}
+	}
+}
+
+func (s *Store) idInUse(id string) bool {
+	if s.Favorites[id] {
+		return true
+	}
+	for _, list := range [][]Station{s.Local, s.Bundled, s.SomaFM} {
+		for _, st := range list {
+			if st.ID == id {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (s *Store) DeleteLocalStation(id string) error {
 	newLocal := make([]Station, 0)
 	for _, st := range s.Local {
@@ -200,50 +303,62 @@ func (s *Store) DeleteLocalStation(id string) error {
 	return s.SaveLocalStations()
 }
 
+// ToggleFavorite adds st to the favourites, or removes it when it is already
+// one. A station that fails SanitizeStation is never added (the result is
+// false); removal works by ID so a bad entry can always be removed.
 func (s *Store) ToggleFavorite(st Station) bool {
 	id := st.ID
-	isFav := !s.Favorites[id]
-	s.Favorites[id] = isFav
-
-	if isFav {
-		st.IsFavorite = true
-		s.FavItems[id] = st
-	} else {
+	if s.Favorites[id] {
+		delete(s.Favorites, id)
 		delete(s.FavItems, id)
+		s.SyncFavorites()
+		_ = s.SaveFavorites()
+		return false
 	}
+
+	clean, ok := SanitizeStation(st)
+	if !ok {
+		return false
+	}
+	clean.IsFavorite = true
+	s.Favorites[clean.ID] = true
+	s.FavItems[clean.ID] = clean
 
 	s.SyncFavorites()
 	_ = s.SaveFavorites()
-	return isFav
+	return true
 }
 
+// GetAllStations returns every station once per ID. A user's own entries
+// win over remote ones: a local station first, then a favourite's stored
+// copy, then the bundled/remote catalog and SomaFM. A catalog update can
+// therefore never repoint a station the user saved or favourited; the
+// favourite keeps the catalog's position in the list.
 func (s *Store) GetAllStations() []Station {
 	seen := make(map[string]bool)
 	var list []Station
 
-	for _, st := range s.Local {
-		if !seen[st.ID] {
-			seen[st.ID] = true
-			list = append(list, st)
+	add := func(st Station) {
+		if seen[st.ID] {
+			return
 		}
+		if fav, ok := s.FavItems[st.ID]; ok && st.Source != "local" {
+			st = fav
+		}
+		seen[st.ID] = true
+		list = append(list, st)
+	}
+	for _, st := range s.Local {
+		add(st)
 	}
 	for _, st := range s.Bundled {
-		if !seen[st.ID] {
-			seen[st.ID] = true
-			list = append(list, st)
-		}
+		add(st)
 	}
 	for _, st := range s.SomaFM {
-		if !seen[st.ID] {
-			seen[st.ID] = true
-			list = append(list, st)
-		}
+		add(st)
 	}
 	for _, st := range s.FavItems {
-		if !seen[st.ID] {
-			seen[st.ID] = true
-			list = append(list, st)
-		}
+		add(st)
 	}
 	return list
 }
