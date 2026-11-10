@@ -21,7 +21,39 @@
 #   VM_CPU / VM_MEMORY_MB   default 4 / 8192
 #   TART_RUN_ARGS    extra `tart run` flags, e.g. --net-softnet
 #   ONCE=1           run a single job and exit
+#   GH_TOKEN_FILE    read GH_TOKEN from this file instead (mode 600)
+#   RUNNER_CONFIG    KEY=value file read at start (default
+#                    ~/.config/halpradio-runner/runner.env, used by the
+#                    launchd service from install-service.sh). Only the
+#                    variables above are accepted; the file is not executed.
 set -euo pipefail
+
+die() { echo "error: $*" >&2; exit 1; }
+log() { echo "[$(date '+%H:%M:%S')] $*"; }
+
+# private_file PATH: refuses a file other users could read or change.
+private_file() {
+	[[ -f "$1" && ! -L "$1" ]] || die "$1 is missing or not a regular file"
+	[[ "$(stat -f '%u' "$1")" == "$(id -u)" ]] || die "$1 is not owned by you"
+	[[ "$(stat -f '%Lp' "$1")" =~ ^[67]00$ ]] || die "$1 must be mode 600 (chmod 600 '$1')"
+}
+
+RUNNER_CONFIG="${RUNNER_CONFIG:-$HOME/.config/halpradio-runner/runner.env}"
+if [[ -e "$RUNNER_CONFIG" ]]; then
+	private_file "$RUNNER_CONFIG"
+	while IFS= read -r line || [[ -n "$line" ]]; do
+		[[ -z "$line" || "$line" == \#* ]] && continue
+		[[ "$line" =~ ^(RUNNER_VERSION|RUNNER_SHA256|GH_TOKEN_FILE|REPO|BASE_IMAGE|VM_CPU|VM_MEMORY_MB|TART_RUN_ARGS)=(.*)$ ]] ||
+			die "$RUNNER_CONFIG: unsupported line: ${line%%=*}"
+		# Values from the environment win over the file.
+		[[ -n "${!BASH_REMATCH[1]:-}" ]] || export "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
+	done <"$RUNNER_CONFIG"
+fi
+if [[ -z "${GH_TOKEN:-}" && -n "${GH_TOKEN_FILE:-}" ]]; then
+	private_file "$GH_TOKEN_FILE"
+	GH_TOKEN="$(tr -d '[:space:]' <"$GH_TOKEN_FILE")"
+	export GH_TOKEN
+fi
 
 REPO="${REPO:-halpworld/halpradio}"
 BASE_IMAGE="${BASE_IMAGE:-ghcr.io/cirruslabs/macos-sequoia-base:latest}"
@@ -29,9 +61,6 @@ VM_CPU="${VM_CPU:-4}"
 VM_MEMORY_MB="${VM_MEMORY_MB:-8192}"
 LABELS='["self-hosted","macOS","ARM64","halpradio-mac"]'
 CACHE_DIR="${CACHE_DIR:-$HOME/Library/Caches/halpradio-runner}"
-
-die() { echo "error: $*" >&2; exit 1; }
-log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
 for cmd in tart gh curl shasum; do
 	command -v "$cmd" >/dev/null || die "$cmd is not installed"
@@ -63,6 +92,14 @@ echo "$RUNNER_SHA256  $SHARE_DIR/$TARBALL" | shasum -a 256 -c --status ||
 
 log "pulling $BASE_IMAGE (first run downloads ~25 GB)"
 tart pull "$BASE_IMAGE"
+
+# A crash or power cut can leave job VMs behind; delete stopped ones.
+# shellcheck disable=SC2013 # one VM name per line
+for stale in $(tart list --source local 2>/dev/null |
+	awk '$2 ~ /^halpradio-runner-[0-9]+-[0-9]+$/ && tolower($NF) == "stopped" { print $2 }'); do
+	log "deleting leftover VM $stale"
+	tart delete "$stale" >/dev/null 2>&1 || true
+done
 
 VM=""
 RUN_PID=""

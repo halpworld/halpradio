@@ -154,6 +154,77 @@ least 8 GB.
 The first run pulls `ghcr.io/cirruslabs/macos-sequoia-base:latest`, about
 25 GB. After that, cloning a VM takes seconds.
 
+## Run it as a service
+
+A loop started from SSH stops when the session ends. To keep the runner up
+after you disconnect, log out or reboot, install it as a launchd daemon.
+Run this as your own user, not with `sudo`; it asks for your password only
+to place the daemon:
+
+```bash
+cd ~/halpradio && git pull
+RUNNER_VERSION=2.338.2 RUNNER_SHA256=<digest> scripts/mac-runner/install-service.sh
+```
+
+The installer:
+
+- asks for the token once, without echoing it, and stores it in
+  `~/.config/halpradio-runner/token` (mode 600). It never goes into the
+  daemon's plist, which any user can read;
+- writes `~/.config/halpradio-runner/runner.env` (mode 600) with the runner
+  version, digest and token path. The runner parses this file and does not
+  execute it;
+- copies `ephemeral-runner.sh` to `~/.local/share/halpradio-runner/`, so a
+  later `git pull` does not change what the daemon runs until you install
+  again;
+- installs `/Library/LaunchDaemons/com.halpworld.halpradio-runner.plist`. It
+  starts at boot, runs as you (not root), restarts the loop if it stops,
+  and keeps the Mac from idle-sleeping with `caffeinate -i`.
+
+Check on it:
+
+```bash
+tail -f ~/Library/Logs/halpradio-runner.log
+```
+
+```bash
+sudo launchctl print system/com.halpworld.halpradio-runner | grep -E 'state|pid'
+```
+
+Restart it, for example after changing the config:
+
+```bash
+sudo launchctl kickstart -k system/com.halpworld.halpradio-runner
+```
+
+Remove it (the token and config stay until you delete them):
+
+```bash
+scripts/mac-runner/install-service.sh --uninstall
+```
+
+To change the token, delete `~/.config/halpradio-runner/token` and run the
+installer again. To upgrade the runner, run the installer with the new
+`RUNNER_VERSION` and `RUNNER_SHA256`.
+
+Notes:
+
+- **Sleep.** `caffeinate -i` stops idle sleep only. On a laptop, closing the
+  lid still sleeps it unless it is on power with an external display. To
+  keep a closed laptop awake, run `sudo pmset -a disablesleep 1` (undo with
+  `0`), keep it on power, and make sure it has airflow.
+- **Manual runs.** Stop the service before a manual `ONCE=1` test, so two
+  loops do not compete for the CPU and memory:
+  `sudo launchctl bootout system/com.halpworld.halpradio-runner`. Run the
+  installer again to start it.
+- **Check it after a reboot.** Reboot the Mac, don't log in, and watch for
+  `runner ... is waiting for a job` in the log over SSH. If Tart cannot
+  start a VM without a logged-in session, turn on automatic login for this
+  user (System Settings → Users & Groups) and tell us, so this guide can be
+  fixed.
+- **Leftover VMs.** If the Mac loses power during a job, the next start
+  deletes the stopped `halpradio-runner-*` VMs it left behind.
+
 ## Network isolation
 
 Tart's `--net-softnet` mode isolates the VM from the host and from other
