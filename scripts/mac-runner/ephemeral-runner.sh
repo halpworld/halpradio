@@ -36,7 +36,11 @@ log() { echo "[$(date '+%H:%M:%S')] $*"; }
 for cmd in tart gh curl shasum; do
 	command -v "$cmd" >/dev/null || die "$cmd is not installed"
 done
-[[ "$(uname -s)/$(uname -m)" == "Darwin/arm64" ]] || die "needs an Apple Silicon Mac"
+[[ "$(uname -s)" == Darwin && "$(sysctl -n hw.optional.arm64 2>/dev/null)" == 1 ]] ||
+	die "needs an Apple Silicon Mac"
+# Under Rosetta, uname -m says x86_64 and Intel-only tools are picked up.
+[[ "$(sysctl -n sysctl.proc_translated 2>/dev/null)" != 1 ]] ||
+	die "this shell runs under Rosetta; start a native one (arch -arm64 /bin/zsh) and see docs/SELF_HOSTED_MAC_RUNNER.md"
 [[ -n "${RUNNER_VERSION:-}" ]] || die "set RUNNER_VERSION (see docs/SELF_HOSTED_MAC_RUNNER.md)"
 [[ "$RUNNER_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "RUNNER_VERSION must look like 2.330.0"
 [[ "${RUNNER_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] || die "set RUNNER_SHA256 to the 64-hex digest from the release notes"

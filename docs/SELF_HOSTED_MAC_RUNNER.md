@@ -60,12 +60,35 @@ see [Removing a host runner](#removing-a-host-runner).
 
 ## One-time setup
 
-On the Mac (Apple Silicon, macOS 14 or later, about 60 GB free). Check the
-chip first; Tart needs Apple Silicon:
+On the Mac (Apple Silicon, macOS 14 or later, about 60 GB free). Tart
+needs Apple Silicon and a native (non-Rosetta) shell. Check both:
 
 ```bash
-sysctl -n machdep.cpu.brand_string
+sysctl -n hw.optional.arm64 sysctl.proc_translated
 ```
+
+You want `1` then `0`. A second `1` means this shell runs under Rosetta
+(Intel emulation). Homebrew then says "You are using macOS on Intel
+x86_64", and builds fail with `missing compatible architecture`. This is
+common on a Mac set up by Migration Assistant from an older Intel Mac:
+it brings an Intel Homebrew in `/usr/local` and sometimes a terminal set
+to "Open using Rosetta". To fix it:
+
+1. Quit the terminal app. In Finder → Applications, select it, choose
+   File → Get Info, and untick **Open using Rosetta** if it is there.
+   Reopen it and run the check again.
+2. If the check still shows `1` then `1`, your login shell is an Intel
+   binary. Run `arch -arm64 /bin/zsh` for this session and
+   `chsh -s /bin/zsh` to fix it for good.
+3. Install a native Homebrew from <https://brew.sh> in the native shell.
+   It goes to `/opt/homebrew` and can sit alongside the old one in
+   `/usr/local`. Put it first on your `PATH`:
+
+   ```bash
+   echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+   eval "$(/opt/homebrew/bin/brew shellenv)"
+   which brew   # /opt/homebrew/bin/brew
+   ```
 
 Install the GitHub CLI and Tart:
 
@@ -87,9 +110,6 @@ mv tart.app ~/Applications/
 ln -sf ~/Applications/tart.app/Contents/MacOS/tart /opt/homebrew/bin/tart
 tart --version
 ```
-
-If your Homebrew lives in `/usr/local` (an Intel-era install), link into
-`/usr/local/bin` instead.
 
 Create a fine-grained personal access token at
 <https://github.com/settings/personal-access-tokens/new>:
