@@ -13,7 +13,23 @@ permissions:
 jobs:
   test:
     name: Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    # The macOS job can run on the maintainer's self-hosted Mac (an ephemeral
+    # Tart VM, see docs/SELF_HOSTED_MAC_RUNNER.md) when the repository
+    # variable MACOS_SELF_HOSTED is 'true', except for pull requests from forks
+    # or Dependabot. This only avoids routing them there by accident: a fork
+    # pull request can edit this file, so the repository setting "Require
+    # approval for all external contributors" is what keeps fork code off that
+    # machine. Unset the variable to fall back to GitHub-hosted runners.
+    runs-on: >-
+      ${{
+        (matrix.os == 'macos-latest'
+          && vars.MACOS_SELF_HOSTED == 'true'
+          && (github.event_name != 'pull_request'
+            || (github.event.pull_request.head.repo.full_name == github.repository
+              && github.event.pull_request.user.login != 'dependabot[bot]')))
+        && fromJSON('["self-hosted","macOS","ARM64","halpradio-mac"]')
+        || matrix.os
+      }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
