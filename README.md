@@ -588,6 +588,7 @@ Explore hundreds of curated streams across diverse activity moods and global gen
 - 🚀 **High Energy Coding**: Synthwave 1980s, Cyberpunk FM, Goa Psytrance, Digitally Imported (DI.FM)
 - 🌏 **Global Radio**: BBC Radio 6 Music (UK), KEXP 90.3 FM Seattle (US), Radio Paradise (US), FM 802 Osaka (JP), Big B Radio K-Pop (KR), FIP Radio (FR), Triple J (AU)
 - 📰 **News & Public Broadcasts**: NPR 24 Hour Program Stream, BBC World Service, Deutschlandfunk
+- 🗺️ **Your Country First**: the bundled catalog covers 33 countries across Europe, Asia, Africa and the Middle East, from RTHK (HK), 飛碟電台 (TW), CNA 938 (SG) and NRK (NO) to Wazobia FM (NG), Metro FM (ZA), Nogoum FM (EG), Galgalatz (IL) and Virgin Radio Türkiye (TR). The Countries tab (`C`) lists your own country first, based on your locale (`LANG` / `LC_ALL`). Search also matches station languages (`cantonese`, `arabic`, `swahili`) and native country names (`香港`, `Suomi`, `Україна`, `مصر`).
 
 ---
 

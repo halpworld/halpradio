@@ -20,6 +20,7 @@ type Station struct {
 	Bitrate    int      `json:"bitrate" yaml:"bitrate"`
 	Codec      string   `json:"codec" yaml:"codec"`
 	Homepage   string   `json:"homepage" yaml:"homepage"`
+	Language   string   `json:"language,omitempty" yaml:"language,omitempty"` // e.g. "Cantonese", "Arabic", "Swedish, Finnish"
 	Activities []string `json:"activities,omitempty" yaml:"activities,omitempty"`
 	Source     string   `json:"source" yaml:"source,omitempty"` // "bundled", "local", "radiobrowser"
 	IsFavorite bool     `json:"is_favorite" yaml:"is_favorite,omitempty"`
@@ -61,6 +62,55 @@ var CountryCodeToName = map[string]string{
 	"AR": "Argentina",
 	"IN": "India",
 	"ZA": "South Africa",
+	"TW": "Taiwan",
+	"HK": "Hong Kong",
+	"SG": "Singapore",
+	"UA": "Ukraine",
+	"RU": "Russia",
+	"IS": "Iceland",
+	"NG": "Nigeria",
+	"KE": "Kenya",
+	"GH": "Ghana",
+	"EG": "Egypt",
+	"MA": "Morocco",
+	"AE": "United Arab Emirates",
+	"SA": "Saudi Arabia",
+	"IL": "Israel",
+	"TR": "Turkey",
+	"LB": "Lebanon",
+}
+
+// CountryNativeNames lists each country's name in its own languages and
+// scripts, so a search for "Deutschland", "日本" or "مصر" finds that
+// country's stations.
+var CountryNativeNames = map[string][]string{
+	"DE": {"Deutschland"},
+	"ES": {"España", "Espana", "Catalunya"},
+	"IT": {"Italia"},
+	"NL": {"Nederland"},
+	"SE": {"Sverige"},
+	"NO": {"Norge", "Noreg"},
+	"DK": {"Danmark"},
+	"FI": {"Suomi"},
+	"IS": {"Ísland", "Island"},
+	"JP": {"日本", "Nihon", "Nippon"},
+	"KR": {"한국", "대한민국"},
+	"CN": {"中国", "中國", "Zhongguo"},
+	"TW": {"台灣", "臺灣", "台湾", "中華民國"},
+	"HK": {"香港", "Heung Kong"},
+	"SG": {"新加坡", "Singapura", "சிங்கப்பூர்"},
+	"UA": {"Україна", "Ukraina"},
+	"RU": {"Россия", "Rossiya"},
+	"GR": {"Ελλάδα"},
+	"IN": {"भारत", "Bharat"},
+	"EG": {"مصر", "Misr"},
+	"MA": {"المغرب", "Maroc", "ⵍⵎⵖⵔⵉⴱ"},
+	"AE": {"الإمارات", "UAE", "Emirates", "Dubai"},
+	"SA": {"السعودية", "KSA"},
+	"IL": {"ישראל"},
+	"TR": {"Türkiye", "Turkiye"},
+	"LB": {"لبنان", "Liban"},
+	"NG": {"Naija"},
 }
 
 // CountryNameToCode converts country names or aliases to a 2-letter ISO code.
@@ -130,6 +180,38 @@ func CountryNameToCode(name string) string {
 		return "IN"
 	case "south africa", "za":
 		return "ZA"
+	case "taiwan", "台灣", "臺灣", "台湾", "tw":
+		return "TW"
+	case "hong kong", "hongkong", "香港", "hk":
+		return "HK"
+	case "singapore", "新加坡", "singapura", "sg":
+		return "SG"
+	case "ukraine", "україна", "ua":
+		return "UA"
+	case "russia", "russian federation", "россия", "ru":
+		return "RU"
+	case "iceland", "ísland", "is":
+		return "IS"
+	case "nigeria", "naija", "ng":
+		return "NG"
+	case "kenya", "ke":
+		return "KE"
+	case "ghana", "gh":
+		return "GH"
+	case "egypt", "مصر", "eg":
+		return "EG"
+	case "morocco", "maroc", "المغرب", "ma":
+		return "MA"
+	case "united arab emirates", "uae", "emirates", "الإمارات", "ae":
+		return "AE"
+	case "saudi arabia", "ksa", "السعودية", "sa":
+		return "SA"
+	case "israel", "ישראל", "il":
+		return "IL"
+	case "turkey", "türkiye", "turkiye", "tr":
+		return "TR"
+	case "lebanon", "liban", "لبنان", "lb":
+		return "LB"
 	}
 	if len(n) == 2 {
 		code := strings.ToUpper(n)
@@ -167,6 +249,20 @@ func (s Station) CountryName() string {
 		return strings.ToUpper(s.Country)
 	}
 	return "International"
+}
+
+// MatchesCountryNativeName reports whether q (already lower-cased) is part of
+// one of the station country's native names, e.g. "suomi" or "香港".
+func (s Station) MatchesCountryNativeName(q string) bool {
+	if q == "" {
+		return false
+	}
+	for _, n := range CountryNativeNames[strings.ToUpper(s.Country)] {
+		if strings.Contains(strings.ToLower(n), q) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s Station) LocationString() string {
@@ -282,6 +378,7 @@ func (s Station) ToYAMLSnippet() string {
 		Bitrate:    s.Bitrate,
 		Codec:      strings.ToUpper(s.Codec),
 		Homepage:   s.Homepage,
+		Language:   s.Language,
 		Activities: s.Activities,
 	}
 	if cleanStation.Bitrate == 0 {

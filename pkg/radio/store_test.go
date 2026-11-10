@@ -228,7 +228,9 @@ func TestBundledStationsYAML(t *testing.T) {
 	}
 
 	seenIDs := make(map[string]bool)
-	requiredCountries := []string{"GB", "IE", "US", "CN", "JP", "AU", "IN", "SE", "KR"}
+	requiredCountries := []string{"GB", "IE", "US", "CN", "JP", "AU", "IN", "SE", "KR",
+		"TW", "HK", "SG", "DE", "ES", "FR", "UA", "RU", "NO", "FI", "IS",
+		"NG", "ZA", "KE", "GH", "EG", "MA", "AE", "SA", "IL", "TR", "LB"}
 	countryCounts := make(map[string]int)
 
 	for _, s := range stations {
@@ -262,6 +264,9 @@ func TestBundledStationsYAML(t *testing.T) {
 			t.Errorf("Station %s has empty Homepage", s.ID)
 		}
 
+		if _, ok := CountryCodeToName[s.Country]; !ok {
+			t.Errorf("Station %s uses country %s, which has no CountryCodeToName entry", s.ID, s.Country)
+		}
 		countryCounts[s.Country]++
 	}
 

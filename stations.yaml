@@ -362,6 +362,130 @@ stations:
     homepage: "https://www.smoothradio.com"
     activities: ["relaxing", "reading", "thinking"]
 
+  - id: bbc-radio-1
+    name: "BBC Radio 1"
+    url: "http://as-hls-ww-live.akamaized.net/pool_01505109/live/ww/bbc_radio_one/bbc_radio_one.isml/bbc_radio_one-audio%3d128000.norewind.m3u8"
+    genre: "Pop / Dance / New Music"
+    country: "GB"
+    city: "London"
+    broadcast: "FM/DAB"
+    frequency: "97-99 FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://www.bbc.co.uk/sounds/play/live:bbc_radio_one"
+    language: "English"
+    activities: ["cleaning"]
+
+  - id: bbc-radio-2
+    name: "BBC Radio 2"
+    url: "http://as-hls-ww-live.akamaized.net/pool_74208725/live/ww/bbc_radio_two/bbc_radio_two.isml/bbc_radio_two-audio%3d128000.norewind.m3u8"
+    genre: "Adult Pop / Rock / Classics"
+    country: "GB"
+    city: "London"
+    broadcast: "FM/DAB"
+    frequency: "88-91 FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://www.bbc.co.uk/sounds/play/live:bbc_radio_two"
+    language: "English"
+    activities: ["cleaning", "relaxing"]
+
+  - id: bbc-radio-4
+    name: "BBC Radio 4"
+    url: "http://as-hls-ww-live.akamaized.net/pool_55057080/live/ww/bbc_radio_fourfm/bbc_radio_fourfm.isml/bbc_radio_fourfm-audio=320000.norewind.m3u8"
+    genre: "News / Talk / Drama / Documentaries"
+    country: "GB"
+    city: "London"
+    broadcast: "FM/DAB"
+    frequency: "92-95 FM"
+    bitrate: 320
+    codec: "AAC"
+    homepage: "https://www.bbc.co.uk/sounds/play/live:bbc_radio_fourfm"
+    language: "English"
+    activities: ["news", "thinking"]
+
+  - id: bbc-6music
+    name: "BBC Radio 6 Music"
+    url: "http://as-hls-ww-live.akamaized.net/pool_81827798/live/ww/bbc_6music/bbc_6music.isml/bbc_6music-audio%3d320000.norewind.m3u8"
+    genre: "Alternative / Indie / Electronic"
+    country: "GB"
+    city: "London"
+    broadcast: "DAB"
+    bitrate: 320
+    codec: "AAC"
+    homepage: "https://www.bbc.co.uk/6music"
+    language: "English"
+    activities: ["programming", "reading"]
+
+  - id: talksport
+    name: "talkSPORT"
+    url: "https://radio.talksport.com/stream"
+    genre: "Sports / Talk"
+    country: "GB"
+    city: "London"
+    broadcast: "AM"
+    frequency: "1089 AM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://talksport.com"
+    language: "English"
+    activities: ["news"]
+
+  - id: lbc-uk
+    name: "LBC"
+    url: "https://media-ssl.musicradio.com/LBCUK"
+    genre: "News / Talk / Phone-in"
+    country: "GB"
+    city: "London"
+    broadcast: "FM/DAB"
+    frequency: "97.3 FM"
+    bitrate: 48
+    codec: "AAC"
+    homepage: "https://www.lbc.co.uk"
+    language: "English"
+    activities: ["news"]
+
+  - id: radio-x-uk
+    name: "Radio X"
+    url: "https://media-ssl.musicradio.com/RadioXUK"
+    genre: "Indie / Alternative Rock"
+    country: "GB"
+    city: "London"
+    broadcast: "FM/DAB"
+    frequency: "104.9 FM"
+    bitrate: 48
+    codec: "AAC"
+    homepage: "https://www.radiox.co.uk"
+    language: "English"
+    activities: ["programming", "cleaning"]
+
+  - id: nts-radio-1
+    name: "NTS Radio 1"
+    url: "http://stream-relay-geo.ntslive.net/stream"
+    genre: "Eclectic / Underground / Electronic"
+    country: "GB"
+    city: "London"
+    broadcast: "Online"
+    bitrate: 256
+    codec: "MP3"
+    homepage: "https://www.nts.live"
+    language: "English"
+    activities: ["programming", "reading"]
+
+  - id: radio-caroline
+    name: "Radio Caroline"
+    url: "http://78.129.202.200:8040/;"
+    genre: "Classic Rock / Album Rock"
+    country: "GB"
+    city: "Essex"
+    broadcast: "AM"
+    frequency: "648 AM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.radiocaroline.co.uk"
+    language: "English"
+    activities: ["relaxing", "programming"]
+
   # Ireland (IE) Top Stations — Real FM / DAB / Public Broadcasters
   - id: rte-radio-1
     name: "RTÉ Radio 1"
@@ -673,6 +797,81 @@ stations:
     homepage: "https://asiadreamradio.com"
     activities: ["programming", "cleaning"]
 
+  - id: nhk-world-radio-japan
+    name: "NHKワールド・ラジオ日本 NHK World Radio Japan"
+    url: "https://masterpl.hls.nhkworld.jp/hls/r1/live/master.m3u8"
+    genre: "News / Public Radio / Culture"
+    country: "JP"
+    city: "Tokyo"
+    broadcast: "SW"
+    bitrate: 96
+    codec: "AAC"
+    homepage: "https://www3.nhk.or.jp/nhkworld/"
+    language: "Japanese, English"
+    activities: ["news", "thinking"]
+
+  - id: jpop-sakura
+    name: "J-Pop Sakura 桜 (Asia Dream Radio)"
+    url: "https://quincy.torontocast.com:2070/stream.mp3"
+    genre: "J-Pop / Anime / Hits"
+    country: "JP"
+    broadcast: "Online"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://asiadreamradio.torontocast.com"
+    language: "Japanese"
+    activities: ["cleaning", "programming"]
+
+  - id: jazz-sakura
+    name: "Jazz Sakura (Asia Dream Radio)"
+    url: "http://kathy.torontocast.com:3330/stream/1/"
+    genre: "Jazz / Japanese Jazz / Lounge"
+    country: "JP"
+    broadcast: "Online"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://asiadreamradio.torontocast.com"
+    language: "Japanese"
+    activities: ["reading", "thinking", "relaxing"]
+
+  - id: japan-city-pop
+    name: "BOX: Japan City Pop 日本のシティポップ"
+    url: "https://play.streamafrica.net/japancitypop"
+    genre: "City Pop / 80s Japanese Pop"
+    country: "JP"
+    broadcast: "Online"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://boxradio.net"
+    language: "Japanese"
+    activities: ["programming", "relaxing"]
+
+  - id: replay-news-ja
+    name: "REPLAY NEWS 日本語ニュース"
+    url: "https://replaynewsja.ice.infomaniak.ch/replaynewsja-128.mp3"
+    genre: "News / Rolling Headlines"
+    country: "JP"
+    broadcast: "Online"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.replaynews.net"
+    language: "Japanese"
+    activities: ["news"]
+
+  - id: fm-kahoku
+    name: "FMかほく FM Kahoku 78.7"
+    url: "http://radio.kahoku.net:8000/;"
+    genre: "Community / J-Pop / Local"
+    country: "JP"
+    city: "Kahoku"
+    broadcast: "FM"
+    frequency: "78.7 FM"
+    bitrate: 96
+    codec: "MP3"
+    homepage: "https://www.kahoku.net"
+    language: "Japanese"
+    activities: ["relaxing"]
+
   # Australia (AU) Top Stations
   - id: kiss-fm-australia
     name: "Kiss FM Dance Australia"
@@ -839,6 +1038,2003 @@ stations:
     codec: "MP3"
     homepage: "https://oldpopcafe.net"
     activities: ["relaxing", "reading", "thinking"]
+
+  # Taiwan (TW) Top Stations
+  - id: tw-bcc-news
+    name: "中廣新聞網 BCC News Network"
+    url: "https://n03.rcs.revma.com/78fm9wyy2tzuv"
+    genre: "News / Talk / Mandarin"
+    country: "TW"
+    city: "Taipei"
+    broadcast: "FM/AM"
+    frequency: "657 AM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.bcc.com.tw"
+    language: "Mandarin Chinese"
+    activities: ["news"]
+
+  - id: tw-bcc-ilike
+    name: "中廣流行網 i like radio"
+    url: "https://n03.rcs.revma.com/aw9uqyxy2tzuv"
+    genre: "Mandopop / C-Pop / Hits"
+    country: "TW"
+    city: "Taipei"
+    broadcast: "FM"
+    frequency: "103.3 FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.bcc.com.tw"
+    language: "Mandarin Chinese"
+    activities: ["cleaning", "relaxing"]
+
+  - id: tw-ufo-radio
+    name: "飛碟電台 UFO Radio"
+    url: "https://n10.rcs.revma.com/em90w4aeewzuv"
+    genre: "Mandopop / Talk / Lifestyle"
+    country: "TW"
+    city: "Taipei"
+    broadcast: "FM"
+    frequency: "92.1 FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.uforadio.com.tw"
+    language: "Mandarin Chinese"
+    activities: ["cleaning"]
+
+  - id: tw-news98
+    name: "九八新聞台 News98"
+    url: "https://n17a-eu.rcs.revma.com/pntx1639ntzuv"
+    genre: "News / Talk / Current Affairs"
+    country: "TW"
+    city: "Taipei"
+    broadcast: "FM"
+    frequency: "98.1 FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.news98.com.tw"
+    language: "Mandarin Chinese"
+    activities: ["news"]
+
+  - id: tw-asiafm
+    name: "AsiaFM 亞洲電台"
+    url: "https://n13.rcs.revma.com/xpgtqc74hv8uv"
+    genre: "Mandopop / Asian Pop / Hits"
+    country: "TW"
+    city: "Taoyuan"
+    broadcast: "FM"
+    frequency: "92.7 FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.asiafm.com.tw"
+    language: "Mandarin Chinese"
+    activities: ["cleaning", "relaxing"]
+
+  - id: tw-icrt
+    name: "ICRT International Community Radio Taipei"
+    url: "https://n27a-eu.rcs.revma.com/nkdfurztxp3vv"
+    genre: "Top 40 / Pop / English News"
+    country: "TW"
+    city: "Taipei"
+    broadcast: "FM"
+    frequency: "100.7 FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.icrt.com.tw"
+    language: "English, Mandarin Chinese"
+    activities: ["cleaning", "news"]
+
+  - id: tw-bcc-music
+    name: "中廣音樂網 BCC Music"
+    url: "https://n03.rcs.revma.com/ndk05tyy2tzuv"
+    genre: "Classical / Light Music / Mandarin"
+    country: "TW"
+    city: "Taipei"
+    broadcast: "FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.bcc.com.tw"
+    language: "Mandarin Chinese"
+    activities: ["reading", "thinking", "relaxing"]
+
+  # Hong Kong (HK) Top Stations
+  - id: rthk-radio-1
+    name: "香港電台第一台 RTHK Radio 1"
+    url: "http://stm1.rthk.hk/radio1"
+    genre: "News / Talk / Cantonese"
+    country: "HK"
+    city: "Hong Kong"
+    broadcast: "FM"
+    frequency: "92.6 FM"
+    bitrate: 64
+    codec: "MP3"
+    homepage: "https://www.rthk.hk/radio/radio1"
+    language: "Cantonese"
+    activities: ["news"]
+
+  - id: rthk-radio-2
+    name: "香港電台第二台 RTHK Radio 2"
+    url: "http://stm2.rthk.hk/radio2"
+    genre: "Cantopop / Youth / Pop"
+    country: "HK"
+    city: "Hong Kong"
+    broadcast: "FM"
+    frequency: "94.8 FM"
+    bitrate: 64
+    codec: "MP3"
+    homepage: "https://www.rthk.hk/radio/radio2"
+    language: "Cantonese"
+    activities: ["cleaning", "relaxing"]
+
+  - id: rthk-radio-4
+    name: "香港電台第四台 RTHK Radio 4"
+    url: "https://rthkradio4-live.akamaized.net/hls/live/2040080/radio4/index_64_a.m3u8"
+    genre: "Classical / Fine Arts"
+    country: "HK"
+    city: "Hong Kong"
+    broadcast: "FM"
+    frequency: "97.6 FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.rthk.hk/radio/radio4"
+    language: "Cantonese, English"
+    activities: ["reading", "thinking", "relaxing"]
+
+  - id: rthk-radio-5
+    name: "香港電台第五台 RTHK Radio 5"
+    url: "https://rthkradio5-live.akamaized.net/hls/live/2040081/radio5/index_64_a.m3u8"
+    genre: "Culture / Cantonese Opera / Community"
+    country: "HK"
+    city: "Hong Kong"
+    broadcast: "AM"
+    frequency: "783 AM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.rthk.hk/radio/radio5"
+    language: "Cantonese"
+    activities: ["relaxing"]
+
+  - id: rthk-putonghua
+    name: "香港普通話台 RTHK Putonghua"
+    url: "https://rthkradiopth-live.akamaized.net/hls/live/2040082/radiopth/master.m3u8"
+    genre: "News / Culture / Mandarin"
+    country: "HK"
+    city: "Hong Kong"
+    broadcast: "AM"
+    frequency: "621 AM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.rthk.hk/radio/pth"
+    language: "Mandarin Chinese"
+    activities: ["news"]
+
+  - id: metro-info-hk
+    name: "新城知訊台 Metro Info"
+    url: "https://1603884249.rsc.cdn77.org/1603884249/index.m3u8"
+    genre: "News / Finance / Talk"
+    country: "HK"
+    city: "Hong Kong"
+    broadcast: "FM"
+    frequency: "99.7 FM"
+    bitrate: 100
+    codec: "AAC"
+    homepage: "https://www.metroradio.com.hk"
+    language: "Cantonese"
+    activities: ["news"]
+
+  - id: radio-lantau
+    name: "大嶼山廣播電台 Radio Lantau"
+    url: "https://radio.dripfeed.net/listen/radiolantau/radio.mp3"
+    genre: "Community / Eclectic / English"
+    country: "HK"
+    city: "Lantau Island"
+    broadcast: "Online"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://radiolantau.com"
+    language: "English"
+    activities: ["programming", "relaxing"]
+
+  # Singapore (SG) Top Stations
+  - id: cna-938
+    name: "CNA 938"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/938NOW_PREM.aac"
+    genre: "News / Talk / Business"
+    country: "SG"
+    city: "Singapore"
+    broadcast: "FM"
+    frequency: "93.8 FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.channelnewsasia.com/listen"
+    language: "English"
+    activities: ["news"]
+
+  - id: class-95
+    name: "Class 95"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/CLASS95_PREM.aac"
+    genre: "Top 40 / Pop / Hits"
+    country: "SG"
+    city: "Singapore"
+    broadcast: "FM"
+    frequency: "95.0 FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.melisten.sg"
+    language: "English"
+    activities: ["cleaning"]
+
+  - id: 987fm
+    name: "987FM"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/987FM_PREM.aac"
+    genre: "Pop / Dance / Youth Hits"
+    country: "SG"
+    city: "Singapore"
+    broadcast: "FM"
+    frequency: "98.7 FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.melisten.sg"
+    language: "English"
+    activities: ["cleaning"]
+
+  - id: gold-905
+    name: "GOLD 905"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/GOLD905_PREM.aac"
+    genre: "Classic Hits / Oldies"
+    country: "SG"
+    city: "Singapore"
+    broadcast: "FM"
+    frequency: "90.5 FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.melisten.sg"
+    language: "English"
+    activities: ["relaxing"]
+
+  - id: yes-933
+    name: "YES 933 醉心频道"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/YES933_PREM.aac"
+    genre: "Mandopop / C-Pop / Hits"
+    country: "SG"
+    city: "Singapore"
+    broadcast: "FM"
+    frequency: "93.3 FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.melisten.sg"
+    language: "Mandarin Chinese"
+    activities: ["cleaning", "relaxing"]
+
+  - id: capital-958
+    name: "CAPITAL 958 城市频道"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/CAPITAL958FM_PREM.aac"
+    genre: "News / Talk / Mandarin"
+    country: "SG"
+    city: "Singapore"
+    broadcast: "FM"
+    frequency: "95.8 FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.melisten.sg"
+    language: "Mandarin Chinese"
+    activities: ["news"]
+
+  - id: warna-942
+    name: "WARNA 942"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/WARNA942FM_PREM.aac"
+    genre: "Malay Pop / Talk"
+    country: "SG"
+    city: "Singapore"
+    broadcast: "FM"
+    frequency: "94.2 FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.melisten.sg"
+    language: "Malay"
+    activities: ["cleaning", "relaxing"]
+
+  - id: oli-968
+    name: "OLI 968 ஒலி"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/OLI968FM_PREM.aac"
+    genre: "Tamil Pop / Kollywood / Talk"
+    country: "SG"
+    city: "Singapore"
+    broadcast: "FM"
+    frequency: "96.8 FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.melisten.sg"
+    language: "Tamil"
+    activities: ["cleaning", "relaxing"]
+
+  # Germany (DE) Top Stations
+  - id: deutschlandfunk
+    name: "Deutschlandfunk (DLF)"
+    url: "https://st01.sslstream.dlf.de/dlf/01/128/mp3/stream.mp3"
+    genre: "News / Public Radio / Culture"
+    country: "DE"
+    city: "Köln"
+    broadcast: "FM/DAB"
+    frequency: "DAB+"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.deutschlandfunk.de"
+    language: "German"
+    activities: ["news", "thinking"]
+
+  - id: deutschlandfunk-kultur
+    name: "Deutschlandfunk Kultur"
+    url: "https://st02.sslstream.dlf.de/dlf/02/128/mp3/stream.mp3"
+    genre: "Culture / Arts / Talk"
+    country: "DE"
+    city: "Berlin"
+    broadcast: "FM/DAB"
+    frequency: "89.6 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.deutschlandfunkkultur.de"
+    language: "German"
+    activities: ["thinking", "reading"]
+
+  - id: swr3
+    name: "SWR3"
+    url: "https://liveradio.swr.de/sw282p3/swr3/play.mp3"
+    genre: "Pop / Rock / Hits"
+    country: "DE"
+    city: "Baden-Baden"
+    broadcast: "FM/DAB"
+    frequency: "FM / DAB+"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.swr3.de"
+    language: "German"
+    activities: ["cleaning"]
+
+  - id: bayern-3
+    name: "Bayern 3"
+    url: "https://dispatcher.rndfnk.com/br/br3/live/mp3/mid"
+    genre: "Pop / Hits / Adult Contemporary"
+    country: "DE"
+    city: "München"
+    broadcast: "FM/DAB"
+    frequency: "FM / DAB+"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.br.de/radio/bayern3"
+    language: "German"
+    activities: ["cleaning", "relaxing"]
+
+  - id: 1live
+    name: "1LIVE (WDR)"
+    url: "https://wdr-1live-live.icecastssl.wdr.de/wdr/1live/live/mp3/128/stream.mp3"
+    genre: "Pop / Hip Hop / Youth"
+    country: "DE"
+    city: "Köln"
+    broadcast: "FM/DAB"
+    frequency: "FM / DAB+"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www1.wdr.de/radio/1live"
+    language: "German"
+    activities: ["cleaning"]
+
+  - id: radioeins
+    name: "radioeins (rbb)"
+    url: "https://dispatcher.rndfnk.com/rbb/radioeins/live/mp3/mid"
+    genre: "Indie / Alternative / Culture"
+    country: "DE"
+    city: "Berlin"
+    broadcast: "FM/DAB"
+    frequency: "95.8 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.radioeins.de"
+    language: "German"
+    activities: ["programming", "reading"]
+
+  - id: ndr-2
+    name: "NDR 2"
+    url: "https://icecast.ndr.de/ndr/ndr2/niedersachsen/mp3/128/stream.mp3"
+    genre: "Pop / Rock / News"
+    country: "DE"
+    city: "Hamburg"
+    broadcast: "FM/DAB"
+    frequency: "87.6 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.ndr.de/ndr2"
+    language: "German"
+    activities: ["cleaning", "news"]
+
+  - id: sunshine-live
+    name: "sunshine live"
+    url: "http://stream.sunshine-live.de/live/mp3-192/stream.sunshine-live.de/"
+    genre: "Electronic / Techno / House"
+    country: "DE"
+    city: "Mannheim"
+    broadcast: "FM/DAB"
+    frequency: "DAB+"
+    bitrate: 192
+    codec: "MP3"
+    homepage: "https://www.sunshine-live.de"
+    language: "German"
+    activities: ["programming", "cleaning"]
+
+  # France (FR) Top Stations
+  - id: france-inter
+    name: "France Inter"
+    url: "https://icecast.radiofrance.fr/franceinter-midfi.mp3"
+    genre: "News / Talk / Culture / Variety"
+    country: "FR"
+    city: "Paris"
+    broadcast: "FM/DAB"
+    frequency: "87.8 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.radiofrance.fr/franceinter"
+    language: "French"
+    activities: ["news", "thinking"]
+
+  - id: france-info
+    name: "franceinfo"
+    url: "https://icecast.radiofrance.fr/franceinfo-midfi.mp3"
+    genre: "News / Rolling News"
+    country: "FR"
+    city: "Paris"
+    broadcast: "FM/DAB"
+    frequency: "105.5 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.francetvinfo.fr"
+    language: "French"
+    activities: ["news"]
+
+  - id: france-culture
+    name: "France Culture"
+    url: "https://icecast.radiofrance.fr/franceculture-midfi.mp3"
+    genre: "Culture / Ideas / Documentaries"
+    country: "FR"
+    city: "Paris"
+    broadcast: "FM/DAB"
+    frequency: "93.5 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.radiofrance.fr/franceculture"
+    language: "French"
+    activities: ["thinking", "reading"]
+
+  - id: france-musique
+    name: "France Musique"
+    url: "https://icecast.radiofrance.fr/francemusique-midfi.mp3"
+    genre: "Classical / Jazz"
+    country: "FR"
+    city: "Paris"
+    broadcast: "FM/DAB"
+    frequency: "91.7 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.radiofrance.fr/francemusique"
+    language: "French"
+    activities: ["reading", "thinking", "relaxing"]
+
+  - id: europe-1
+    name: "Europe 1"
+    url: "https://europe1.lmn.fm/europe1.mp3"
+    genre: "News / Talk"
+    country: "FR"
+    city: "Paris"
+    broadcast: "FM"
+    frequency: "104.7 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.europe1.fr"
+    language: "French"
+    activities: ["news"]
+
+  - id: nrj-france
+    name: "NRJ"
+    url: "https://streaming.nrjaudio.fm/ou5k6tirv93h"
+    genre: "Top 40 / Pop / Dance / Hits"
+    country: "FR"
+    city: "Paris"
+    broadcast: "FM/DAB"
+    frequency: "100.3 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.nrj.fr"
+    language: "French"
+    activities: ["cleaning"]
+
+  - id: skyrock
+    name: "Skyrock"
+    url: "http://icecast.skyrock.net/s/natio_mp3_128k"
+    genre: "Rap / Hip Hop / R&B"
+    country: "FR"
+    city: "Paris"
+    broadcast: "FM"
+    frequency: "96.0 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://skyrock.fm"
+    language: "French"
+    activities: ["cleaning", "programming"]
+
+  - id: rmc
+    name: "RMC"
+    url: "https://audio.bfmtv.com/rmcradio_128.mp3"
+    genre: "Sports / News / Talk"
+    country: "FR"
+    city: "Paris"
+    broadcast: "FM"
+    frequency: "103.1 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://rmc.bfmtv.com"
+    language: "French"
+    activities: ["news"]
+
+  - id: radio-nova
+    name: "Radio Nova"
+    url: "https://novazz.ice.infomaniak.ch/novazz-128.mp3"
+    genre: "Eclectic / World / Hip Hop / Electro"
+    country: "FR"
+    city: "Paris"
+    broadcast: "FM/DAB"
+    frequency: "101.5 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.nova.fr"
+    language: "French"
+    activities: ["programming", "relaxing"]
+
+  - id: rfi-afrique
+    name: "RFI Afrique"
+    url: "http://live02.rfi.fr/rfiafrique-64.mp3"
+    genre: "News / African Affairs / Francophone"
+    country: "FR"
+    city: "Paris"
+    broadcast: "FM"
+    bitrate: 64
+    codec: "MP3"
+    homepage: "https://www.rfi.fr/fr/afrique"
+    language: "French"
+    activities: ["news"]
+
+  # Spain (ES) Top Stations
+  - id: cadena-100
+    name: "CADENA 100"
+    url: "http://cadena100-streamers-mp3.flumotion.com/cope/cadena100.mp3"
+    genre: "Pop / Hits / Spanish & International"
+    country: "ES"
+    city: "Madrid"
+    broadcast: "FM"
+    frequency: "99.5 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.cadena100.es"
+    language: "Spanish"
+    activities: ["cleaning", "relaxing"]
+
+  - id: los40
+    name: "LOS40"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/LOS40.mp3"
+    genre: "Top 40 / Pop / Hits"
+    country: "ES"
+    city: "Madrid"
+    broadcast: "FM"
+    frequency: "93.9 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://los40.com"
+    language: "Spanish"
+    activities: ["cleaning"]
+
+  - id: cadena-ser
+    name: "Cadena SER"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/CADENASER.mp3"
+    genre: "News / Talk / Sports"
+    country: "ES"
+    city: "Madrid"
+    broadcast: "FM/AM"
+    frequency: "105.4 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://cadenaser.com"
+    language: "Spanish"
+    activities: ["news"]
+
+  - id: cadena-dial
+    name: "Cadena Dial"
+    url: "http://playerservices.streamtheworld.com/api/livestream-redirect/CADENADIAL.mp3"
+    genre: "Spanish Pop / Latin Hits"
+    country: "ES"
+    city: "Madrid"
+    broadcast: "FM"
+    frequency: "91.7 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.cadenadial.com"
+    language: "Spanish"
+    activities: ["cleaning", "relaxing"]
+
+  - id: rne-radio-nacional
+    name: "RNE Radio Nacional"
+    url: "https://rtvelivestream.rtve.es/rtvesec/rne/rne_r1_main.m3u8"
+    genre: "News / Public Radio / Talk"
+    country: "ES"
+    city: "Madrid"
+    broadcast: "FM"
+    frequency: "88.2 FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://www.rtve.es/play/radio/radio-nacional/"
+    language: "Spanish"
+    activities: ["news", "thinking"]
+
+  - id: rne-radio-3
+    name: "RNE Radio 3"
+    url: "https://rtvelivestream.rtve.es/rtvesec/rne/rne_r3_main.m3u8"
+    genre: "Indie / Alternative / Spanish Rock"
+    country: "ES"
+    city: "Madrid"
+    broadcast: "FM"
+    frequency: "93.2 FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://www.rtve.es/play/radio/radio-3/"
+    language: "Spanish"
+    activities: ["programming", "reading"]
+
+  - id: rockfm-es
+    name: "Rock FM"
+    url: "https://rockfm-cope-rrcast.flumotion.com/cope/rockfm.mp3"
+    genre: "Classic Rock / Rock"
+    country: "ES"
+    city: "Madrid"
+    broadcast: "FM"
+    frequency: "101.7 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.rockfm.fm"
+    language: "Spanish"
+    activities: ["programming", "cleaning"]
+
+  - id: cope
+    name: "COPE"
+    url: "https://net1-cope-rrcast.flumotion.com/cope/net1-low.mp3"
+    genre: "News / Talk / Sports"
+    country: "ES"
+    city: "Madrid"
+    broadcast: "FM/AM"
+    frequency: "100.7 FM"
+    bitrate: 64
+    codec: "MP3"
+    homepage: "https://www.cope.es"
+    language: "Spanish"
+    activities: ["news"]
+
+  - id: catalunya-informacio
+    name: "Catalunya Informació"
+    url: "https://shoutcast.ccma.cat/ccma/catalunyainformacioHD.mp3"
+    genre: "News / Rolling News / Catalan"
+    country: "ES"
+    city: "Barcelona"
+    broadcast: "FM"
+    frequency: "92.0 FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://www.ccma.cat/catradio/"
+    language: "Catalan"
+    activities: ["news"]
+
+  # Norway (NO) Top Stations
+  - id: nrk-p1
+    name: "NRK P1"
+    url: "https://cdn0-47115-liveicecast0.dna.contentdelivery.net/p1_mp3_h"
+    genre: "Public Radio / Pop / Regional"
+    country: "NO"
+    city: "Oslo"
+    broadcast: "DAB"
+    frequency: "DAB+"
+    bitrate: 192
+    codec: "MP3"
+    homepage: "https://radio.nrk.no/direkte/p1"
+    language: "Norwegian"
+    activities: ["news", "relaxing"]
+
+  - id: nrk-p3
+    name: "NRK P3"
+    url: "https://cdn0-47115-liveicecast0.dna.contentdelivery.net/p3_mp3_h"
+    genre: "Pop / Hip Hop / Youth"
+    country: "NO"
+    city: "Oslo"
+    broadcast: "DAB"
+    frequency: "DAB+"
+    bitrate: 192
+    codec: "MP3"
+    homepage: "https://radio.nrk.no/direkte/p3"
+    language: "Norwegian"
+    activities: ["cleaning"]
+
+  - id: nrk-nyheter
+    name: "NRK Nyheter"
+    url: "https://cdn0-47115-liveicecast0.dna.contentdelivery.net/nyheter_aac_h"
+    genre: "News / Rolling News"
+    country: "NO"
+    city: "Oslo"
+    broadcast: "DAB"
+    frequency: "DAB+"
+    bitrate: 160
+    codec: "AAC"
+    homepage: "https://radio.nrk.no/direkte/nyheter"
+    language: "Norwegian"
+    activities: ["news"]
+
+  - id: nrk-jazz
+    name: "NRK Jazz"
+    url: "https://cdn0-47115-liveicecast0.dna.contentdelivery.net/jazz_mp3_h"
+    genre: "Jazz"
+    country: "NO"
+    city: "Oslo"
+    broadcast: "DAB"
+    frequency: "DAB+"
+    bitrate: 192
+    codec: "MP3"
+    homepage: "https://radio.nrk.no/direkte/jazz"
+    language: "Norwegian"
+    activities: ["reading", "thinking", "relaxing"]
+
+  - id: nrk-klassisk
+    name: "NRK Klassisk"
+    url: "https://cdn0-47115-liveicecast0.dna.contentdelivery.net/klassisk_mp3_h"
+    genre: "Classical"
+    country: "NO"
+    city: "Oslo"
+    broadcast: "DAB"
+    frequency: "DAB+"
+    bitrate: 192
+    codec: "MP3"
+    homepage: "https://radio.nrk.no/direkte/klassisk"
+    language: "Norwegian"
+    activities: ["reading", "thinking", "relaxing"]
+
+  - id: p4-norge
+    name: "P4 Norge"
+    url: "https://p4.p4groupaudio.com/P04_MM"
+    genre: "Pop / Hits / Entertainment"
+    country: "NO"
+    city: "Lillehammer"
+    broadcast: "DAB"
+    frequency: "DAB+"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.p4.no"
+    language: "Norwegian"
+    activities: ["cleaning"]
+
+  - id: radio-rock-no
+    name: "Radio Rock"
+    url: "https://live-bauerno.sharp-stream.com/radiorock_no_mp3"
+    genre: "Rock / Hard Rock"
+    country: "NO"
+    city: "Oslo"
+    broadcast: "DAB"
+    frequency: "DAB+"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.radiorock.no"
+    language: "Norwegian"
+    activities: ["programming", "cleaning"]
+
+  # Finland (FI) Top Stations
+  - id: yle-x
+    name: "YleX"
+    url: "https://icecast.live.yle.fi/radio/YleX/icecast.audio"
+    genre: "Pop / Hip Hop / Youth"
+    country: "FI"
+    city: "Helsinki"
+    broadcast: "FM"
+    frequency: "91.9 FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://yle.fi/ylex"
+    language: "Finnish"
+    activities: ["cleaning"]
+
+  - id: yle-radio-1
+    name: "Yle Radio 1"
+    url: "https://icecast.live.yle.fi/radio/YleRadio1/icecast.audio"
+    genre: "Culture / Classical / Talk"
+    country: "FI"
+    city: "Helsinki"
+    broadcast: "FM"
+    frequency: "87.9 FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://yle.fi/radio1"
+    language: "Finnish"
+    activities: ["thinking", "reading"]
+
+  - id: yle-radio-suomi
+    name: "Yle Radio Suomi"
+    url: "https://icecast.live.yle.fi/radio/YleRS/icecast.audio"
+    genre: "News / Pop / Regional"
+    country: "FI"
+    city: "Helsinki"
+    broadcast: "FM"
+    frequency: "94.0 FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://yle.fi/radiosuomi"
+    language: "Finnish"
+    activities: ["news", "relaxing"]
+
+  - id: yle-vega
+    name: "Yle Vega"
+    url: "https://icecast.live.yle.fi/radio/YleVega/icecast.audio"
+    genre: "Public Radio / Swedish-language Finland"
+    country: "FI"
+    city: "Helsinki"
+    broadcast: "FM"
+    frequency: "101.1 FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://svenska.yle.fi/vega"
+    language: "Swedish, Finnish"
+    activities: ["news", "relaxing"]
+
+  - id: radio-city-fi
+    name: "Radio City"
+    url: "https://streaming.radioplay.fi/fi_radiocity_128.mp3"
+    genre: "Pop / Rock / Hits"
+    country: "FI"
+    city: "Helsinki"
+    broadcast: "FM"
+    frequency: "96.2 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.radiocity.fi"
+    language: "Finnish"
+    activities: ["cleaning"]
+
+  - id: kaaos-chiptune
+    name: "Kaaos Radio Chiptune"
+    url: "http://stream.kaaosradio.fi:8000/chip"
+    genre: "Chiptune / Demoscene / 8-bit"
+    country: "FI"
+    broadcast: "Online"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.kaaosradio.fi"
+    language: "Finnish"
+    activities: ["programming"]
+
+  # Iceland (IS) Top Stations
+  - id: ruv-ras-1
+    name: "RÚV Rás 1"
+    url: "http://netradio.ruv.is/ras1.mp3"
+    genre: "Public Radio / Culture / News"
+    country: "IS"
+    city: "Reykjavík"
+    broadcast: "FM"
+    frequency: "92.4 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.ruv.is/utvarp/ras1"
+    language: "Icelandic"
+    activities: ["news", "thinking"]
+
+  - id: ruv-ras-2
+    name: "RÚV Rás 2"
+    url: "http://netradio.ruv.is/ras2.mp3"
+    genre: "Pop / Rock / Icelandic Music"
+    country: "IS"
+    city: "Reykjavík"
+    broadcast: "FM"
+    frequency: "90.1 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.ruv.is/utvarp/ras2"
+    language: "Icelandic"
+    activities: ["cleaning", "relaxing"]
+
+  - id: bylgjan
+    name: "Bylgjan 98.9"
+    url: "http://icecast.365net.is:8000/orbbylgjan.aac"
+    genre: "Pop / Talk / Adult Hits"
+    country: "IS"
+    city: "Reykjavík"
+    broadcast: "FM"
+    frequency: "98.9 FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://www.visir.is/bylgjan"
+    language: "Icelandic"
+    activities: ["cleaning"]
+
+  - id: x977
+    name: "X977"
+    url: "http://icecast.365net.is:8000/orbXid.aac"
+    genre: "Rock / Alternative"
+    country: "IS"
+    city: "Reykjavík"
+    broadcast: "FM"
+    frequency: "97.7 FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://www.visir.is/x977"
+    language: "Icelandic"
+    activities: ["programming"]
+
+  - id: fm957
+    name: "FM957"
+    url: "http://icecast.365net.is:8000/orbFm957.aac"
+    genre: "Top 40 / Pop / Dance"
+    country: "IS"
+    city: "Reykjavík"
+    broadcast: "FM"
+    frequency: "95.7 FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://www.visir.is/fm957"
+    language: "Icelandic"
+    activities: ["cleaning"]
+
+  - id: k100
+    name: "K100"
+    url: "https://ice-11.spilarinn.is/kaninnmobile"
+    genre: "Pop / Hits"
+    country: "IS"
+    city: "Reykjavík"
+    broadcast: "FM"
+    frequency: "100.5 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://k100.is"
+    language: "Icelandic"
+    activities: ["cleaning"]
+
+  # Ukraine (UA) Top Stations
+  - id: hit-fm-ua
+    name: "Хіт FM (Hit FM)"
+    url: "https://online.hitfm.ua/HitFM_HD"
+    genre: "Pop / Hits / Ukrainian & International"
+    country: "UA"
+    city: "Kyiv"
+    broadcast: "FM"
+    frequency: "96.4 FM"
+    bitrate: 320
+    codec: "MP3"
+    homepage: "https://www.hitfm.ua"
+    language: "Ukrainian"
+    activities: ["cleaning"]
+
+  - id: hit-fm-ukr-hits
+    name: "Хіт FM Українські хіти"
+    url: "https://online.hitfm.ua/HitFM_Ukr"
+    genre: "Ukrainian Pop / Hits"
+    country: "UA"
+    city: "Kyiv"
+    broadcast: "Online"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.hitfm.ua"
+    language: "Ukrainian"
+    activities: ["cleaning", "relaxing"]
+
+  - id: kiss-fm-ua
+    name: "Kiss FM Україна"
+    url: "https://online.kissfm.ua/KissFM_HD"
+    genre: "Dance / Electronic / Club"
+    country: "UA"
+    city: "Kyiv"
+    broadcast: "FM"
+    frequency: "106.5 FM"
+    bitrate: 320
+    codec: "MP3"
+    homepage: "https://www.kissfm.ua"
+    language: "Ukrainian"
+    activities: ["programming", "cleaning"]
+
+  - id: radio-roks
+    name: "Radio ROKS Радіо Рокс"
+    url: "https://online.radioroks.ua/RadioROKS_HD"
+    genre: "Rock / Classic Rock"
+    country: "UA"
+    city: "Kyiv"
+    broadcast: "FM"
+    frequency: "103.6 FM"
+    bitrate: 320
+    codec: "MP3"
+    homepage: "https://www.radioroks.ua"
+    language: "Ukrainian"
+    activities: ["programming", "cleaning"]
+
+  - id: lux-fm
+    name: "Люкс FM (Lux FM)"
+    url: "https://lux.radio.tvstitch.com/kyiv/lux_adv_sd"
+    genre: "Pop / Hits / Entertainment"
+    country: "UA"
+    city: "Kyiv"
+    broadcast: "FM"
+    frequency: "103.1 FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://lux.fm"
+    language: "Ukrainian"
+    activities: ["cleaning"]
+
+  - id: radio-nv
+    name: "Радіо НВ (Radio NV)"
+    url: "http://91.218.212.84:8000/radionv.mp3"
+    genre: "News / Talk / Current Affairs"
+    country: "UA"
+    city: "Kyiv"
+    broadcast: "FM"
+    frequency: "96.0 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://radio.nv.ua"
+    language: "Ukrainian"
+    activities: ["news"]
+
+  - id: ukrainske-radio
+    name: "Українське радіо (Ukrainian Radio)"
+    url: "http://radio.ukr.radio:8000/ur1-mp3"
+    genre: "Public Radio / News / Culture"
+    country: "UA"
+    city: "Kyiv"
+    broadcast: "FM"
+    frequency: "FM / DAB+"
+    bitrate: 192
+    codec: "MP3"
+    homepage: "https://ukr.radio"
+    language: "Ukrainian"
+    activities: ["news", "thinking"]
+
+  - id: melodia-fm
+    name: "Мелодія FM (Melodia FM)"
+    url: "https://online.melodiafm.ua/MelodiaFM"
+    genre: "Romantic Pop / Easy Listening"
+    country: "UA"
+    city: "Kyiv"
+    broadcast: "FM"
+    frequency: "95.2 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.melodiafm.ua"
+    language: "Ukrainian"
+    activities: ["relaxing"]
+
+  # Russia (RU) Top Stations
+  - id: russkoe-radio
+    name: "Русское Радио (Russkoe Radio)"
+    url: "https://rusradio.hostingradio.ru/rusradio96.aacp"
+    genre: "Russian Pop / Hits"
+    country: "RU"
+    city: "Moscow"
+    broadcast: "FM"
+    frequency: "105.7 FM"
+    bitrate: 96
+    codec: "AAC"
+    homepage: "https://rusradio.ru"
+    language: "Russian"
+    activities: ["cleaning"]
+
+  - id: europa-plus
+    name: "Европа Плюс (Europa Plus)"
+    url: "http://ep128server.streamr.ru:8030/ep128"
+    genre: "Top 40 / Pop / Dance"
+    country: "RU"
+    city: "Moscow"
+    broadcast: "FM"
+    frequency: "106.2 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://europaplus.ru"
+    language: "Russian"
+    activities: ["cleaning"]
+
+  - id: radio-record
+    name: "Radio Record Радио Рекорд"
+    url: "https://radiorecord.hostingradio.ru/rr_main96.aacp"
+    genre: "Electronic / Dance / EDM"
+    country: "RU"
+    city: "St. Petersburg"
+    broadcast: "FM"
+    bitrate: 96
+    codec: "AAC"
+    homepage: "https://www.radiorecord.ru"
+    language: "Russian"
+    activities: ["programming", "cleaning"]
+
+  - id: radio-record-ambient
+    name: "Radio Record Ambient"
+    url: "https://radiorecord.hostingradio.ru/ambient96.aacp"
+    genre: "Ambient / Chillout"
+    country: "RU"
+    city: "St. Petersburg"
+    broadcast: "Online"
+    bitrate: 96
+    codec: "AAC"
+    homepage: "https://www.radiorecord.ru"
+    language: "Russian"
+    activities: ["programming", "reading", "thinking"]
+
+  - id: radio-mayak
+    name: "Радио Маяк (Radio Mayak)"
+    url: "http://icecast.vgtrk.cdnvideo.ru/mayakfm_mp3_192kbps"
+    genre: "Talk / Entertainment / Music"
+    country: "RU"
+    city: "Moscow"
+    broadcast: "FM"
+    frequency: "103.4 FM"
+    bitrate: 192
+    codec: "MP3"
+    homepage: "https://radiomayak.ru"
+    language: "Russian"
+    activities: ["news", "relaxing"]
+
+  - id: nashe-radio
+    name: "Наше Радио (Nashe Radio)"
+    url: "http://nashe1.hostingradio.ru/nashe-128.mp3"
+    genre: "Russian Rock"
+    country: "RU"
+    city: "Moscow"
+    broadcast: "FM"
+    frequency: "101.8 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.nashe.ru"
+    language: "Russian"
+    activities: ["programming", "cleaning"]
+
+  - id: retro-fm
+    name: "Ретро FM (Retro FM)"
+    url: "http://retroserver.streamr.ru:8043/retro128"
+    genre: "Retro / 70s 80s 90s Hits"
+    country: "RU"
+    city: "Moscow"
+    broadcast: "FM"
+    frequency: "88.3 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://retrofm.ru"
+    language: "Russian"
+    activities: ["relaxing", "cleaning"]
+
+  - id: dfm-disco-90s
+    name: "DFM Дискач 90-х"
+    url: "https://dfm-disc90.hostingradio.ru/disc9096.aacp"
+    genre: "90s Dance / Eurodance"
+    country: "RU"
+    city: "Moscow"
+    broadcast: "Online"
+    bitrate: 96
+    codec: "AAC"
+    homepage: "https://dfm.ru"
+    language: "Russian"
+    activities: ["cleaning"]
+
+  # Nigeria (NG) Top Stations
+  - id: nigeria-info
+    name: "Nigeria Info 99.3"
+    url: "https://nigeriainfofmlagos993-atunwadigital.streamguys1.com/nigeriainfofmlagos993"
+    genre: "News / Talk / Current Affairs"
+    country: "NG"
+    city: "Lagos"
+    broadcast: "FM"
+    frequency: "99.3 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.nigeriainfo.fm"
+    language: "English"
+    activities: ["news"]
+
+  - id: wazobia-fm
+    name: "Wazobia FM 95.1"
+    url: "https://wazobiafmlagos951-atunwadigital.streamguys1.com/wazobiafmlagos951"
+    genre: "Afrobeats / Talk / Pidgin"
+    country: "NG"
+    city: "Lagos"
+    broadcast: "FM"
+    frequency: "95.1 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.wazobiafm.com"
+    language: "Nigerian Pidgin"
+    activities: ["cleaning", "relaxing"]
+
+  - id: cool-fm
+    name: "Cool FM 96.9"
+    url: "https://coolfmlagos969-atunwadigital.streamguys1.com/coolfmlagos969"
+    genre: "Afrobeats / Hip Hop / R&B"
+    country: "NG"
+    city: "Lagos"
+    broadcast: "FM"
+    frequency: "96.9 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.coolfm.ng"
+    language: "English"
+    activities: ["cleaning"]
+
+  - id: rhythm-937
+    name: "Rhythm 93.7 FM"
+    url: "https://rhythmfmlagos-atunwadigital.streamguys1.com/rhythmfmlagos"
+    genre: "Afrobeats / R&B / Pop"
+    country: "NG"
+    city: "Lagos"
+    broadcast: "FM"
+    frequency: "93.7 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://rhythm937.com"
+    language: "English"
+    activities: ["cleaning", "relaxing"]
+
+  - id: brila-fm
+    name: "Brila FM 88.9"
+    url: "https://atunwadigital.streamguys1.com/brilafm"
+    genre: "Sports / Talk"
+    country: "NG"
+    city: "Lagos"
+    broadcast: "FM"
+    frequency: "88.9 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://brila.net"
+    language: "English"
+    activities: ["news"]
+
+  - id: lagosjump-radio
+    name: "LagosJump Radio"
+    url: "https://radio.lagosjumpradio.com/listen/lagosjump_radio/radio.mp3"
+    genre: "Afrobeats / Amapiano / Naija Hits"
+    country: "NG"
+    city: "Lagos"
+    broadcast: "Online"
+    bitrate: 192
+    codec: "MP3"
+    homepage: "https://lagosjumpradio.com"
+    language: "English"
+    activities: ["cleaning", "programming"]
+
+  # South Africa (ZA) Top Stations
+  - id: metro-fm-za
+    name: "Metro FM"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/METROFMAAC.aac"
+    genre: "Urban / R&B / Hip Hop / Amapiano"
+    country: "ZA"
+    city: "Johannesburg"
+    broadcast: "FM"
+    frequency: "94.5 FM"
+    bitrate: 48
+    codec: "AAC"
+    homepage: "https://www.metrofm.co.za"
+    language: "English"
+    activities: ["cleaning"]
+
+  - id: 5fm
+    name: "5FM"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/5FMAAC.aac"
+    genre: "Top 40 / Pop / Dance"
+    country: "ZA"
+    city: "Johannesburg"
+    broadcast: "FM"
+    frequency: "98.0 FM"
+    bitrate: 48
+    codec: "AAC"
+    homepage: "https://www.5fm.co.za"
+    language: "English"
+    activities: ["cleaning"]
+
+  - id: talk-radio-702
+    name: "Talk Radio 702"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/FM702_192AAC.aac"
+    genre: "News / Talk"
+    country: "ZA"
+    city: "Johannesburg"
+    broadcast: "FM"
+    frequency: "92.7 FM"
+    bitrate: 192
+    codec: "AAC"
+    homepage: "https://www.702.co.za"
+    language: "English"
+    activities: ["news"]
+
+  - id: ukhozi-fm
+    name: "Ukhozi FM"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/UKHOZIFMAAC_SC"
+    genre: "Maskandi / Gospel / Talk / Zulu"
+    country: "ZA"
+    city: "Durban"
+    broadcast: "FM"
+    frequency: "90.8 FM"
+    bitrate: 48
+    codec: "AAC"
+    homepage: "https://www.ukhozifm.co.za"
+    language: "Zulu"
+    activities: ["cleaning", "relaxing"]
+
+  - id: jacaranda-fm
+    name: "Jacaranda FM"
+    url: "https://edge.iono.fm/xice/jacarandafm_live_medium.mp3"
+    genre: "Adult Contemporary / Pop"
+    country: "ZA"
+    city: "Pretoria"
+    broadcast: "FM"
+    frequency: "94.2 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.jacarandafm.com"
+    language: "English, Afrikaans"
+    activities: ["cleaning", "relaxing"]
+
+  - id: radio-sonder-grense
+    name: "Radio Sonder Grense (RSG)"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/RSGAAC.aac"
+    genre: "Public Radio / Talk / Afrikaans"
+    country: "ZA"
+    city: "Johannesburg"
+    broadcast: "FM"
+    frequency: "100-104 FM"
+    bitrate: 48
+    codec: "AAC"
+    homepage: "https://www.rsg.co.za"
+    language: "Afrikaans"
+    activities: ["news", "relaxing"]
+
+  # Kenya (KE) Top Stations
+  - id: capital-fm-ke
+    name: "Capital FM 98.4"
+    url: "https://atunwadigital.streamguys1.com/capitalfm"
+    genre: "Top 40 / Pop / Hip Hop"
+    country: "KE"
+    city: "Nairobi"
+    broadcast: "FM"
+    frequency: "98.4 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.capitalfm.co.ke"
+    language: "English"
+    activities: ["cleaning"]
+
+  - id: classic-105
+    name: "Classic 105"
+    url: "https://classic105-atunwadigital.streamguys1.com/classic105"
+    genre: "Classic Hits / Talk"
+    country: "KE"
+    city: "Nairobi"
+    broadcast: "FM"
+    frequency: "105.2 FM"
+    bitrate: 192
+    codec: "MP3"
+    homepage: "https://www.classic105.co.ke"
+    language: "English"
+    activities: ["relaxing"]
+
+  - id: radio-jambo
+    name: "Radio Jambo"
+    url: "https://radiojambo-atunwadigital.streamguys1.com/radiojambo"
+    genre: "Talk / Sports / Bongo / Swahili"
+    country: "KE"
+    city: "Nairobi"
+    broadcast: "FM"
+    frequency: "97.5 FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.radiojambo.co.ke"
+    language: "Swahili"
+    activities: ["news", "cleaning"]
+
+  - id: kameme-fm
+    name: "Kameme FM"
+    url: "https://kamemefm-atunwadigital.streamguys1.com/kamemefm"
+    genre: "Talk / Gospel / Kikuyu"
+    country: "KE"
+    city: "Nairobi"
+    broadcast: "FM"
+    frequency: "101.1 FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://kameme.co.ke"
+    language: "Kikuyu"
+    activities: ["relaxing"]
+
+  - id: radio-47
+    name: "Radio 47"
+    url: "https://streaming.shoutcast.com/radio-47"
+    genre: "News / Talk / Swahili"
+    country: "KE"
+    city: "Nairobi"
+    broadcast: "FM"
+    frequency: "103.0 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://radio47.co.ke"
+    language: "Swahili"
+    activities: ["news"]
+
+  # Ghana (GH) Top Stations
+  - id: citi-fm
+    name: "Citi 97.3 FM"
+    url: "https://citi973fm.radioca.st/;stream.mp3"
+    genre: "News / Talk / Business"
+    country: "GH"
+    city: "Accra"
+    broadcast: "FM"
+    frequency: "97.3 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://citinewsroom.com"
+    language: "English"
+    activities: ["news"]
+
+  - id: joy-fm
+    name: "Joy 99.7 FM"
+    url: "https://mmg.streamguys1.com/JoyFM-mp3"
+    genre: "News / Talk / Highlife"
+    country: "GH"
+    city: "Accra"
+    broadcast: "FM"
+    frequency: "99.7 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.myjoyonline.com"
+    language: "English"
+    activities: ["news", "relaxing"]
+
+  - id: peace-fm
+    name: "Peace 104.3 FM"
+    url: "https://peacefm-atunwadigital.streamguys1.com/peacefm"
+    genre: "Talk / Highlife / Akan"
+    country: "GH"
+    city: "Accra"
+    broadcast: "FM"
+    frequency: "104.3 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.peacefmonline.com"
+    language: "Akan (Twi)"
+    activities: ["news", "relaxing"]
+
+  - id: adom-fm
+    name: "Adom 106.3 FM"
+    url: "https://mmg.streamguys1.com/AdomFM-mp3"
+    genre: "Highlife / Talk / Akan"
+    country: "GH"
+    city: "Accra"
+    broadcast: "FM"
+    frequency: "106.3 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.adomonline.com"
+    language: "Akan (Twi)"
+    activities: ["cleaning", "relaxing"]
+
+  - id: hitz-fm
+    name: "Hitz 103.9 FM"
+    url: "https://mmg.streamguys1.com/HitzFM-mp3"
+    genre: "Afrobeats / Hiplife / Urban"
+    country: "GH"
+    city: "Accra"
+    broadcast: "FM"
+    frequency: "103.9 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.myjoyonline.com/hitz"
+    language: "English"
+    activities: ["cleaning"]
+
+  # Egypt (EG) Top Stations
+  - id: nogoum-fm
+    name: "نجوم إف إم Nogoum FM"
+    url: "https://stream.zeno.fm/qb1zvsykm98uv"
+    genre: "Arabic Pop / Egyptian Hits"
+    country: "EG"
+    city: "Cairo"
+    broadcast: "FM"
+    frequency: "100.6 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://nogoumfm.net"
+    language: "Arabic"
+    activities: ["cleaning", "relaxing"]
+
+  - id: radio-9090
+    name: "راديو ٩٠٩٠ Radio 9090"
+    url: "https://9090streaming.mobtada.com/9090FMEGYPT"
+    genre: "Arabic Pop / Talk / Entertainment"
+    country: "EG"
+    city: "Cairo"
+    broadcast: "FM"
+    frequency: "90.9 FM"
+    bitrate: 64
+    codec: "MP3"
+    homepage: "https://9090.fm"
+    language: "Arabic"
+    activities: ["cleaning"]
+
+  - id: nrj-egypt
+    name: "NRJ Egypt"
+    url: "http://nrjstreaming.ahmed-melege.com/nrjegypt"
+    genre: "Top 40 / Pop / Dance"
+    country: "EG"
+    city: "Cairo"
+    broadcast: "FM"
+    frequency: "104.2 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://nrjegypt.com"
+    language: "Arabic, English"
+    activities: ["cleaning"]
+
+  - id: quran-cairo
+    name: "إذاعة القرآن الكريم من القاهرة Holy Quran Radio Cairo"
+    url: "https://stream.radiojar.com/8s5u5tpdtwzuv"
+    genre: "Quran / Religious / Recitation"
+    country: "EG"
+    city: "Cairo"
+    broadcast: "FM"
+    frequency: "98.2 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.maspero.eg"
+    language: "Arabic"
+    activities: ["reading", "thinking"]
+
+  # Morocco (MA) Top Stations
+  - id: hit-radio-maroc
+    name: "HIT RADIO"
+    url: "https://hitradio-maroc.ice.infomaniak.ch/hitradio-maroc-128.mp3"
+    genre: "Hits / Urban / Rap / Moroccan Pop"
+    country: "MA"
+    city: "Casablanca"
+    broadcast: "FM"
+    frequency: "100.5 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.hitradio.ma"
+    language: "Darija Arabic, French"
+    activities: ["cleaning"]
+
+  - id: radio-mars
+    name: "Radio Mars"
+    url: "https://radiomars.ice.infomaniak.ch/radiomars-128.mp3"
+    genre: "Sports / Talk / Football"
+    country: "MA"
+    city: "Casablanca"
+    broadcast: "FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.radiomars.ma"
+    language: "Darija Arabic"
+    activities: ["news"]
+
+  - id: radio-aswat
+    name: "Radio Aswat أصوات"
+    url: "https://broadcast.ice.infomaniak.ch/aswat-high.mp3"
+    genre: "Pop / Talk / Entertainment"
+    country: "MA"
+    city: "Casablanca"
+    broadcast: "FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.aswat.ma"
+    language: "Darija Arabic, French"
+    activities: ["cleaning"]
+
+  - id: skyrock-casa
+    name: "Skyrock Casablanca"
+    url: "https://icecast.skyrock.net/s/casa_aac_64k"
+    genre: "Rap / Hip Hop / R&B"
+    country: "MA"
+    city: "Casablanca"
+    broadcast: "Online"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://skyrock.fm"
+    language: "French, Arabic"
+    activities: ["cleaning"]
+
+  - id: only-rai
+    name: "Only Raï"
+    url: "http://onlyrai.ice.infomaniak.ch/onlyrai-high.mp3"
+    genre: "Raï / Maghreb Music"
+    country: "MA"
+    broadcast: "Online"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.onlyrai.com"
+    language: "Arabic"
+    activities: ["relaxing", "cleaning"]
+
+  # United Arab Emirates (AE) Top Stations
+  - id: sky-news-arabia-radio
+    name: "سكاي نيوز عربية Sky News Arabia Radio"
+    url: "https://stream.skynewsarabia.com/hls/sna.m3u8"
+    genre: "News / Current Affairs"
+    country: "AE"
+    city: "Abu Dhabi"
+    broadcast: "FM"
+    frequency: "90.3 FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://www.skynewsarabia.com"
+    language: "Arabic"
+    activities: ["news"]
+
+  - id: big-fm-uae
+    name: "Big FM 106.2"
+    url: "https://funasia.streamguys1.com/live4"
+    genre: "Bollywood / Hindi Pop"
+    country: "AE"
+    city: "Dubai"
+    broadcast: "FM"
+    frequency: "106.2 FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://www.bigfm.ae"
+    language: "Hindi"
+    activities: ["cleaning", "relaxing"]
+
+  - id: quran-sharjah
+    name: "إذاعة القرآن الكريم من الشارقة Sharjah Quran Radio"
+    url: "https://l3.itworkscdn.net/smcquranlive/quranradiolive/icecast.audio"
+    genre: "Quran / Religious / Recitation"
+    country: "AE"
+    city: "Sharjah"
+    broadcast: "FM"
+    frequency: "102.7 FM"
+    bitrate: 56
+    codec: "AAC"
+    homepage: "https://www.smc.ae"
+    language: "Arabic"
+    activities: ["reading", "thinking"]
+
+  # Saudi Arabia (SA) Top Stations
+  - id: al-arabiya-fm
+    name: "العربية FM Al Arabiya FM"
+    url: "https://fm.alarabiya.net/fm/myStream/playlist.m3u8"
+    genre: "Arabic Pop / News / Talk"
+    country: "SA"
+    city: "Riyadh"
+    broadcast: "FM"
+    frequency: "99.0 FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://www.alarabiya.net"
+    language: "Arabic"
+    activities: ["news", "cleaning"]
+
+  - id: rotana-fm
+    name: "روتانا FM Rotana FM"
+    url: "http://philae.shoutca.st:8250/stream"
+    genre: "Arabic Pop / Khaleeji"
+    country: "SA"
+    city: "Riyadh"
+    broadcast: "FM"
+    frequency: "88.0 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://rotana.net"
+    language: "Arabic"
+    activities: ["cleaning", "relaxing"]
+
+  - id: ufm-sa
+    name: "UFM 95.5"
+    url: "https://stream.ufmradio.com:8003/;"
+    genre: "Arabic & International Hits"
+    country: "SA"
+    city: "Riyadh"
+    broadcast: "FM"
+    frequency: "95.5 FM"
+    bitrate: 64
+    codec: "MP3"
+    homepage: "https://ufmradio.com"
+    language: "Arabic"
+    activities: ["cleaning"]
+
+  - id: quran-makkah
+    name: "إذاعة القرآن الكريم من مكة Holy Quran Radio Makkah"
+    url: "https://n05.radiojar.com/4wqre23fytzuv"
+    genre: "Quran / Religious / Recitation"
+    country: "SA"
+    city: "Makkah"
+    broadcast: "FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://sba.sa"
+    language: "Arabic"
+    activities: ["reading", "thinking"]
+
+  - id: replay-news-ar
+    name: "REPLAY NEWS عربي"
+    url: "https://replaynewsar.ice.infomaniak.ch/replaynewsar-128.mp3"
+    genre: "News / Rolling Headlines"
+    country: "SA"
+    broadcast: "Online"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.replaynews.net"
+    language: "Arabic"
+    activities: ["news"]
+
+  # Israel (IL) Top Stations
+  - id: galgalatz
+    name: "גלגלצ Galgalatz"
+    url: "https://glzicylv01.bynetcdn.com/glglz_mp3"
+    genre: "Pop / Rock / Hits"
+    country: "IL"
+    city: "Tel Aviv"
+    broadcast: "FM"
+    frequency: "91.8 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://glz.co.il"
+    language: "Hebrew"
+    activities: ["cleaning", "programming"]
+
+  - id: galei-zahal
+    name: "גלי צה\"ל Galei Tzahal"
+    url: "http://glzwizzlv.bynetcdn.com/glz_mp3"
+    genre: "News / Talk / Music"
+    country: "IL"
+    city: "Tel Aviv"
+    broadcast: "FM"
+    frequency: "102.3 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://glz.co.il"
+    language: "Hebrew"
+    activities: ["news"]
+
+  - id: kan-bet
+    name: "כאן ב Kan Bet"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/KAN_BET.mp3"
+    genre: "News / Public Radio / Talk"
+    country: "IL"
+    city: "Jerusalem"
+    broadcast: "FM"
+    frequency: "95.5 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.kan.org.il"
+    language: "Hebrew"
+    activities: ["news"]
+
+  - id: kan-gimel
+    name: "כאן גימל Kan Gimel"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/KAN_GIMMEL.mp3"
+    genre: "Israeli Music / Pop"
+    country: "IL"
+    city: "Jerusalem"
+    broadcast: "FM"
+    frequency: "97.8 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.kan.org.il"
+    language: "Hebrew"
+    activities: ["cleaning", "relaxing"]
+
+  - id: kan-88
+    name: "כאן 88 Kan 88"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/KAN_88.mp3"
+    genre: "Rock / Jazz / Alternative / World"
+    country: "IL"
+    city: "Jerusalem"
+    broadcast: "FM"
+    frequency: "88.0 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.kan.org.il"
+    language: "Hebrew"
+    activities: ["programming", "reading"]
+
+  - id: eco99fm
+    name: "ECO99FM"
+    url: "https://eco-live.mediacast.co.il/99fm_aac"
+    genre: "Pop / Adult Contemporary"
+    country: "IL"
+    city: "Tel Aviv"
+    broadcast: "FM"
+    frequency: "99.0 FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://99fm.co.il"
+    language: "Hebrew"
+    activities: ["cleaning", "relaxing"]
+
+  - id: radio-ashams
+    name: "راديو الشمس A-Shams Radio"
+    url: "https://cdna.streamgates.net/Ashams/Live/icecast.audio"
+    genre: "Arabic Pop / News / Talk"
+    country: "IL"
+    city: "Nazareth"
+    broadcast: "FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.ashams.com"
+    language: "Arabic"
+    activities: ["news", "cleaning"]
+
+  # Turkey (TR) Top Stations
+  - id: virgin-radio-tr
+    name: "Virgin Radio Türkiye"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/VIRGIN_RADIO_SC"
+    genre: "Pop / Rock / International Hits"
+    country: "TR"
+    city: "Istanbul"
+    broadcast: "FM"
+    frequency: "95.9 FM"
+    bitrate: 64
+    codec: "MP3"
+    homepage: "https://www.virginradio.com.tr"
+    language: "Turkish"
+    activities: ["cleaning"]
+
+  - id: joy-turk
+    name: "JOY Türk"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/JOY_TURK_SC"
+    genre: "Turkish Pop / Slow / Romantic"
+    country: "TR"
+    city: "Istanbul"
+    broadcast: "FM"
+    frequency: "89.0 FM"
+    bitrate: 64
+    codec: "MP3"
+    homepage: "https://www.joyturk.com.tr"
+    language: "Turkish"
+    activities: ["relaxing"]
+
+  - id: super-fm
+    name: "Süper FM"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/SUPER_FMAAC_SC"
+    genre: "Turkish Pop / Hits"
+    country: "TR"
+    city: "Istanbul"
+    broadcast: "FM"
+    frequency: "90.6 FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.superfm.com.tr"
+    language: "Turkish"
+    activities: ["cleaning"]
+
+  - id: metro-fm-tr
+    name: "Metro FM"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/METRO_FMAAC_SC"
+    genre: "International Hits / Pop"
+    country: "TR"
+    city: "Istanbul"
+    broadcast: "FM"
+    frequency: "97.2 FM"
+    bitrate: 64
+    codec: "AAC"
+    homepage: "https://www.metrofm.com.tr"
+    language: "Turkish"
+    activities: ["cleaning"]
+
+  - id: power-turk
+    name: "PowerTürk"
+    url: "https://listen.powerapp.com.tr/powerturk/mpeg/icecast.audio"
+    genre: "Turkish Pop / Hits"
+    country: "TR"
+    city: "Istanbul"
+    broadcast: "FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://www.powerapp.com.tr"
+    language: "Turkish"
+    activities: ["cleaning"]
+
+  - id: power-fm-tr
+    name: "Power FM"
+    url: "https://listen.powerapp.com.tr/powerfm/mpeg/icecast.audio"
+    genre: "International Pop / Dance"
+    country: "TR"
+    city: "Istanbul"
+    broadcast: "FM"
+    frequency: "100.0 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.powerapp.com.tr"
+    language: "Turkish"
+    activities: ["cleaning", "programming"]
+
+  - id: radyo-fenomen
+    name: "Radyo Fenomen"
+    url: "https://live.radyofenomen.com/fenomen/128/icecast.audio"
+    genre: "Hits / Dance / Pop"
+    country: "TR"
+    city: "Istanbul"
+    broadcast: "Online"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://www.radyofenomen.com"
+    language: "Turkish"
+    activities: ["cleaning", "programming"]
+
+  - id: trt-fm
+    name: "TRT FM"
+    url: "https://trt.radyotvonline.net/trtfm"
+    genre: "Public Radio / Turkish Pop"
+    country: "TR"
+    city: "Ankara"
+    broadcast: "FM"
+    bitrate: 128
+    codec: "AAC"
+    homepage: "https://www.trtdinle.com"
+    language: "Turkish"
+    activities: ["relaxing", "news"]
+
+  # Lebanon (LB) Top Stations
+  - id: voice-of-lebanon
+    name: "صوت لبنان Voice of Lebanon"
+    url: "https://l3.itworkscdn.net/itwaudio/9054/stream"
+    genre: "News / Talk / Arabic Music"
+    country: "LB"
+    city: "Beirut"
+    broadcast: "FM"
+    frequency: "93.3 FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.vdl.me"
+    language: "Arabic"
+    activities: ["news", "relaxing"]
+
+  - id: fame-fm
+    name: "Fame FM"
+    url: "https://l3.itworkscdn.net/itwaudio/9044/stream"
+    genre: "Arabic Pop / Hits"
+    country: "LB"
+    city: "Beirut"
+    broadcast: "FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://www.famefm.net"
+    language: "Arabic"
+    activities: ["cleaning"]
+
+  - id: radio-liban
+    name: "إذاعة لبنان Radio Liban"
+    url: "https://media2.streambrothers.com:2020/stream/8194"
+    genre: "Public Radio / News / Culture"
+    country: "LB"
+    city: "Beirut"
+    broadcast: "FM"
+    bitrate: 64
+    codec: "MP3"
+    homepage: "https://www.radioliban.gov.lb"
+    language: "Arabic, French"
+    activities: ["news"]
+
+  - id: sawt-el-mada
+    name: "صوت المدى Sawt El Mada"
+    url: "http://audiostreaming.itworkscdn.com:9018/stream"
+    genre: "Arabic Pop / Tarab"
+    country: "LB"
+    city: "Beirut"
+    broadcast: "FM"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://sawtelmada.com"
+    language: "Arabic"
+    activities: ["relaxing"]
+
+  - id: fairuz-radio
+    name: "فيروز Fairuz Radio"
+    url: "https://stream.zeno.fm/9vrahqqfuuhvv"
+    genre: "Fairuz / Classic Arabic / Tarab"
+    country: "LB"
+    broadcast: "Online"
+    bitrate: 128
+    codec: "MP3"
+    homepage: "https://zeno.fm"
+    language: "Arabic"
+    activities: ["relaxing", "reading"]
 
   # Global Terrestrial & Ham Dial Broadcasts
   - id: wnyc-fm
